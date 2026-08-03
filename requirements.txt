@@ -1,0 +1,18 @@
+# Pinned exactly: an unpinned install could silently pull in a newer major
+# version with breaking API/behavior changes and break the whole app on the next
+# fresh install. Bump these deliberately, then test, rather than floating.
+#
+# Pin Essentials + Addons explicitly alongside the meta package: installing only
+# the meta package can leave a partial tree behind on an interrupted run.
+PySide6==6.11.1
+PySide6_Essentials==6.11.1
+PySide6_Addons==6.11.1
+shiboken6==6.11.1
+
+# GitHub REST API calls (pull requests, issues, checks, avatars).
+requests==2.34.2
+
+# Stores the GitHub token in the OS keychain (libsecret on Linux, Credential
+# Manager on Windows). Branchly refuses to keep the token in a plain file, so
+# without a working keychain the GitHub features stay switched off.
+keyring==25.7.0
