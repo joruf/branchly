@@ -131,7 +131,7 @@ def reexec_into_venv_if_available() -> None:
 
 def _report_missing_dependencies(error: ImportError) -> int:
     """
-    Explains that the GUI toolkit is not installed, and how to fix it.
+    Opens the installer window when possible; otherwise explains how to fix it.
 
     Args:
         error: The import failure, shown as the technical detail.
@@ -143,6 +143,19 @@ def _report_missing_dependencies(error: ImportError) -> int:
     interpreter = paths.venv_python_path(_ROOT)
     launcher = "branchly.bat" if paths.is_windows() else "./branchly.sh"
     installer = "python install_dependencies.py" if paths.is_windows() else "./install_dependencies.py"
+
+    # Prefer a visible installer: desktop users never see stderr from the launcher.
+    try:
+        from install_dependencies import display_available, launch_gui
+
+        if display_available():
+            print(
+                f"{APP_NAME}: {error.name or error} is missing — opening the installer.",
+                file=sys.stderr,
+            )
+            return launch_gui()
+    except Exception as gui_error:  # noqa: BLE001 — fall through to the text hint
+        print(f"{APP_NAME}: installer window unavailable ({gui_error})", file=sys.stderr)
 
     lines = [
         f"{APP_NAME} cannot start: its GUI toolkit is not installed for this interpreter.",
@@ -156,12 +169,15 @@ def _report_missing_dependencies(error: ImportError) -> int:
                 "The dependencies are in this project's virtual environment. Start it with:",
                 f"  {launcher}",
                 f"  {interpreter} run.py",
+                "",
+                "Or repair the environment with the installer:",
+                f"  {installer}",
             ]
         )
     else:
         lines.extend(
             [
-                "No virtual environment yet. Create it with:",
+                "No virtual environment yet. Create it with the installer:",
                 f"  {installer}",
                 f"then start {APP_NAME} with:",
                 f"  {launcher}",

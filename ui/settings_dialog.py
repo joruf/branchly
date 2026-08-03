@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -173,7 +174,35 @@ class SettingsDialog(QDialog):
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         form.addRow("", hint)
+
+        repair = QPushButton(i18n.t("settings.repair_deps"), page)
+        repair.clicked.connect(self._open_repair_installer)
+        form.addRow("", repair)
+
+        repair_hint = QLabel(i18n.t("settings.repair_deps_hint"), page)
+        repair_hint.setObjectName("Muted")
+        repair_hint.setWordWrap(True)
+        form.addRow("", repair_hint)
         return page
+
+    def _open_repair_installer(self) -> None:
+        """
+        Launches the dependency installer in a separate process.
+
+        Returns:
+            None
+        """
+
+        answer = QMessageBox.question(
+            self,
+            i18n.t("settings.repair_deps_confirm_title"),
+            i18n.t("settings.repair_deps_confirm"),
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        from installer_ui import launch_installer_subprocess
+
+        launch_installer_subprocess()
 
     def _build_checks_tab(self) -> QWidget:
         """

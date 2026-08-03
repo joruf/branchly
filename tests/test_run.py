@@ -124,8 +124,9 @@ class MissingDependencyTests(unittest.TestCase):
     def test_message_names_the_launcher_when_a_venv_exists(self) -> None:
         with mock.patch("run.paths.venv_python_path", return_value=self.__class__._existing()):
             with mock.patch("run.paths.is_windows", return_value=False):
-                with mock.patch("sys.stderr") as stderr:
-                    code = run._report_missing_dependencies(ImportError(name="PySide6"))
+                with mock.patch("install_dependencies.display_available", return_value=False):
+                    with mock.patch("sys.stderr") as stderr:
+                        code = run._report_missing_dependencies(ImportError(name="PySide6"))
         self.assertEqual(3, code)
         printed = "".join(str(call.args[0]) for call in stderr.write.call_args_list)
         self.assertIn("branchly.sh", printed)
@@ -134,10 +135,19 @@ class MissingDependencyTests(unittest.TestCase):
     def test_message_names_the_installer_without_a_venv(self) -> None:
         with mock.patch("run.paths.venv_python_path", return_value=Path("/nonexistent/python")):
             with mock.patch("run.paths.is_windows", return_value=False):
-                with mock.patch("sys.stderr") as stderr:
-                    run._report_missing_dependencies(ImportError(name="PySide6"))
+                with mock.patch("install_dependencies.display_available", return_value=False):
+                    with mock.patch("sys.stderr") as stderr:
+                        run._report_missing_dependencies(ImportError(name="PySide6"))
         printed = "".join(str(call.args[0]) for call in stderr.write.call_args_list)
         self.assertIn("install_dependencies.py", printed)
+
+    def test_opens_installer_when_a_display_is_available(self) -> None:
+        with mock.patch("install_dependencies.display_available", return_value=True):
+            with mock.patch("install_dependencies.launch_gui", return_value=0) as launch:
+                with mock.patch("sys.stderr"):
+                    code = run._report_missing_dependencies(ImportError(name="PySide6"))
+        self.assertEqual(0, code)
+        launch.assert_called_once()
 
     @staticmethod
     def _existing() -> Path:
