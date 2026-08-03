@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Branchly
+GenericName=Git client
+Comment=Manage your Git projects without the command line
+Comment[de]=Git-Projekte verwalten ohne Kommandozeile
+Exec=/home/joruf/Applications/branchly/branchly.sh %f
+Icon=/home/joruf/Applications/branchly/resources/branchly.png
+Terminal=false
+Categories=Development;RevisionControl;
+Keywords=git;version control;repository;commit;merge;
+Keywords[de]=git;versionsverwaltung;repository;commit;zusammenführen;
+StartupNotify=true
+StartupWMClass=branchly

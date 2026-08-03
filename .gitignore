@@ -1,0 +1,19 @@
+# Virtual environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local state written at runtime
+settings.json
+repos.json
+*.tmp
+
+# Editor and OS clutter
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
