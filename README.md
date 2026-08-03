@@ -65,16 +65,20 @@ Needs Python 3.11+ and Git.
 
 ```bash
 cd ~/Applications/branchly
-./install_dependencies.py      # creates .venv, installs pinned packages,
-                               # offers the Qt system libraries
+./install_dependencies.py      # opens a window: creates .venv, installs the
+                               # pinned package versions, offers Qt system libs
 ./branchly.sh
 ```
 
 On Windows: `python install_dependencies.py`, then `branchly.bat`.
 
+Use `./install_dependencies.py --cli` for a terminal-only install (scripts, SSH).
+You can run the installer again anytime to repair missing or wrong-version
+packages; Settings → General also has “Repair dependencies…”.
+
 `python3 run.py` works too: it notices that the dependencies live in `.venv` and
-hands itself over to that interpreter. If there is no environment yet, it says so
-and names the command to create one instead of printing a traceback.
+hands itself over to that interpreter. If something is missing, it opens the
+installer window instead of printing a traceback.
 
 For a desktop entry on Linux:
 
