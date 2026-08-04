@@ -56,7 +56,7 @@ from gitops.remote_url import github_slug
 from gitops.runner import GitResult
 from gitops.status import RepositoryState, read_state
 from models.repository import RepoEntry
-from services import avatars, open_with, scanner, updater
+from services import avatars, open_with, puller, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, ScanCoordinator
 from ui.changes_panel import ChangesPanel
@@ -65,6 +65,7 @@ from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
 from ui.graph_view import GraphView
 from ui.pr_panel import PullRequestPanel, build_snapshot_thread
+from ui.pull_all_dialog import PullAllDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
 from ui.update_dialog import UpdateDialog, build_update_thread, describe_update
@@ -273,6 +274,7 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._reload_current)
         repo_menu.addAction(refresh_action)
         repo_menu.addAction(i18n.t("sidebar.check_all"), lambda: self._start_scan(""))
+        repo_menu.addAction(i18n.t("sidebar.pull_all"), self._pull_all)
         repo_menu.addSeparator()
         repo_menu.addAction(i18n.t("repo.open_folder"), self._open_current_folder)
         repo_menu.addAction(i18n.t("repo.open_remote"), self._open_current_remote)
@@ -300,6 +302,7 @@ class MainWindow(QMainWindow):
 
         self._sidebar.repo_selected.connect(self._on_repo_selected)
         self._sidebar.check_requested.connect(self._start_scan)
+        self._sidebar.pull_all_requested.connect(self._pull_all)
         self._sidebar.add_requested.connect(self._prompt_add_repo)
         self._sidebar.clone_requested.connect(self._open_clone_dialog)
         self._sidebar.registry_changed.connect(self._save_registry)
@@ -1111,6 +1114,37 @@ class MainWindow(QMainWindow):
             self._report(result)
             return
         self._start_scan(entry.key)
+
+    def _pull_all(self) -> None:
+        """
+        Brings every project up to the server's version in one run.
+
+        Deliberately fast-forward only, and deliberately modal: this is the one
+        bulk action that writes to working trees, so nothing else may touch a
+        project while a worker is inside it. Whatever cannot be fast-forwarded is
+        reported by name rather than merged behind the user's back.
+
+        Returns:
+            None
+        """
+
+        if self._scans.is_running:
+            self.statusBar().showMessage(i18n.t("pull_all.busy"), 4000)
+            return
+        entries = self._registry.entries
+        if not entries:
+            self._show_notice("pull_all.heading", "pull_all.nothing", "info")
+            return
+
+        dialog = PullAllDialog(puller.build_jobs(entries), self)
+        dialog.exec()
+        if not dialog.results:
+            return
+
+        if any(result.changed for result in dialog.results):
+            self._reload_current()
+        # Every badge is stale now, whether the project moved or was only fetched.
+        self._start_scan("")
 
     def _do_push(self) -> None:
         """

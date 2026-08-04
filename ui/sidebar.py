@@ -156,6 +156,8 @@ class Sidebar(QWidget):
         repo_selected: Emitted with the registry key of the newly selected project.
         check_requested: Emitted with a registry key when one project should be
             checked, or with an empty string for all of them.
+        pull_all_requested: Emitted when every project should be brought up to the
+            server's version.
         add_requested: Emitted when the user wants to add an existing project.
         clone_requested: Emitted when the user wants to clone one.
         registry_changed: Emitted whenever the registry was modified and needs
@@ -168,6 +170,7 @@ class Sidebar(QWidget):
 
     repo_selected = Signal(str)
     check_requested = Signal(str)
+    pull_all_requested = Signal()
     add_requested = Signal()
     clone_requested = Signal()
     registry_changed = Signal()
@@ -303,6 +306,11 @@ class Sidebar(QWidget):
         self._check_all = QPushButton(i18n.t("sidebar.check_all"), holder)
         self._check_all.clicked.connect(lambda: self.check_requested.emit(""))
         column.addWidget(self._check_all)
+
+        self._pull_all = QPushButton(i18n.t("sidebar.pull_all"), holder)
+        self._pull_all.setToolTip(i18n.t("sidebar.pull_all_hint"))
+        self._pull_all.clicked.connect(self.pull_all_requested.emit)
+        column.addWidget(self._pull_all)
         return holder
 
     # ------------------------------------------------------------------- state
@@ -377,6 +385,8 @@ class Sidebar(QWidget):
         running = total > 0 and done < total
         self._progress.setVisible(running)
         self._check_all.setEnabled(not running)
+        # A pull would fight the scan for the same index locks.
+        self._pull_all.setEnabled(not running)
         if running:
             self._progress.setRange(0, total)
             self._progress.setValue(done)

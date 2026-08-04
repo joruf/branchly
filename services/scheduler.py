@@ -1,25 +1,31 @@
 """
-Running scans in the background.
+Running scans and bulk pulls in the background.
 
 Scanning a dozen repositories means a dozen git processes, so they go through a
 thread pool with a small ceiling rather than all at once — otherwise a check
 would briefly saturate the machine and make the window stutter, which is the
-opposite of helpful.
+opposite of helpful. Bulk pulls get their own, smaller pool for the same reason.
 
-Nothing here decides *what* a scan means; that is ``services.scanner``. This
-module only handles when scans run, how many at a time, and how results get back
-to the UI thread.
+Nothing here decides *what* a scan or a pull means; that is ``services.scanner``
+and ``services.puller``. This module only handles when work runs, how much of it
+at a time, and how results get back to the UI thread.
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Slot
 
+from services.puller import PullJob, PullResult, pull_one
 from services.scanner import ScanRequest, ScanResult, scan
 
 # Concurrent git processes. Four keeps a scan of twenty repositories quick while
 # leaving the machine responsive.
 MAX_CONCURRENT_SCANS = 4
+
+# Fewer than for scans: every pull is a full fetch plus a write to the working
+# tree, so three at a time keeps the network and the disk from being the thing the
+# user notices.
+MAX_CONCURRENT_PULLS = 3
 
 
 class _WorkerSignals(QObject):
@@ -180,6 +186,168 @@ class ScanCoordinator(QObject):
     def _advance(self) -> None:
         """
         Counts a finished scan and closes the batch when it was the last one.
+
+        Returns:
+            None
+        """
+
+        self._done += 1
+        self.progress.emit(self._done, self._total)
+        if self._done >= self._total:
+            self._running = False
+            self.batch_finished.emit()
+
+
+class _PullWorker(QRunnable):
+    """
+    Brings one project up to date, off the UI thread.
+    """
+
+    def __init__(self, job: PullJob) -> None:
+        """
+        Args:
+            job: Project to update.
+        """
+
+        super().__init__()
+        self.job = job
+        self.signals = _WorkerSignals()
+
+    @Slot()
+    def run(self) -> None:
+        """
+        Performs the pull and emits the outcome.
+
+        Returns:
+            None
+        """
+
+        try:
+            result = pull_one(self.job)
+        except Exception as error:  # noqa: BLE001 - a worker must never take the app down
+            self.signals.failed.emit(self.job.key, str(error))
+            return
+        self.signals.finished.emit(result)
+
+
+class PullCoordinator(QObject):
+    """
+    Runs a batch of pulls and reports progress.
+
+    Attributes:
+        result_ready: Emitted with each ``PullResult`` as it arrives.
+        progress: Emitted with ``(done, total)`` after each result.
+        batch_finished: Emitted once when every pull in the batch has ended.
+        pull_failed: Emitted with ``(key, message)`` when a worker raised.
+    """
+
+    result_ready = Signal(object)
+    progress = Signal(int, int)
+    batch_finished = Signal()
+    pull_failed = Signal(str, str)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        """
+        Args:
+            parent: Parent object.
+        """
+
+        super().__init__(parent)
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(MAX_CONCURRENT_PULLS)
+        self._total = 0
+        self._done = 0
+        self._running = False
+
+    @property
+    def is_running(self) -> bool:
+        """
+        Reports whether a batch is in flight.
+
+        Returns:
+            bool: True while pulls are outstanding.
+        """
+
+        return self._running
+
+    def start(self, jobs: list[PullJob]) -> bool:
+        """
+        Starts a batch of pulls.
+
+        A second batch is refused while one runs. Two batches over the same
+        working trees would fight over the index lock, and the point of the action
+        is one clear answer per project.
+
+        Args:
+            jobs: Projects to update.
+
+        Returns:
+            bool: True when the batch started.
+        """
+
+        if self._running or not jobs:
+            return False
+        self._running = True
+        self._total = len(jobs)
+        self._done = 0
+        self.progress.emit(0, self._total)
+        for job in jobs:
+            worker = _PullWorker(job)
+            worker.signals.finished.connect(self._on_finished)
+            worker.signals.failed.connect(self._on_failed)
+            self._pool.start(worker)
+        return True
+
+    def wait(self, timeout_ms: int = 120_000) -> bool:
+        """
+        Blocks until the batch is done.
+
+        Only for shutdown and for tests; the UI never calls this. The default is
+        generous because every job may be a network fetch.
+
+        Args:
+            timeout_ms: Milliseconds to wait.
+
+        Returns:
+            bool: True when the pool drained in time.
+        """
+
+        return self._pool.waitForDone(timeout_ms)
+
+    @Slot(object)
+    def _on_finished(self, result: PullResult) -> None:
+        """
+        Handles one completed pull.
+
+        Args:
+            result: The outcome.
+
+        Returns:
+            None
+        """
+
+        self.result_ready.emit(result)
+        self._advance()
+
+    @Slot(str, str)
+    def _on_failed(self, key: str, message: str) -> None:
+        """
+        Handles a worker that raised.
+
+        Args:
+            key: Registry key of the project.
+            message: Exception text.
+
+        Returns:
+            None
+        """
+
+        self.pull_failed.emit(key, message)
+        self._advance()
+
+    def _advance(self) -> None:
+        """
+        Counts a finished pull and closes the batch when it was the last one.
 
         Returns:
             None

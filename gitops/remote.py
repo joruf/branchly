@@ -285,7 +285,13 @@ def fetch(repo: Path | str, remote: str = "origin", prune: bool = True) -> GitRe
     return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK)
 
 
-def pull(repo: Path | str, remote: str = "origin", branch: str = "", rebase: bool = False) -> GitResult:
+def pull(
+    repo: Path | str,
+    remote: str = "origin",
+    branch: str = "",
+    rebase: bool = False,
+    ff_only: bool = False,
+) -> GitResult:
     """
     Downloads and integrates the server's commits.
 
@@ -294,17 +300,25 @@ def pull(repo: Path | str, remote: str = "origin", branch: str = "", rebase: boo
         remote: Remote name.
         branch: Branch to pull. Defaults to the tracking configuration.
         rebase: Whether to rebase local commits on top instead of merging.
+        ff_only: Whether to refuse anything but a fast-forward. Git then declines
+            a diverged branch outright rather than building a merge commit, and
+            leaves HEAD exactly where it was. This is what an unattended pull over
+            many repositories needs: it cannot invent history or stop halfway
+            through a conflict.
 
     Returns:
         GitResult: Outcome. Conflicts make this fail; the caller then opens the
-            conflict assistant.
+            conflict assistant. With ``ff_only`` a conflict cannot arise.
     """
 
     if not is_valid_branch_name(remote):
         return _refused("pull", "invalid remote name")
     if branch and not is_valid_branch_name(branch):
         return _refused("pull", "invalid branch name")
-    args = ["pull", "--rebase" if rebase else "--no-rebase", "--no-edit"]
+    args = ["pull", "--rebase" if rebase else "--no-rebase"]
+    if ff_only:
+        args.append("--ff-only")
+    args.append("--no-edit")
     args.append(remote)
     if branch:
         args.append(branch)
