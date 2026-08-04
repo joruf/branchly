@@ -31,6 +31,12 @@ AUTO_CHECK_PRESETS: tuple[int, ...] = (0, 5, 15, 30, 60, 120)
 DEFAULT_AUTO_CHECK_MINUTES = 15
 MAX_AUTO_CHECK_MINUTES = 1440
 
+# How often the startup update check may contact GitHub. Not offered in the
+# dialog — one checkbox is the decision users care about — but honoured when
+# hand-edited, with 0 meaning "on every start".
+DEFAULT_UPDATE_CHECK_HOURS = 24
+MAX_UPDATE_CHECK_HOURS = 720
+
 
 def normalize_diff_mode(mode: str | None) -> str:
     """
@@ -67,6 +73,45 @@ def normalize_auto_check_minutes(minutes: Any) -> int:
     return min(value, MAX_AUTO_CHECK_MINUTES)
 
 
+def normalize_update_check_hours(hours: Any) -> int:
+    """
+    Clamps the update-check interval into a sane range.
+
+    Args:
+        hours: Candidate interval in hours.
+
+    Returns:
+        int: 0 when every start should check, otherwise 1..720.
+    """
+
+    if isinstance(hours, bool) or not isinstance(hours, (int, float)):
+        return DEFAULT_UPDATE_CHECK_HOURS
+    value = int(hours)
+    if value <= 0:
+        return 0
+    return min(value, MAX_UPDATE_CHECK_HOURS)
+
+
+def normalize_timestamp(value: Any) -> float:
+    """
+    Reduces a stored point in time to a usable number.
+
+    Args:
+        value: Candidate epoch timestamp.
+
+    Returns:
+        float: The timestamp, or 0.0 when it is missing or nonsense. Zero reads
+            as "never", which is the safe answer: it triggers a check rather than
+            suppressing one forever.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    if value <= 0:
+        return 0.0
+    return float(value)
+
+
 @dataclass(slots=True)
 class AppSettings:
     """
@@ -80,6 +125,11 @@ class AppSettings:
         check_online_automatically: Whether the automatic check also contacts
             remotes. When False it only inspects the working trees, which needs
             no network at all.
+        check_updates: Whether Branchly asks GitHub on startup whether a newer
+            version of itself exists. Looking only — nothing is ever installed
+            without the user saying so.
+        update_check_hours: Hours between two startup update checks.
+        update_checked_at: Epoch timestamp of the last update check, 0 for never.
         diff_mode: Default diff layout.
         diff_ignore_whitespace: Whether diffs ignore whitespace-only changes.
         diff_word_level: Whether changed lines get intra-line word highlighting.
@@ -98,6 +148,9 @@ class AppSettings:
     sort_mode: str = DEFAULT_SORT_MODE
     auto_check_minutes: int = DEFAULT_AUTO_CHECK_MINUTES
     check_online_automatically: bool = True
+    check_updates: bool = True
+    update_check_hours: int = DEFAULT_UPDATE_CHECK_HOURS
+    update_checked_at: float = 0.0
     diff_mode: str = DEFAULT_DIFF_MODE
     diff_ignore_whitespace: bool = False
     diff_word_level: bool = True
@@ -122,6 +175,9 @@ class AppSettings:
             sort_mode=normalize_sort_mode(self.sort_mode),
             auto_check_minutes=normalize_auto_check_minutes(self.auto_check_minutes),
             check_online_automatically=bool(self.check_online_automatically),
+            check_updates=bool(self.check_updates),
+            update_check_hours=normalize_update_check_hours(self.update_check_hours),
+            update_checked_at=normalize_timestamp(self.update_checked_at),
             diff_mode=normalize_diff_mode(self.diff_mode),
             diff_ignore_whitespace=bool(self.diff_ignore_whitespace),
             diff_word_level=bool(self.diff_word_level),

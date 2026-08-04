@@ -18,14 +18,15 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-# Set in the child process so a re-exec can never turn into a loop.
-_REEXEC_MARKER = "BRANCHLY_REEXEC"
-
 import i18n  # noqa: E402
 import paths  # noqa: E402
 from config.app_settings import AppSettings, load_settings, save_settings  # noqa: E402
 from config.theme import available_themes, build_application_stylesheet, set_current_theme  # noqa: E402
-from constants import APP_NAME, APP_SLUG, APP_VERSION  # noqa: E402
+from constants import APP_NAME, APP_SLUG, APP_VERSION, REEXEC_MARKER  # noqa: E402
+
+# Set in the child process so a re-exec can never turn into a loop. The restart
+# after an update clears the same variable, for the same reason.
+_REEXEC_MARKER = REEXEC_MARKER
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -264,6 +265,14 @@ def main(argv: list[str] | None = None) -> int:
 
     exit_code = app.exec()
     save_settings(window.collect_settings())
+
+    if window.wants_restart():
+        # Last thing before this process ends: the window is gone and the settings
+        # are on disk, so the fresh instance starts from a clean state. On POSIX
+        # this never returns.
+        from services import updater
+
+        updater.restart()
     return exit_code
 
 

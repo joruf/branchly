@@ -181,12 +181,36 @@ Ein Token legst du auf github.com unter *Settings → Developer settings →
 Personal access tokens* an. Es landet im Schlüsselspeicher des Systems, nie in
 einer Datei. Branchly prüft es sofort und zeigt, als wer du angemeldet bist.
 
+## Branchly aktuell halten
+
+Beim Start fragt Branchly einmal am Tag bei GitHub nach, ob es eine neuere Version
+von sich selbst gibt. Findet es eine, erscheint über den Panels ein Streifen:
+**Installieren und neu starten** oder **Jetzt nicht**. Ohne Neuigkeit sagt es
+nichts — eine Meldung „alles beim Alten" braucht niemand.
+
+Sofort nachfragen: **Hilfe → Nach Updates suchen…**. Dort steht, welcher Stand
+installiert und welcher verfügbar ist, mit der Kurzfassung der neuesten Änderung.
+
+Beim Installieren holt Branchly die neue Version, schließt sich und startet
+wieder. Was dabei **nicht** passiert:
+
+- Deine Projekte, Einstellungen und dein Token werden nicht angefasst. Sie liegen
+  außerhalb des Programmordners.
+- Eigene, nicht eingecheckte Änderungen im Branchly-Ordner werden nicht
+  überschrieben. Stattdessen bricht das Update ab und sagt genau das. Speichere
+  sie erst als Änderung ein oder verwirf sie.
+- Nichts wird ohne Klick installiert. Die Prüfung schaut nur.
+
+Die Prüfung beim Start lässt sich in *Einstellungen → Automatische Prüfung*
+abschalten. Wie oft sie höchstens läuft, steht als `update_check_hours` in
+`settings.json` — `0` heißt „bei jedem Start".
+
 ## Einstellungen
 
 | Reiter | Inhalt |
 |---|---|
 | Allgemein | Sprache, Erscheinungsbild, Standard-Sortierung, Nachfragen vor Verlust |
-| Automatische Prüfung | Intervall, und ob dabei die Server gefragt werden |
+| Automatische Prüfung | Intervall, ob dabei die Server gefragt werden, Update-Suche beim Start |
 | Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung |
 | GitHub | Token, GitHub-Funktionen ein/aus, Autorenbilder |
 

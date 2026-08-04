@@ -170,7 +170,10 @@ class MainWindowSmokeTests(unittest.TestCase):
         from ui.main_window import MainWindow
 
         os.environ["XDG_CONFIG_HOME"] = str(tmp_config)
-        settings = AppSettings(auto_check_minutes=0, github_enabled=False, language="en")
+        # No automatic checks of any kind: a test must never depend on a network.
+        settings = AppSettings(
+            auto_check_minutes=0, github_enabled=False, check_updates=False, language="en"
+        )
         window = MainWindow(settings)
         outcome, entry = window._registry.add(repo_path)  # noqa: SLF001 - setup shortcut
         self.assertIsNotNone(entry)
@@ -277,6 +280,98 @@ class MainWindowSmokeTests(unittest.TestCase):
                     self.assertTrue(window._notice.isVisibleTo(window))  # noqa: SLF001
                 finally:
                     window.close()
+
+    def test_the_update_banner_appears_and_can_be_dismissed(self) -> None:
+        import tempfile
+
+        from services.updater import UpdateInfo
+        from ui.main_window import ACTION_UPDATE_LATER
+
+        info = UpdateInfo(available=True, local="a" * 10, remote="b" * 10, summary="Faster graph")
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    window._show_update_banner(info)  # noqa: SLF001
+                    self.assertTrue(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    window._on_update_banner_action(ACTION_UPDATE_LATER)  # noqa: SLF001
+                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    self.assertFalse(window.wants_restart())
+                finally:
+                    window.close()
+
+    def test_a_quiet_failed_check_says_nothing(self) -> None:
+        import tempfile
+
+        from services.updater import ERROR_OFFLINE, UpdateInfo
+
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    window._on_update_checked(UpdateInfo(error_key=ERROR_OFFLINE))  # noqa: SLF001
+                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                finally:
+                    window.close()
+
+
+@requires_qt
+class UpdateDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_an_available_update_offers_the_install_button(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import UpdateDialog
+
+        info = UpdateInfo(available=True, local="a" * 10, remote="b" * 10, summary="Faster graph")
+        dialog = UpdateDialog(info)
+        try:
+            self.assertTrue(dialog._install.isVisibleTo(dialog))  # noqa: SLF001
+            self.assertIn("b" * 10, dialog._detail.text())  # noqa: SLF001
+            self.assertFalse(dialog.restart_wanted)
+        finally:
+            dialog.close()
+
+    def test_the_newest_version_offers_nothing(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import UpdateDialog
+
+        info = UpdateInfo(available=False, local="a" * 10, remote="a" * 10)
+        dialog = UpdateDialog(info)
+        try:
+            self.assertFalse(dialog._install.isVisibleTo(dialog))  # noqa: SLF001
+        finally:
+            dialog.close()
+
+    def test_a_failed_check_is_shown_without_an_install_button(self) -> None:
+        from services.updater import ERROR_OFFLINE, UpdateInfo
+        from ui.update_dialog import UpdateDialog
+
+        dialog = UpdateDialog(UpdateInfo(error_key=ERROR_OFFLINE, detail="no route to host"))
+        try:
+            self.assertFalse(dialog._install.isVisibleTo(dialog))  # noqa: SLF001
+            self.assertIn("no route", dialog._detail.text())  # noqa: SLF001
+        finally:
+            dialog.close()
+
+    def test_the_description_names_the_commit_and_what_happens(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import describe_update
+
+        text = describe_update(UpdateInfo(available=True, summary="Faster graph"))
+        self.assertIn("Faster graph", text)
+        self.assertIn(i18n.t("update.available_hint"), text)
+
+    def test_a_commit_without_a_subject_still_describes_the_update(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import describe_update
+
+        self.assertEqual(
+            i18n.t("update.available_hint"), describe_update(UpdateInfo(available=True))
+        )
 
 
 @requires_qt

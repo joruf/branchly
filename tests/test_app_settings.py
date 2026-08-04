@@ -13,13 +13,17 @@ from config.app_settings import (
     AUTO_CHECK_PRESETS,
     DEFAULT_AUTO_CHECK_MINUTES,
     DEFAULT_DIFF_MODE,
+    DEFAULT_UPDATE_CHECK_HOURS,
     DIFF_SIDE_BY_SIDE,
     DIFF_UNIFIED,
     MAX_AUTO_CHECK_MINUTES,
+    MAX_UPDATE_CHECK_HOURS,
     AppSettings,
     load_settings,
     normalize_auto_check_minutes,
     normalize_diff_mode,
+    normalize_timestamp,
+    normalize_update_check_hours,
     save_settings,
 )
 from config.theme import DEFAULT_THEME, THEME_LIGHT
@@ -50,6 +54,24 @@ class NormalizationTests(unittest.TestCase):
         for preset in AUTO_CHECK_PRESETS:
             self.assertEqual(preset, normalize_auto_check_minutes(preset))
 
+    def test_update_hours_zero_checks_on_every_start(self) -> None:
+        self.assertEqual(0, normalize_update_check_hours(0))
+        self.assertEqual(0, normalize_update_check_hours(-3))
+
+    def test_update_hours_are_clamped(self) -> None:
+        self.assertEqual(MAX_UPDATE_CHECK_HOURS, normalize_update_check_hours(100_000))
+
+    def test_update_hours_reject_non_numbers(self) -> None:
+        for value in (None, "24", True, [], {}):
+            self.assertEqual(DEFAULT_UPDATE_CHECK_HOURS, normalize_update_check_hours(value))
+
+    def test_a_missing_or_absurd_check_time_reads_as_never(self) -> None:
+        for value in (None, "yesterday", True, -1, 0, []):
+            self.assertEqual(0.0, normalize_timestamp(value))
+
+    def test_a_real_check_time_survives(self) -> None:
+        self.assertEqual(1_700_000_000.0, normalize_timestamp(1_700_000_000))
+
 
 class AppSettingsTests(unittest.TestCase):
     def test_defaults_are_sane(self) -> None:
@@ -58,6 +80,9 @@ class AppSettingsTests(unittest.TestCase):
         self.assertEqual(DEFAULT_SORT_MODE, settings.sort_mode)
         self.assertEqual(DEFAULT_AUTO_CHECK_MINUTES, settings.auto_check_minutes)
         self.assertTrue(settings.confirm_destructive)
+        self.assertTrue(settings.check_updates)
+        self.assertEqual(DEFAULT_UPDATE_CHECK_HOURS, settings.update_check_hours)
+        self.assertEqual(0.0, settings.update_checked_at)
 
     def test_normalized_fixes_bad_values(self) -> None:
         settings = AppSettings(theme="neon", sort_mode="whatever", diff_mode="nope", auto_check_minutes=-5)
@@ -91,6 +116,16 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(THEME_LIGHT, loaded.theme)
             self.assertEqual("de", loaded.language)
             self.assertEqual(60, loaded.auto_check_minutes)
+
+    def test_the_update_check_time_survives_a_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "settings.json"
+            save_settings(
+                AppSettings(check_updates=False, update_checked_at=1_700_000_000.0), target
+            )
+            loaded = load_settings(target)
+            self.assertFalse(loaded.check_updates)
+            self.assertEqual(1_700_000_000.0, loaded.update_checked_at)
 
     def test_missing_file_yields_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

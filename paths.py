@@ -172,12 +172,15 @@ def ensure_dir(path: Path) -> bool:
     return path.is_dir()
 
 
-def venv_python_path(root: Path | None = None) -> Path:
+def venv_python_path(root: Path | None = None, gui: bool = False) -> Path:
     """
     Resolves the project virtualenv interpreter for the current OS.
 
     Args:
         root: Project root to look in. Defaults to the Branchly source tree.
+        gui: Whether the interpreter will start a window rather than a script.
+            Only matters on Windows, where ``python.exe`` opens a console the
+            user never asked for; ``pythonw.exe`` does not.
 
     Returns:
         Path: Preferred interpreter path, which may not exist yet.
@@ -186,9 +189,10 @@ def venv_python_path(root: Path | None = None) -> Path:
     base = root or project_root()
     if is_windows():
         scripts = base / ".venv" / "Scripts"
-        for name in ("python.exe", "pythonw.exe"):
+        order = ("pythonw.exe", "python.exe") if gui else ("python.exe", "pythonw.exe")
+        for name in order:
             candidate = scripts / name
             if candidate.exists():
                 return candidate
-        return scripts / "python.exe"
+        return scripts / order[0]
     return base / ".venv" / "bin" / "python"

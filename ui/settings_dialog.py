@@ -248,6 +248,15 @@ class SettingsDialog(QDialog):
         online_hint.setObjectName("Muted")
         online_hint.setWordWrap(True)
         form.addRow("", online_hint)
+
+        self._check_updates = QCheckBox(i18n.t("settings.check_updates"), page)
+        self._check_updates.setChecked(self._original.check_updates)
+        form.addRow("", self._check_updates)
+
+        updates_hint = QLabel(i18n.t("settings.check_updates_hint"), page)
+        updates_hint.setObjectName("Muted")
+        updates_hint.setWordWrap(True)
+        form.addRow("", updates_hint)
         return page
 
     def _build_diff_tab(self) -> QWidget:
@@ -464,6 +473,11 @@ class SettingsDialog(QDialog):
             sort_mode=str(self._sort.currentData() or self._original.sort_mode),
             auto_check_minutes=int(self._interval.currentData() or 0),
             check_online_automatically=self._check_online.isChecked(),
+            check_updates=self._check_updates.isChecked(),
+            # Not offered here, but a hand-edited value and the last check must
+            # survive a trip through this dialog.
+            update_check_hours=self._original.update_check_hours,
+            update_checked_at=self._original.update_checked_at,
             diff_mode=str(self._diff_mode.currentData() or self._original.diff_mode),
             diff_ignore_whitespace=self._diff_whitespace.isChecked(),
             diff_word_level=self._diff_words.isChecked(),

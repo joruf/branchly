@@ -22,7 +22,7 @@ run.py                     Bootstrap: Argumente, Sprache, Theme, QApplication
 ├── models/                Reine Daten: RepoEntry, Category, Sortierung
 ├── gitops/                Die EINZIGE Schicht, die git aufruft
 ├── github_api/            REST-Client, Token-Ablage, Antwortmodelle
-├── services/              Registry, Scanner, Scheduler, Desktop, Avatare
+├── services/              Registry, Scanner, Scheduler, Updater, Desktop, Avatare
 └── ui/                    Qt-Widgets; kennt gitops, aber nie subprocess
 ```
 
@@ -143,6 +143,41 @@ abgewiesen, solange einer läuft, statt sich einzureihen.
 Der Online-Teil nutzt `git ls-remote`. Das ist rein lesend: ein automatischer Scan
 kann die Refs des Nutzers nicht bewegen. `fetch` und `pull` laufen nur auf
 ausdrücklichen Wunsch.
+
+### Selbst-Update
+
+`services/updater.py`. Branchly veröffentlicht keine Releases und keine Tags,
+also ist „neuer" der Head-Commit von `main`: `GET /repos/joruf/branchly/commits/main`
+liefert ihn, `git rev-parse HEAD` liefert den eigenen, verglichen wird stumpf auf
+Gleichheit. Kein Versionsvergleich, keine Semantik, nichts, was falsch sortieren
+kann.
+
+Bewusst **nicht** über `github_api/client.py`: der Client dreht sich um das Token
+des Nutzers, dessen Pull Requests und einen ETag-Cache. Die Update-Prüfung stellt
+eine anonyme Frage zu einem öffentlichen Repo und darf dabei weder das Rate-Limit
+des Nutzers verbrauchen noch sein Token sehen. `tests/test_updater.py` prüft, dass
+kein `Authorization`-Header rausgeht.
+
+Zwei Wege beim Einspielen, automatisch gewählt:
+
+| Weg | Wann | Schutz |
+|---|---|---|
+| `git pull --ff-only` | Es gibt ein `.git` (der Normalfall) | `git status --porcelain` muss leer sein; `--ff-only` scheitert an eigenen Commits statt sie zu begraben |
+| Branch-ZIP über den Ordner | Kein `.git` | `.git`, `.venv`, `settings.json`, `repos.json` werden nie überschrieben; Größenlimit beim Download; Zielpfade müssen innerhalb der Installation liegen |
+
+Der Neustart ist das Letzte, was der Prozess tut: `ui/update_dialog.py` setzt nur
+`restart_wanted`, das Fenster schließt normal, `run.py` ruft danach
+`updater.restart()`. Dateien unter einem laufenden Python zu ersetzen ist harmlos —
+die Module sind längst geladen —, ein Neustart mitten in der Event-Loop nicht.
+Unter POSIX ersetzt `os.execve` den Prozess, unter Windows startet ein Kind mit
+`pythonw.exe` und `CREATE_NO_WINDOW`. In beiden Fällen wird `BRANCHLY_REEXEC` aus
+der Umgebung entfernt, sonst würde das Kind seine venv nicht mehr betreten.
+
+Die Prüfung beim Start läuft verzögert (4 s) auf einem Worker-Thread und schweigt,
+wenn sie scheitert: sie läuft auch ohne Netz, und ein Dialog darüber wäre Lärm.
+Der Zeitstempel der letzten *erfolgreichen* Prüfung liegt in `settings.json`;
+gescheiterte Prüfungen setzen ihn nicht, damit eine Woche offline nicht als
+„geprüft" durchgeht.
 
 ## Themes und Sprachen erweitern
 

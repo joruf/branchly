@@ -58,6 +58,11 @@ Erscheint nur, wenn es etwas zu sagen gibt, und immer mit Erklärung:
 Dies ist bewusst kein Modal: eine Erklärung soll stehen bleiben, während man
 weiterarbeitet.
 
+Darüber liegt ein **zweiter** Streifen derselben Bauart, nur für Branchly selbst:
+„Eine neuere Version ist verfügbar" mit *Installieren und neu starten* und *Jetzt
+nicht*. Ein eigener Streifen, weil die nächste Projektauswahl den unteren neu
+schreibt — eine Nachricht über das Programm darf dabei nicht verschwinden.
+
 ## Reiter Änderungen (`ui/changes_panel.py`)
 
 Dateiliste mit Häkchen; die Farbe der Zeile sagt die Art (geändert, neu, gelöscht,
@@ -114,6 +119,26 @@ Vier Reiter: Allgemein, Automatische Prüfung, Gegenüberstellung, GitHub.
 Bearbeitet wird eine Kopie — Abbrechen lässt wirklich alles, wie es war. Nur der
 GitHub-Reiter hat sofortige Wirkung: ein gespeichertes Token wird augenblicklich
 gegen die API geprüft.
+
+## Updates (`ui/update_dialog.py`)
+
+```
+┌─ Updates ──────────────────────────────────────────────┐
+│ Branchly                                               │
+│ Version 0.1.0                                          │
+│ ┌────────────────────────────────────────────────────┐ │
+│ │ Eine neuere Version ist verfügbar                  │ │
+│ │ Graph-Layout beschleunigt — Branchly kann sie holen│ │
+│ └────────────────────────────────────────────────────┘ │
+│ Installiert fa5cf9e424, verfügbar 9c1d7ab002.          │
+│ [Erneut prüfen]   [Installieren und neu starten][Zu]   │
+└────────────────────────────────────────────────────────┘
+```
+
+Über *Hilfe → Nach Updates suchen…* oder über den Streifen. Prüfen und Installieren
+laufen auf einem Worker-Thread. Während des Installierens ist *Schließen* gesperrt:
+ein Worker, der Dateien schreibt, darf nicht ins Leere laufen. Nichts wird ohne
+Rückfrage installiert, und der Neustart passiert erst, wenn das Fenster weg ist.
 
 ## Farben
 
