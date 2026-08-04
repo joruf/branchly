@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover - PySide6 missing is a valid environment
 import i18n
 from config.theme import THEME_DARK, THEME_LIGHT, get_theme_colors
 from gitops.diff import parse_unified
-from tests.support import requires_git, temp_repo
+from tests.support import requires_git, temp_repo, temp_repo_pair
 
 requires_qt = unittest.skipUnless(QT_AVAILABLE, "PySide6 is not installed")
 
@@ -281,6 +281,59 @@ class MainWindowSmokeTests(unittest.TestCase):
                 finally:
                     window.close()
 
+    def test_the_bulk_pull_is_offered_in_the_menu(self) -> None:
+        import tempfile
+
+        from PySide6.QtWidgets import QMenu
+
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    labels = [
+                        action.text()
+                        for menu in window.menuBar().findChildren(QMenu)
+                        for action in menu.actions()
+                    ]
+                    self.assertIn(i18n.t("sidebar.pull_all"), labels)
+                finally:
+                    window.close()
+
+    def test_the_sidebar_button_reaches_the_window(self) -> None:
+        """
+        Proves the wiring without opening the modal dialog: with a check running,
+        the request is answered by a message instead of by a window.
+        """
+
+        import tempfile
+
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    window._scans._running = True  # noqa: SLF001
+                    window._sidebar.pull_all_requested.emit()  # noqa: SLF001
+                    self.assertEqual(
+                        i18n.t("pull_all.busy"), window.statusBar().currentMessage()
+                    )
+                finally:
+                    window._scans._running = False  # noqa: SLF001
+                    window.close()
+
+    def test_a_bulk_pull_without_projects_says_so(self) -> None:
+        import tempfile
+
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    for entry in list(window._registry.entries):  # noqa: SLF001
+                        window._registry.remove(entry)  # noqa: SLF001
+                    window._pull_all()  # noqa: SLF001
+                    self.assertTrue(window._notice.isVisibleTo(window))  # noqa: SLF001
+                finally:
+                    window.close()
+
     def test_the_update_banner_appears_and_can_be_dismissed(self) -> None:
         import tempfile
 
@@ -497,6 +550,137 @@ class UpdateDialogTests(unittest.TestCase):
             self.assertFalse(dialog._changes_title.isVisibleTo(dialog))  # noqa: SLF001
         finally:
             dialog.close()
+
+
+@requires_qt
+class PullAllWordingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_a_pulled_project_says_how_many_commits(self) -> None:
+        from services.puller import RESULT_PULLED, PullResult
+        from ui.pull_all_dialog import describe_result
+
+        text = describe_result(PullResult(key="a", name="pmtool", state=RESULT_PULLED, commits=3))
+        self.assertIn("pmtool", text)
+        self.assertIn("3", text)
+
+    def test_a_current_project_says_so(self) -> None:
+        from services.puller import RESULT_CURRENT, PullResult
+        from ui.pull_all_dialog import describe_result
+
+        text = describe_result(PullResult(key="a", name="pmtool", state=RESULT_CURRENT))
+        self.assertIn(i18n.t("pull_all.already_current"), text)
+
+    def test_a_skipped_project_names_the_reason_and_what_waits(self) -> None:
+        from services.puller import RESULT_SKIPPED, SKIP_DIRTY, PullResult
+        from ui.pull_all_dialog import describe_result
+
+        text = describe_result(
+            PullResult(key="a", name="snappix", state=RESULT_SKIPPED, reason_key=SKIP_DIRTY, waiting=2)
+        )
+        self.assertIn("snappix", text)
+        self.assertIn(i18n.t(SKIP_DIRTY), text)
+        self.assertIn(i18n.t("pull_all.waiting", count=2), text)
+
+    def test_an_empty_run_cannot_be_started(self) -> None:
+        from ui.pull_all_dialog import PullAllDialog
+
+        dialog = PullAllDialog([])
+        try:
+            self.assertFalse(dialog._start.isEnabled())  # noqa: SLF001
+            self.assertEqual([], dialog.results)
+        finally:
+            dialog.close()
+
+
+@requires_qt
+@requires_git
+class PullAllRunTests(unittest.TestCase):
+    """
+    The whole action end to end: real repositories, real git, real event loop.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _drain(self, dialog, timeout: float = 90.0) -> None:  # noqa: ANN001 - PullAllDialog
+        """
+        Spins the event loop until the batch reports itself finished.
+
+        Args:
+            dialog: Dialog whose run should complete.
+            timeout: Seconds before giving up.
+
+        Returns:
+            None
+        """
+
+        import time
+
+        deadline = time.monotonic() + timeout
+        while dialog._running and time.monotonic() < deadline:  # noqa: SLF001
+            self.app.processEvents()
+        self.assertFalse(dialog._running, "the batch never finished")  # noqa: SLF001
+
+    def test_one_project_is_pulled_and_another_is_skipped(self) -> None:
+        from services.puller import RESULT_PULLED, RESULT_SKIPPED, SKIP_NO_REMOTE, PullJob
+        from ui.pull_all_dialog import PullAllDialog
+
+        with temp_repo_pair() as (first, second, _origin):
+            first.commit_file("shared.txt", "theirs\n", "their commit")
+            first.git("push", "origin", "main")
+            with temp_repo() as lonely:
+                jobs = [
+                    PullJob(path=second.root, key="pair", name="pair"),
+                    PullJob(path=lonely.root, key="lonely", name="lonely"),
+                ]
+                dialog = PullAllDialog(jobs)
+                try:
+                    dialog._begin()  # noqa: SLF001
+                    self._drain(dialog)
+
+                    by_key = {item.key: item for item in dialog.results}
+                    self.assertEqual(2, len(by_key))
+                    self.assertEqual(RESULT_PULLED, by_key["pair"].state)
+                    self.assertEqual(1, by_key["pair"].commits)
+                    self.assertEqual(RESULT_SKIPPED, by_key["lonely"].state)
+                    self.assertEqual(SKIP_NO_REMOTE, by_key["lonely"].reason_key)
+
+                    # The report is on screen, and the window can be left again.
+                    self.assertEqual(2, dialog._list.count())  # noqa: SLF001
+                    self.assertTrue(dialog._close.isEnabled())  # noqa: SLF001
+                    self.assertFalse(dialog._start.isVisibleTo(dialog))  # noqa: SLF001
+                    self.assertEqual(first.head(), second.head())
+                finally:
+                    dialog.close()
+
+    def test_the_window_refuses_to_close_mid_run(self) -> None:
+        """
+        Closing while workers are writing would leave them updating projects
+        nobody is watching, so the way out is to let the batch finish.
+        """
+
+        from services.puller import PullJob
+        from ui.pull_all_dialog import PullAllDialog
+
+        with temp_repo() as repo:
+            dialog = PullAllDialog([PullJob(path=repo.root, key="one", name="one")])
+            left: list[bool] = []
+            dialog.rejected.connect(lambda: left.append(True))
+            try:
+                dialog._running = True  # noqa: SLF001
+                dialog.reject()
+                self.assertEqual([], left, "the dialog left while a batch was running")
+
+                dialog._running = False  # noqa: SLF001
+                dialog.reject()
+                self.assertEqual([True], left, "and closes normally once it is done")
+            finally:
+                dialog._running = False  # noqa: SLF001
+                dialog.close()
 
 
 @requires_qt

@@ -22,7 +22,7 @@ run.py                     Bootstrap: Argumente, Sprache, Theme, QApplication
 ├── models/                Reine Daten: RepoEntry, Category, Sortierung
 ├── gitops/                Die EINZIGE Schicht, die git aufruft
 ├── github_api/            REST-Client, Token-Ablage, Antwortmodelle
-├── services/              Registry, Scanner, Scheduler, Updater, Desktop, Avatare
+├── services/              Registry, Scanner, Scheduler, Puller, Updater, Desktop
 └── ui/                    Qt-Widgets; kennt gitops, aber nie subprocess
 ```
 
@@ -143,6 +143,34 @@ abgewiesen, solange einer läuft, statt sich einzureihen.
 Der Online-Teil nutzt `git ls-remote`. Das ist rein lesend: ein automatischer Scan
 kann die Refs des Nutzers nicht bewegen. `fetch` und `pull` laufen nur auf
 ausdrücklichen Wunsch.
+
+### Alle Projekte auf einmal holen
+
+`services/puller.py` (Qt-frei, also ohne Fenster testbar) plus `PullCoordinator` in
+`services/scheduler.py` für den Thread-Pool. Drei gleichzeitige Prozesse, nicht vier
+wie beim Scan: jeder Pull ist ein voller Fetch **plus** ein Schreibvorgang im
+Arbeitsbaum.
+
+Die eine Entscheidung, auf der alles ruht: **`git pull --ff-only`**. Bei einem
+Projekt schaut der Nutzer hin und entscheidet; bei zwanzig nicht. Ohne `--ff-only`
+könnte ein Lauf zwanzig Merge-Commits bauen und in fünf Ordnern einen offenen
+Konflikt hinterlassen — genau das, was Branchly nie ohne Rückfrage tun darf. Mit
+`--ff-only` lehnt git ab und lässt HEAD stehen, wo es stand. `tests/test_pull_all.py`
+prüft beides an echten Klon-Paaren, inklusive „der Einzel-Button merged weiter".
+
+`blocking_reason()` nennt vorab *einen* Grund, sortiert danach, was der Nutzer am
+ehesten hören muss: Konflikt → laufender Vorgang → Detached HEAD → unfertige Arbeit
+→ kein Upstream → eigene Commits. Eigene Commits werden dabei aus `state.ahead`
+erkannt, nicht aus einer Fehlermeldung von git: „dein Branch ist auseinandergelaufen"
+ist eine Aussage, die Branchly selbst treffen kann.
+
+Übersprungene Projekte bekommen trotzdem ein `fetch`. Fetch schreibt nur in die
+Tracking-Refs und lässt den Arbeitsbaum unberührt — dadurch stimmt hinterher das
+Badge, statt nach dem Lauf veraltet dazustehen.
+
+Der Dialog ist modal, und während der Lauf schreibt, ist *Schließen* gesperrt. Das
+ist die einzige Massenaktion in Branchly, die in Arbeitsbäume schreibt; solange ein
+Worker in einem Projekt steckt, darf niemand daneben einen Push starten.
 
 ### Selbst-Update
 

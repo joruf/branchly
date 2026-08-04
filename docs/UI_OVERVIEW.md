@@ -36,6 +36,7 @@
 | Projektzeile | Sternchen, Name, Badges. Fehlender Ordner wird rot mit `!` markiert |
 | Zusammenfassung | Ein Satz über alle Projekte |
 | Alle Projekte prüfen | Während des Laufs Fortschrittsbalken statt Zusammenfassung |
+| Alle Projekte aktualisieren | Öffnet den Massen-Pull. Während einer Prüfung gesperrt — beide würden um dieselben Index-Sperren streiten |
 
 ## Kopfzeile
 
@@ -119,6 +120,29 @@ Vier Reiter: Allgemein, Automatische Prüfung, Gegenüberstellung, GitHub.
 Bearbeitet wird eine Kopie — Abbrechen lässt wirklich alles, wie es war. Nur der
 GitHub-Reiter hat sofortige Wirkung: ein gespeichertes Token wird augenblicklich
 gegen die API geprüft.
+
+## Alle Projekte aktualisieren (`ui/pull_all_dialog.py`)
+
+```
+┌─ Alle Projekte aktualisieren ──────────────────────────┐
+│ ┌────────────────────────────────────────────────────┐ │
+│ │ Fertig                                             │ │
+│ │ 2 aktualisiert · 6 neue Commits · 2 übersprungen   │ │
+│ └────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────┐ │
+│ │ snappix — eigene Änderungen … · 3 warten am Server │ │
+│ │ byteback — 3 neue Commits                          │ │
+│ │ consentry — 3 neue Commits                         │ │
+│ │ nudge — eigene Commits sind noch nicht gesendet    │ │
+│ └────────────────────────────────────────────────────┘ │
+│                                            [Schließen] │
+└────────────────────────────────────────────────────────┘
+```
+
+Drei Zustände in einem Fenster: Ankündigung, Fortschritt, Bericht. Zeilenfarbe nach
+Ausgang — `success` vorgespult, `text_muted` schon aktuell, `warning` übersprungen,
+`danger` fehlgeschlagen. Modal, und während des Laufs ist *Schließen* gesperrt: es
+wird in Arbeitsbäume geschrieben.
 
 ## Updates (`ui/update_dialog.py`)
 

@@ -38,6 +38,9 @@ something new" — locally *and* on the server.
 - Tick the files that belong together, write a summary, save
 - Branch: create, switch, rename, delete
 - Fetch, pull and push with the counts on the buttons
+- One action brings *every* project up to the server's version. Fast-forward only:
+  nothing is merged, nothing is overwritten, and every project that was skipped is
+  named with the reason — unsaved work, own commits, a waiting conflict
 - Graph view with lanes: check out a version, branch from it, merge it,
   cherry-pick, revert, move the branch, tag it, or compare two versions
 
@@ -124,6 +127,10 @@ where most of its safety comes from. On top of that:
   command rather than hold content, and refuses any path outside the repository.
 - **Destructive actions confirm first**, in a sentence saying what gets lost.
   `--force-with-lease` is offered; a plain `--force` push is not.
+- **The bulk pull is fast-forward only.** Over twenty projects nobody is watching
+  each one, so git is told to refuse anything but a fast-forward: it cannot build a
+  merge commit, cannot leave a conflict behind, and cannot move a branch that has
+  unsaved work in its tree. Skipped projects are fetched, which touches no file.
 - **The update check is anonymous and never installs by itself.** It asks the
   public commits endpoint without your token, so it cannot spend your rate limit
   or leak the token to a redirect. Installing needs a click, refuses to run over

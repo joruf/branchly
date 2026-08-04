@@ -78,6 +78,38 @@ herunter und verändert dein Projekt nicht. Wer ganz ohne Netz arbeiten will,
 schaltet „Auch die Server fragen" aus; dann werden nur die lokalen Ordner
 angesehen.
 
+## Alle Projekte auf einmal aktualisieren
+
+**Alle Projekte aktualisieren** unten in der Liste (oder *Projekt → Alle Projekte
+aktualisieren*) holt für jedes Projekt die Änderungen vom Server. Ein Fenster sagt
+vorher, was passiert, zeigt den Fortschritt und danach für **jedes** Projekt
+einzeln, was daraus geworden ist.
+
+Der Vorgang **spult nur vor**. Er führt nichts zusammen, überschreibt nichts und
+kann keinen Konflikt hinterlassen. Was nicht eindeutig vorzuspulen ist, bleibt
+unangetastet und steht namentlich in der Liste:
+
+| Steht da | Heißt |
+|---|---|
+| *3 neue Commits* | Vorgespult, das Projekt ist auf dem Stand des Servers |
+| *schon aktuell* | Der Server hatte nichts Neues |
+| *eigene Änderungen sind noch nicht gespeichert* | Im Ordner liegt unfertige Arbeit |
+| *eigene Commits sind noch nicht gesendet* | Der Branch ist auseinandergelaufen — Vorspulen ist unmöglich |
+| *Konflikte warten auf eine Entscheidung* | Erst den Konflikt-Assistenten durchlaufen |
+| *kein Branch ausgewählt* | Detached HEAD |
+| *der Branch folgt keinem Server-Branch* | Kein Upstream gesetzt |
+| *kein Server* | Rein lokales Projekt |
+
+Übersprungene Projekte werden trotzdem **geholt** (`fetch`). Das rührt den Ordner
+nicht an, sorgt aber dafür, dass hinterher „3 warten auf dem Server" dasteht statt
+eines veralteten Badges. Ein solches Projekt aktualisierst du danach einzeln über
+**Änderungen vom Server holen** — dort führt Branchly bei Bedarf zusammen und
+öffnet den Konflikt-Assistenten.
+
+Während der Lauf arbeitet, lässt sich das Fenster nicht schließen: es schreibt in
+die Ordner, und ein halb fertiges Projekt ohne jemanden, der zusieht, wäre die
+schlechtere Variante.
+
 ## Änderungen speichern
 
 1. Dateien anhaken, die zusammengehören
