@@ -315,6 +315,71 @@ class MainWindowSmokeTests(unittest.TestCase):
                 finally:
                     window.close()
 
+    def test_a_check_remembers_what_it_found(self) -> None:
+        import tempfile
+
+        from services.updater import UpdateInfo
+
+        info = UpdateInfo(available=True, local="a" * 10, remote="b" * 10, summary="Faster graph")
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    window._on_update_checked(info)  # noqa: SLF001
+                    self.assertEqual("b" * 10, window._settings.update_remote_commit)  # noqa: SLF001
+                    self.assertEqual("Faster graph", window._settings.update_remote_summary)  # noqa: SLF001
+
+                    # A later check that finds nothing must clear the note again.
+                    window._on_update_checked(  # noqa: SLF001
+                        UpdateInfo(available=False, local="b" * 10, remote="b" * 10)
+                    )
+                    self.assertEqual("", window._settings.update_remote_commit)  # noqa: SLF001
+                finally:
+                    window.close()
+
+    def test_a_remembered_update_is_announced_again_without_a_network(self) -> None:
+        """
+        The regression this guards: dismissing the notice with "not now" used to
+        silence Branchly for a day, because the throttle stopped the next check
+        and nothing else remembered the find.
+        """
+
+        import tempfile
+
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    window._settings.update_remote_commit = "b" * 10  # noqa: SLF001
+                    window._settings.update_remote_summary = "Faster graph"  # noqa: SLF001
+                    window._show_pending_update()  # noqa: SLF001
+                    self.assertTrue(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    # Re-checking is left to the install click, so the live result
+                    # stays empty and cannot be installed from stale data.
+                    self.assertIsNone(window._update_info)  # noqa: SLF001
+                finally:
+                    window.close()
+
+    def test_an_installed_update_is_forgotten(self) -> None:
+        import tempfile
+
+        with temp_repo() as repo:
+            with tempfile.TemporaryDirectory() as config:
+                window = self._window(repo.root, config)
+                try:
+                    # Branchly itself is the checkout here, so its own HEAD is what
+                    # a pending commit is compared against.
+                    from services import updater
+
+                    head = updater.local_commit()
+                    window._settings.update_remote_commit = head[:10]  # noqa: SLF001
+                    window._settings.update_remote_summary = "Already installed"  # noqa: SLF001
+                    window._show_pending_update()  # noqa: SLF001
+                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    self.assertEqual("", window._settings.update_remote_commit)  # noqa: SLF001
+                finally:
+                    window.close()
+
 
 @requires_qt
 class UpdateDialogTests(unittest.TestCase):
@@ -372,6 +437,66 @@ class UpdateDialogTests(unittest.TestCase):
         self.assertEqual(
             i18n.t("update.available_hint"), describe_update(UpdateInfo(available=True))
         )
+
+    def test_several_commits_are_counted_instead_of_named(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import describe_update
+
+        text = describe_update(
+            UpdateInfo(available=True, summary="Newest", count=7, changes=("Newest", "Older"))
+        )
+        self.assertIn("7", text)
+        self.assertNotIn("Newest", text, "one subject must not stand in for seven commits")
+
+    def test_the_dialog_lists_what_is_new(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import UpdateDialog
+
+        info = UpdateInfo(
+            available=True,
+            local="a" * 10,
+            remote="b" * 10,
+            summary="Faster graph",
+            count=3,
+            changes=("Faster graph", "Fix the sidebar", "Update the manual"),
+        )
+        dialog = UpdateDialog(info)
+        try:
+            self.assertTrue(dialog._changes_area.isVisibleTo(dialog))  # noqa: SLF001
+            listed = dialog._changes.text()  # noqa: SLF001
+            for subject in info.changes:
+                self.assertIn(subject, listed)
+            self.assertNotIn("…and", listed, "nothing was left out here")
+        finally:
+            dialog.close()
+
+    def test_a_capped_list_says_how_many_were_left_out(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import UpdateDialog
+
+        info = UpdateInfo(
+            available=True,
+            local="a" * 10,
+            remote="b" * 10,
+            count=25,
+            changes=tuple(f"Change {number}" for number in range(10)),
+        )
+        dialog = UpdateDialog(info)
+        try:
+            self.assertIn(i18n.t("update.changes_more", count=15), dialog._changes.text())  # noqa: SLF001
+        finally:
+            dialog.close()
+
+    def test_without_changes_the_list_stays_away(self) -> None:
+        from services.updater import UpdateInfo
+        from ui.update_dialog import UpdateDialog
+
+        dialog = UpdateDialog(UpdateInfo(available=True, local="a" * 10, remote="b" * 10))
+        try:
+            self.assertFalse(dialog._changes_area.isVisibleTo(dialog))  # noqa: SLF001
+            self.assertFalse(dialog._changes_title.isVisibleTo(dialog))  # noqa: SLF001
+        finally:
+            dialog.close()
 
 
 @requires_qt

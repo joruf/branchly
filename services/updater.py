@@ -49,6 +49,7 @@ from constants import (
     UPDATE_BRANCH,
     UPDATE_DOWNLOAD_TIMEOUT,
     UPDATE_MAX_ARCHIVE_BYTES,
+    UPDATE_MAX_CHANGES,
     UPDATE_TIMEOUT,
 )
 from gitops import runner
@@ -90,6 +91,10 @@ class UpdateInfo:
         local: Commit this installation sits on, shortened; empty when unknown.
         remote: Commit the branch points at, shortened; empty when unreachable.
         summary: Subject line of the remote commit.
+        count: How many commits the branch is ahead, 0 when unknown.
+        changes: Commit subjects between the two, newest first and capped at
+            :data:`constants.UPDATE_MAX_CHANGES`. Empty when the comparison could
+            not be made.
         error_key: Translation key describing why the check failed, empty on
             success.
         detail: Technical detail behind ``error_key``, for the details pane.
@@ -99,6 +104,8 @@ class UpdateInfo:
     local: str = ""
     remote: str = ""
     summary: str = ""
+    count: int = 0
+    changes: tuple[str, ...] = ()
     error_key: str = ""
     detail: str = ""
 
@@ -112,6 +119,23 @@ class UpdateInfo:
         """
 
         return not self.error_key and bool(self.remote)
+
+
+@dataclass(frozen=True, slots=True)
+class _Comparison:
+    """
+    What the compare endpoint said about two commits.
+
+    Attributes:
+        known: Whether the comparison could be made at all. False for a 404, which
+            is the normal answer when the local commit was never pushed.
+        count: How many commits the branch is ahead of the installation.
+        subjects: Commit subjects, newest first and capped.
+    """
+
+    known: bool = False
+    count: int = 0
+    subjects: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,14 +258,131 @@ def check(root: Path | None = None) -> UpdateInfo:
         return UpdateInfo(error_key=ERROR_CHECK_FAILED, detail="the answer held no commit")
 
     local = local_commit(root)
+    # Without a local commit there is nothing to compare, so do not claim an
+    # update: offering one would mean replacing an installation blind.
+    differs = bool(local) and local != remote
+    comparison = _changes_between(slug, local, remote) if differs else _Comparison()
     return UpdateInfo(
-        # Without a local commit there is nothing to compare, so do not claim an
-        # update: offering one would mean replacing an installation blind.
-        available=bool(local) and local != remote,
+        available=differs and _is_behind(local, remote, comparison, root),
         local=local[:_SHORT_HASH],
         remote=remote[:_SHORT_HASH],
         summary=_summary_of(payload),
+        count=comparison.count,
+        changes=comparison.subjects,
     )
+
+
+def _is_behind(local: str, remote: str, comparison: _Comparison, root: Path | None) -> bool:
+    """
+    Decides whether the branch really has something this installation lacks.
+
+    "Different commit" is not the same as "newer commit". Anyone working on
+    Branchly itself sits on an unpushed commit of their own, and announcing an
+    update to them would be a phantom: the pull would have nothing to fast-forward.
+
+    Args:
+        local: Commit the installation sits on.
+        remote: Commit the branch points at.
+        comparison: What the compare endpoint said, if anything.
+        root: Installation directory.
+
+    Returns:
+        bool: True when the branch is genuinely ahead.
+    """
+
+    if comparison.known:
+        # The authoritative answer, straight from the repository.
+        return comparison.count > 0
+    # No comparison to be had — GitHub does not know a commit that was never
+    # pushed. Git can still answer it when the remote commit was fetched once.
+    if _already_contains(remote, root):
+        return False
+    return bool(local)
+
+
+def _already_contains(commit: str, root: Path | None) -> bool:
+    """
+    Reports whether HEAD already contains a commit.
+
+    Args:
+        commit: Commit to look for.
+        root: Installation directory.
+
+    Returns:
+        bool: True only when the answer is certain. A commit whose object is not
+            present locally cannot be judged, and that is reported as False rather
+            than guessed at.
+    """
+
+    target = root or installation_root()
+    if not commit or not is_git_checkout(target):
+        return False
+    present = runner.run(
+        ["cat-file", "-e", f"{commit}^{{commit}}"],
+        cwd=target,
+        timeout=GIT_TIMEOUT_LOCAL,
+        read_only=True,
+    )
+    if present.failed:
+        return False
+    contained = runner.run(
+        ["merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=target,
+        timeout=GIT_TIMEOUT_LOCAL,
+        read_only=True,
+    )
+    return contained.ok
+
+
+def _changes_between(slug: str, local: str, remote: str) -> _Comparison:
+    """
+    Collects the commit subjects between the installation and the branch.
+
+    One commit subject answers "what is new" badly when twelve commits landed: the
+    user sees the last one and never learns about the rest.
+
+    Args:
+        slug: ``owner/name`` of the repository.
+        local: Commit the installation sits on.
+        remote: Commit the branch points at.
+
+    Returns:
+        _Comparison: The subjects and the count, or an unknown comparison when the
+            endpoint could not answer.
+    """
+
+    url = f"{GITHUB_API_ROOT}/repos/{slug}/compare/{local}...{remote}"
+    try:
+        response = requests.get(url, headers=_HEADERS, timeout=UPDATE_TIMEOUT)
+    except requests.RequestException:
+        return _Comparison()
+    if response.status_code != 200:
+        return _Comparison()
+    try:
+        payload = response.json()
+    except ValueError:
+        return _Comparison()
+    if not isinstance(payload, dict):
+        return _Comparison()
+
+    commits = payload.get("commits")
+    entries = commits if isinstance(commits, list) else []
+    subjects: list[str] = []
+    for entry in reversed(entries):
+        if not isinstance(entry, dict):
+            continue
+        subject = _summary_of(entry)
+        if subject:
+            subjects.append(subject)
+        if len(subjects) >= UPDATE_MAX_CHANGES:
+            break
+
+    ahead = payload.get("ahead_by")
+    if isinstance(ahead, int) and not isinstance(ahead, bool) and ahead >= 0:
+        return _Comparison(known=True, count=ahead, subjects=tuple(subjects))
+    # No usable ahead_by: fall back to what came in the list rather than treating
+    # the whole answer as missing.
+    return _Comparison(known=bool(entries), count=len(subjects), subjects=tuple(subjects))
 
 
 def _summary_of(payload: dict) -> str:

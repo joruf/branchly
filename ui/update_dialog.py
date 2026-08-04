@@ -14,13 +14,15 @@ not, so it waits.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -46,6 +48,10 @@ def describe_update(info: updater.UpdateInfo) -> str:
     """
 
     hint = i18n.t("update.available_hint")
+    if info.count > 1:
+        # With several commits waiting, one subject would misrepresent the rest;
+        # the count is the honest headline and the list below has the detail.
+        return f"{i18n.t('update.changes_count', count=info.count)} {hint}"
     summary = info.summary.strip()
     if not summary:
         return hint
@@ -149,6 +155,26 @@ class UpdateDialog(QDialog):
         self._notice = InlineMessage(i18n.t("update.unknown"), "", "info", self)
         layout.addWidget(self._notice)
 
+        self._changes_title = QLabel(i18n.t("update.changes_title"), self)
+        self._changes_title.setObjectName("Heading")
+        self._changes_title.setVisible(False)
+        layout.addWidget(self._changes_title)
+
+        self._changes = QLabel("", self)
+        self._changes.setWordWrap(True)
+        self._changes.setTextInteractionFlags(
+            self._changes.textInteractionFlags() | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._changes_area = QScrollArea(self)
+        self._changes_area.setWidgetResizable(True)
+        self._changes_area.setFrameShape(QFrame.Shape.NoFrame)
+        # Tall enough for a full list of ten without scrolling, bounded so a long
+        # list cannot push the buttons off the screen.
+        self._changes_area.setMaximumHeight(230)
+        self._changes_area.setWidget(self._changes)
+        self._changes_area.setVisible(False)
+        layout.addWidget(self._changes_area)
+
         self._detail = QLabel("", self)
         self._detail.setObjectName("Muted")
         self._detail.setWordWrap(True)
@@ -205,6 +231,8 @@ class UpdateDialog(QDialog):
         self._set_busy(True)
         self._notice.set_message(i18n.t("update.checking"), "", "info")
         self._detail.setVisible(False)
+        self._changes_title.setVisible(False)
+        self._changes_area.setVisible(False)
         self._install.setVisible(False)
 
         thread, worker = build_update_thread(False, self)
@@ -240,6 +268,7 @@ class UpdateDialog(QDialog):
             None
         """
 
+        self._set_changes(info)
         if not info.known:
             self._notice.set_message(
                 i18n.t(info.error_key or "update.check_failed"), "", "warning"
@@ -339,6 +368,25 @@ class UpdateDialog(QDialog):
         self.accept()
 
     # --------------------------------------------------------------------- shared
+
+    def _set_changes(self, info: updater.UpdateInfo) -> None:
+        """
+        Lists the commit subjects that arrived since this installation.
+
+        Args:
+            info: The check result whose changes should be listed.
+
+        Returns:
+            None
+        """
+
+        lines = [f"•  {subject}" for subject in info.changes]
+        remaining = info.count - len(info.changes)
+        if lines and remaining > 0:
+            lines.append(i18n.t("update.changes_more", count=remaining))
+        self._changes.setText("\n".join(lines))
+        self._changes_title.setVisible(bool(lines))
+        self._changes_area.setVisible(bool(lines))
 
     def _set_detail(self, text: str) -> None:
         """

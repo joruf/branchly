@@ -62,6 +62,11 @@ the state from before.
 **Keeping itself up to date**
 - Once a day on startup Branchly asks GitHub whether a newer version exists and
   says so in a strip you can dismiss; Help → “Check for updates…” asks right away
+- “Not now” means *now*: the find is remembered, so the strip is back on the next
+  start without asking GitHub again, and gone once you installed it
+- Every change since your version is listed, not just the newest commit
+- An unpushed commit of your own is not an update: `ahead_by` from the compare
+  endpoint decides, with `git merge-base` as the fallback
 - One button fetches it and restarts. Your projects, settings and token stay as
   they are, and uncommitted changes in Branchly's own folder block the update
   instead of being thrown away

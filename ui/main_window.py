@@ -1601,7 +1601,7 @@ class MainWindow(QMainWindow):
 
     def _maybe_check_updates(self) -> None:
         """
-        Runs the quiet startup check, if it is wanted and due.
+        Shows an update that is still waiting, then checks again if that is due.
 
         Returns:
             None
@@ -1609,9 +1609,41 @@ class MainWindow(QMainWindow):
 
         if not self._settings.check_updates:
             return
+        self._show_pending_update()
         if not updater.due(self._settings.update_check_hours, self._settings.update_checked_at):
             return
         self._start_update_check()
+
+    def _show_pending_update(self) -> None:
+        """
+        Restores the notice for an update the last check already found.
+
+        Without this, "not now" would silence Branchly until the next check is
+        due — a restart would not bring the notice back, because the throttle says
+        there is nothing to ask about.
+
+        Returns:
+            None
+        """
+
+        pending = self._settings.update_remote_commit
+        if not pending:
+            return
+        local = updater.local_commit()
+        if not local or local.startswith(pending):
+            # Already installed, or no longer comparable: nothing to announce.
+            self._forget_pending_update()
+            return
+        # Deliberately not stored as the live result: clicking Install re-checks,
+        # which both fetches the list of changes and confirms it is still pending.
+        self._show_update_banner(
+            updater.UpdateInfo(
+                available=True,
+                local=local[:10],
+                remote=pending,
+                summary=self._settings.update_remote_summary,
+            )
+        )
 
     def _start_update_check(self) -> None:
         """
@@ -1652,19 +1684,38 @@ class MainWindow(QMainWindow):
         if not info.known:
             return
         self._update_info = info
-        self._remember_update_check()
+        self._remember_update_check(info)
         if info.available:
             self._show_update_banner(info)
 
-    def _remember_update_check(self) -> None:
+    def _remember_update_check(self, info: updater.UpdateInfo) -> None:
         """
-        Stores when the last successful check happened, to throttle the next one.
+        Stores when the last successful check happened and what it found.
+
+        Args:
+            info: The result of a check that produced a usable answer.
 
         Returns:
             None
         """
 
         self._settings.update_checked_at = time.time()
+        self._settings.update_remote_commit = info.remote if info.available else ""
+        self._settings.update_remote_summary = info.summary if info.available else ""
+        save_settings(self._settings)
+
+    def _forget_pending_update(self) -> None:
+        """
+        Drops a remembered update, without touching the check throttle.
+
+        Returns:
+            None
+        """
+
+        if not self._settings.update_remote_commit and not self._settings.update_remote_summary:
+            return
+        self._settings.update_remote_commit = ""
+        self._settings.update_remote_summary = ""
         save_settings(self._settings)
 
     def _show_update_banner(self, info: updater.UpdateInfo) -> None:
@@ -1731,13 +1782,16 @@ class MainWindow(QMainWindow):
         if result is not None:
             self._update_info = result
             if result.known:
-                self._remember_update_check()
+                self._remember_update_check(result)
             if result.known and result.available and not dialog.restart_wanted:
                 self._show_update_banner(result)
             else:
                 self._update_banner.setVisible(False)
 
         if dialog.restart_wanted:
+            # The new version is on disk, so nothing is pending any more; leaving
+            # the note behind would announce the update the user just installed.
+            self._forget_pending_update()
             self._restart_after_update = True
             self.close()
 
