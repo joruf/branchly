@@ -59,6 +59,14 @@ the state from before.
 - German and English; a new language is one JSON file in `locales/`
 - Dark and light; a new theme is one entry in `config/theme.py`
 
+**Keeping itself up to date**
+- Once a day on startup Branchly asks GitHub whether a newer version exists and
+  says so in a strip you can dismiss; Help → “Check for updates…” asks right away
+- One button fetches it and restarts. Your projects, settings and token stay as
+  they are, and uncommitted changes in Branchly's own folder block the update
+  instead of being thrown away
+- The startup check can be switched off in Settings → Automatic checks
+
 ## Install
 
 Needs Python 3.11+ and Git.
@@ -111,6 +119,11 @@ where most of its safety comes from. On top of that:
   command rather than hold content, and refuses any path outside the repository.
 - **Destructive actions confirm first**, in a sentence saying what gets lost.
   `--force-with-lease` is offered; a plain `--force` push is not.
+- **The update check is anonymous and never installs by itself.** It asks the
+  public commits endpoint without your token, so it cannot spend your rate limit
+  or leak the token to a redirect. Installing needs a click, refuses to run over
+  uncommitted work, and the archive fallback never overwrites `.git`, `.venv`,
+  `settings.json` or `repos.json`.
 
 ## Development
 

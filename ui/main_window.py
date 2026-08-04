@@ -16,6 +16,7 @@ Two rules it enforces on behalf of the whole program:
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, Qt, QTimer
@@ -55,7 +56,7 @@ from gitops.remote_url import github_slug
 from gitops.runner import GitResult
 from gitops.status import RepositoryState, read_state
 from models.repository import RepoEntry
-from services import avatars, open_with, scanner
+from services import avatars, open_with, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, ScanCoordinator
 from ui.changes_panel import ChangesPanel
@@ -66,11 +67,20 @@ from ui.graph_view import GraphView
 from ui.pr_panel import PullRequestPanel, build_snapshot_thread
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
+from ui.update_dialog import UpdateDialog, build_update_thread, describe_update
 from ui.widgets import InlineMessage, refresh_theme_aware
 
 TAB_CHANGES = 0
 TAB_GRAPH = 1
 TAB_GITHUB = 2
+
+# Delay before the startup update check runs. Long enough that the first scan and
+# the first repository are already on screen: news about Branchly itself is never
+# more urgent than the window being usable.
+UPDATE_CHECK_DELAY_MS = 4000
+
+ACTION_UPDATE_INSTALL = "update.install"
+ACTION_UPDATE_LATER = "update.later"
 
 
 class MainWindow(QMainWindow):
@@ -93,6 +103,10 @@ class MainWindow(QMainWindow):
         self._github_thread = None
         self._github_worker = None
         self._pending_github_key = ""
+        self._update_thread = None
+        self._update_worker = None
+        self._update_info: updater.UpdateInfo | None = None
+        self._restart_after_update = False
 
         self.setWindowTitle(APP_NAME)
         self.resize(1360, 860)
@@ -111,6 +125,8 @@ class MainWindow(QMainWindow):
 
         self._scheduler.configure(self._settings.auto_check_minutes)
         self._scheduler.trigger_soon()
+        if self._settings.check_updates:
+            QTimer.singleShot(UPDATE_CHECK_DELAY_MS, self._maybe_check_updates)
 
     # --------------------------------------------------------------------- build
 
@@ -134,6 +150,12 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(0)
 
         right_layout.addWidget(self._build_repo_bar(right))
+
+        # Its own strip rather than sharing the repository notice below: news about
+        # Branchly itself must not be wiped out by the next repository selection.
+        self._update_banner = InlineMessage("", "", "success", right)
+        self._update_banner.setVisible(False)
+        right_layout.addWidget(self._update_banner)
 
         self._notice = InlineMessage("", "", "info", right)
         self._notice.setVisible(False)
@@ -264,6 +286,8 @@ class MainWindow(QMainWindow):
         branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
 
         help_menu = bar.addMenu(i18n.t("menu.help"))
+        help_menu.addAction(i18n.t("menu.check_updates"), self._open_update_dialog)
+        help_menu.addSeparator()
         help_menu.addAction(i18n.t("menu.about"), self._show_about)
 
     def _wire(self) -> None:
@@ -318,6 +342,8 @@ class MainWindow(QMainWindow):
         self._scans.progress.connect(self._sidebar.set_scan_progress)
         self._scans.batch_finished.connect(self._on_scan_batch_finished)
         self._scheduler.due.connect(lambda: self._start_scan(""))
+
+        self._update_banner.action_clicked.connect(self._on_update_banner_action)
 
     # ----------------------------------------------------------------- selection
 
@@ -1571,6 +1597,160 @@ class MainWindow(QMainWindow):
             f"{i18n.t('about.description')}\n\n{i18n.t('about.credits')}",
         )
 
+    # ------------------------------------------------------------------- updates
+
+    def _maybe_check_updates(self) -> None:
+        """
+        Runs the quiet startup check, if it is wanted and due.
+
+        Returns:
+            None
+        """
+
+        if not self._settings.check_updates:
+            return
+        if not updater.due(self._settings.update_check_hours, self._settings.update_checked_at):
+            return
+        self._start_update_check()
+
+    def _start_update_check(self) -> None:
+        """
+        Asks GitHub for the newest commit on a worker thread.
+
+        Returns:
+            None
+        """
+
+        if self._update_thread is not None:
+            return
+        thread, worker = build_update_thread(False, self)
+        worker.checked.connect(self._on_update_checked)
+        self._update_thread = thread
+        self._update_worker = worker
+        thread.start()
+
+    def _on_update_checked(self, info: updater.UpdateInfo) -> None:
+        """
+        Announces a new version, and says nothing at all otherwise.
+
+        A failed check stays silent on purpose: the startup check runs whether or
+        not there is a network, and a dialog about that would be noise.
+
+        Args:
+            info: What the check found.
+
+        Returns:
+            None
+        """
+
+        if self._update_thread is not None:
+            self._update_thread.quit()
+            self._update_thread.wait(5000)
+            self._update_thread = None
+        self._update_worker = None
+
+        if not info.known:
+            return
+        self._update_info = info
+        self._remember_update_check()
+        if info.available:
+            self._show_update_banner(info)
+
+    def _remember_update_check(self) -> None:
+        """
+        Stores when the last successful check happened, to throttle the next one.
+
+        Returns:
+            None
+        """
+
+        self._settings.update_checked_at = time.time()
+        save_settings(self._settings)
+
+    def _show_update_banner(self, info: updater.UpdateInfo) -> None:
+        """
+        Puts the "there is a new version" strip above the panels.
+
+        Args:
+            info: The check result to announce.
+
+        Returns:
+            None
+        """
+
+        self._update_banner.set_message(
+            i18n.t("update.available"), describe_update(info), "success"
+        )
+        self._update_banner.clear_actions()
+        self._update_banner.add_action(i18n.t("update.install"), ACTION_UPDATE_INSTALL, primary=True)
+        self._update_banner.add_action(i18n.t("update.later"), ACTION_UPDATE_LATER)
+        self._update_banner.setVisible(True)
+
+    def _on_update_banner_action(self, action_id: str) -> None:
+        """
+        Handles a click on the update strip.
+
+        Args:
+            action_id: Identifier of the button.
+
+        Returns:
+            None
+        """
+
+        if action_id == ACTION_UPDATE_LATER:
+            self._update_banner.setVisible(False)
+            return
+        if action_id == ACTION_UPDATE_INSTALL:
+            self._show_update_dialog(self._update_info)
+
+    def _open_update_dialog(self) -> None:
+        """
+        Opens the update dialog from the menu, always with a fresh check.
+
+        Returns:
+            None
+        """
+
+        self._show_update_dialog(None)
+
+    def _show_update_dialog(self, info: updater.UpdateInfo | None) -> None:
+        """
+        Runs the update dialog and acts on what the user decided there.
+
+        Args:
+            info: A check result to show straight away, or None to check now.
+
+        Returns:
+            None
+        """
+
+        dialog = UpdateDialog(info, self)
+        dialog.exec()
+
+        result = dialog.info
+        if result is not None:
+            self._update_info = result
+            if result.known:
+                self._remember_update_check()
+            if result.known and result.available and not dialog.restart_wanted:
+                self._show_update_banner(result)
+            else:
+                self._update_banner.setVisible(False)
+
+        if dialog.restart_wanted:
+            self._restart_after_update = True
+            self.close()
+
+    def wants_restart(self) -> bool:
+        """
+        Reports whether the entry point should start Branchly again after closing.
+
+        Returns:
+            bool: True when an update was installed and asked for a restart.
+        """
+
+        return self._restart_after_update
+
     # -------------------------------------------------------------------- shared
 
     def _confirm(self, title: str, message: str, accept_label: str, destructive: bool = False) -> bool:
@@ -1686,6 +1866,10 @@ class MainWindow(QMainWindow):
             self._github_thread.quit()
             self._github_thread.wait(2000)
             self._github_thread = None
+        if self._update_thread is not None:
+            self._update_thread.quit()
+            self._update_thread.wait(2000)
+            self._update_thread = None
         self._github.close()
         self._scans.wait(5000)
         self._save_registry()
