@@ -474,10 +474,12 @@ class SettingsDialog(QDialog):
             auto_check_minutes=int(self._interval.currentData() or 0),
             check_online_automatically=self._check_online.isChecked(),
             check_updates=self._check_updates.isChecked(),
-            # Not offered here, but a hand-edited value and the last check must
-            # survive a trip through this dialog.
+            # Not offered here, but a hand-edited value and everything the last
+            # check found must survive a trip through this dialog.
             update_check_hours=self._original.update_check_hours,
             update_checked_at=self._original.update_checked_at,
+            update_remote_commit=self._original.update_remote_commit,
+            update_remote_summary=self._original.update_remote_summary,
             diff_mode=str(self._diff_mode.currentData() or self._original.diff_mode),
             diff_ignore_whitespace=self._diff_whitespace.isChecked(),
             diff_word_level=self._diff_words.isChecked(),

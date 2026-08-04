@@ -40,6 +40,10 @@ UPDATE_BRANCH = "main"
 UPDATE_TIMEOUT = 20
 UPDATE_DOWNLOAD_TIMEOUT = 180
 
+# Commit subjects listed as "what is new". Beyond this the list stops being read
+# and starts being wallpaper; the total count is shown either way.
+UPDATE_MAX_CHANGES = 10
+
 # A source archive of this project is a few megabytes. The ceiling is not about
 # disk space but about never streaming an unbounded body into a temporary file
 # because a redirect landed somewhere unexpected.

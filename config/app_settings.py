@@ -92,6 +92,44 @@ def normalize_update_check_hours(hours: Any) -> int:
     return min(value, MAX_UPDATE_CHECK_HOURS)
 
 
+def normalize_commit(value: Any) -> str:
+    """
+    Reduces a stored commit hash to something that can only be a commit hash.
+
+    Args:
+        value: Candidate hash, possibly hand-edited.
+
+    Returns:
+        str: Lowercase hex of at most 40 characters, or an empty string when the
+            value is not a plausible hash. Never a path, an option or a URL.
+    """
+
+    if not isinstance(value, str):
+        return ""
+    candidate = value.strip().lower()
+    if not candidate or len(candidate) > 40:
+        return ""
+    if any(character not in "0123456789abcdef" for character in candidate):
+        return ""
+    return candidate
+
+
+def normalize_summary(value: Any) -> str:
+    """
+    Trims a stored commit subject to one harmless line.
+
+    Args:
+        value: Candidate subject.
+
+    Returns:
+        str: First line, at most 200 characters, empty when unusable.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    return value.strip().splitlines()[0][:200]
+
+
 def normalize_timestamp(value: Any) -> float:
     """
     Reduces a stored point in time to a usable number.
@@ -130,6 +168,11 @@ class AppSettings:
             without the user saying so.
         update_check_hours: Hours between two startup update checks.
         update_checked_at: Epoch timestamp of the last update check, 0 for never.
+        update_remote_commit: Commit the last check found waiting, empty when
+            there is nothing pending. Remembered so that dismissing the notice
+            with "not now" does not blind Branchly until the next check is due:
+            the notice comes back on the next start without asking GitHub again.
+        update_remote_summary: Subject line belonging to that commit.
         diff_mode: Default diff layout.
         diff_ignore_whitespace: Whether diffs ignore whitespace-only changes.
         diff_word_level: Whether changed lines get intra-line word highlighting.
@@ -151,6 +194,8 @@ class AppSettings:
     check_updates: bool = True
     update_check_hours: int = DEFAULT_UPDATE_CHECK_HOURS
     update_checked_at: float = 0.0
+    update_remote_commit: str = ""
+    update_remote_summary: str = ""
     diff_mode: str = DEFAULT_DIFF_MODE
     diff_ignore_whitespace: bool = False
     diff_word_level: bool = True
@@ -178,6 +223,8 @@ class AppSettings:
             check_updates=bool(self.check_updates),
             update_check_hours=normalize_update_check_hours(self.update_check_hours),
             update_checked_at=normalize_timestamp(self.update_checked_at),
+            update_remote_commit=normalize_commit(self.update_remote_commit),
+            update_remote_summary=normalize_summary(self.update_remote_summary),
             diff_mode=normalize_diff_mode(self.diff_mode),
             diff_ignore_whitespace=bool(self.diff_ignore_whitespace),
             diff_word_level=bool(self.diff_word_level),

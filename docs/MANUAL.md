@@ -188,8 +188,18 @@ von sich selbst gibt. Findet es eine, erscheint über den Panels ein Streifen:
 **Installieren und neu starten** oder **Jetzt nicht**. Ohne Neuigkeit sagt es
 nichts — eine Meldung „alles beim Alten" braucht niemand.
 
+„Jetzt nicht" heißt wirklich nur *jetzt* nicht: der Fund bleibt gemerkt, und beim
+nächsten Start steht der Streifen wieder da — ohne dass dafür erneut jemand gefragt
+werden muss. Weg ist er erst, wenn du das Update installiert hast.
+
 Sofort nachfragen: **Hilfe → Nach Updates suchen…**. Dort steht, welcher Stand
-installiert und welcher verfügbar ist, mit der Kurzfassung der neuesten Änderung.
+installiert und welcher verfügbar ist — und unter **Was ist neu** alle Änderungen
+seit deinem Stand, nicht nur die letzte. Sind es mehr als zehn, nennt die Liste am
+Ende die Zahl der übrigen.
+
+Ein eigener, noch nicht gepushter Commit im Branchly-Ordner ist **kein** Update.
+Branchly vergleicht nicht bloß „gleicher Commit oder nicht", sondern fragt, ob der
+Server wirklich etwas hat, was dir fehlt.
 
 Beim Installieren holt Branchly die neue Version, schließt sich und startet
 wieder. Was dabei **nicht** passiert:

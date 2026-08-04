@@ -148,9 +148,33 @@ ausdrücklichen Wunsch.
 
 `services/updater.py`. Branchly veröffentlicht keine Releases und keine Tags,
 also ist „neuer" der Head-Commit von `main`: `GET /repos/joruf/branchly/commits/main`
-liefert ihn, `git rev-parse HEAD` liefert den eigenen, verglichen wird stumpf auf
-Gleichheit. Kein Versionsvergleich, keine Semantik, nichts, was falsch sortieren
-kann.
+liefert ihn, `git rev-parse HEAD` liefert den eigenen. Kein Versionsvergleich, keine
+Semantik, nichts, was falsch sortieren kann.
+
+Ungleiche Commits heißen aber **nicht** „hinterher". Wer an Branchly arbeitet, sitzt
+auf einem eigenen, noch nicht gepushten Commit — die reine Ungleichheit hätte dem
+ein Phantom-Update gemeldet, das kein `pull` je einlösen kann. Deshalb entscheidet
+`_is_behind()` in drei Stufen:
+
+1. `GET /compare/{local}...{remote}` → `ahead_by` ist die verbindliche Antwort.
+   `0` heißt: der Server hat nichts, was hier fehlt.
+2. Antwortet der Vergleich nicht (404, weil GitHub den lokalen Commit nie gesehen
+   hat), fragt `git merge-base --is-ancestor` lokal nach — vorher prüft
+   `git cat-file -e`, ob das Objekt überhaupt da ist.
+3. Ist beides nicht zu haben, bleibt die Ungleichheit als letzte Auskunft.
+
+Derselbe `/compare`-Aufruf liefert die Commit-Betreffzeilen für **Was ist neu**.
+Ein Betreff wäre eine schlechte Antwort, wenn zwölf Commits dazwischenliegen: der
+Nutzer sähe den letzten und erführe von den anderen nie. Angezeigt werden höchstens
+`UPDATE_MAX_CHANGES` Zeilen, gezählt wird trotzdem alles.
+
+Der Fund selbst liegt in `settings.json` (`update_remote_commit`,
+`update_remote_summary`). Ohne das wäre „Jetzt nicht" faktisch „24 Stunden nicht":
+die Drosselung verhindert die nächste Abfrage, und ein Neustart hätte den Streifen
+nicht zurückgebracht. Beim Start wird der gemerkte Commit ohne Netz gegen `HEAD`
+gehalten; passt er, erscheint der Streifen wieder, ist er installiert, wird er
+vergessen. Ein Klick auf *Installieren* prüft neu — das holt die Änderungsliste und
+bestätigt, dass das Update überhaupt noch aussteht.
 
 Bewusst **nicht** über `github_api/client.py`: der Client dreht sich um das Token
 des Nutzers, dessen Pull Requests und einen ETag-Cache. Die Update-Prüfung stellt

@@ -23,7 +23,7 @@ from pathlib import Path
 from unittest import mock
 
 import paths
-from constants import APP_URL, UPDATE_MAX_ARCHIVE_BYTES
+from constants import APP_URL, UPDATE_MAX_ARCHIVE_BYTES, UPDATE_MAX_CHANGES
 from services import updater
 from tests.support import requires_git, temp_repo, temp_repo_pair
 
@@ -93,6 +93,46 @@ def _commit_answer(sha: str, message: str = "A newer commit\n\nwith a body") -> 
     """
 
     return _Response(payload={"sha": sha, "commit": {"message": message}})
+
+
+def _compare_answer(*subjects: str, ahead_by: int | None = None) -> _Response:
+    """
+    Builds a fake answer for the compare endpoint.
+
+    Args:
+        *subjects: Commit subjects, oldest first, as GitHub returns them.
+        ahead_by: Value for ``ahead_by``. Defaults to the number of subjects.
+
+    Returns:
+        _Response: The fake response.
+    """
+
+    return _Response(
+        payload={
+            "ahead_by": len(subjects) if ahead_by is None else ahead_by,
+            "total_commits": len(subjects),
+            "commits": [{"commit": {"message": subject}} for subject in subjects],
+        }
+    )
+
+
+def _answers(*responses: _Response):  # noqa: ANN202 - test helper
+    """
+    Builds a ``requests.get`` stand-in that answers calls in order.
+
+    Args:
+        *responses: One response per expected call; the last one repeats.
+
+    Returns:
+        A callable suitable for patching ``requests.get``.
+    """
+
+    queue = list(responses)
+
+    def get(*args: object, **kwargs: object) -> _Response:
+        return queue.pop(0) if len(queue) > 1 else queue[0]
+
+    return get
 
 
 def _archive(*members: tuple[str, str]) -> bytes:
@@ -209,6 +249,164 @@ class CheckTests(unittest.TestCase):
         info = self._check(_Response(payload={"sha": "b" * 40}), "a" * 40)
         self.assertTrue(info.known)
         self.assertEqual("", info.summary)
+
+
+class ChangeListTests(unittest.TestCase):
+    """
+    What the user is told is new.
+
+    One commit subject is a bad answer when twelve commits landed, so the check
+    follows up with the compare endpoint — and must survive that call failing,
+    because a local commit that was never pushed makes GitHub answer 404.
+    """
+
+    def _check(self, *responses: _Response, local: str = "a" * 40) -> updater.UpdateInfo:
+        """
+        Runs a check against a queue of faked answers.
+
+        Args:
+            *responses: Answers in call order.
+            local: The installation's commit.
+
+        Returns:
+            updater.UpdateInfo: The result.
+        """
+
+        with mock.patch.object(updater.requests, "get", side_effect=_answers(*responses)):
+            with mock.patch.object(updater, "local_commit", return_value=local):
+                return updater.check()
+
+    def test_the_changes_are_listed_newest_first(self) -> None:
+        info = self._check(
+            _commit_answer("b" * 40, "Third"),
+            _compare_answer("First", "Second", "Third"),
+        )
+        self.assertTrue(info.available)
+        self.assertEqual(3, info.count)
+        self.assertEqual(("Third", "Second", "First"), info.changes)
+
+    def test_only_the_subject_line_is_kept(self) -> None:
+        info = self._check(
+            _commit_answer("b" * 40),
+            _compare_answer("Fix the graph\n\nA long body nobody needs here."),
+        )
+        self.assertEqual(("Fix the graph",), info.changes)
+
+    def test_the_list_is_capped_but_the_count_is_not(self) -> None:
+        subjects = [f"Change {number}" for number in range(25)]
+        info = self._check(_commit_answer("b" * 40), _compare_answer(*subjects, ahead_by=25))
+        self.assertEqual(25, info.count)
+        self.assertEqual(UPDATE_MAX_CHANGES, len(info.changes))
+        self.assertEqual("Change 24", info.changes[0], "the newest must be first")
+
+    def test_an_unavailable_comparison_still_offers_the_update(self) -> None:
+        info = self._check(_commit_answer("b" * 40), _Response(status_code=404, payload={}))
+        self.assertTrue(info.available, "a 404 on compare must not hide the update")
+        self.assertEqual(0, info.count)
+        self.assertEqual((), info.changes)
+
+    def test_a_failed_comparison_request_is_swallowed(self) -> None:
+        def get(*args: object, **kwargs: object) -> _Response:
+            if getattr(get, "called", False):
+                raise updater.requests.ConnectionError("dropped")
+            get.called = True  # type: ignore[attr-defined]
+            return _commit_answer("b" * 40)
+
+        with mock.patch.object(updater.requests, "get", side_effect=get):
+            with mock.patch.object(updater, "local_commit", return_value="a" * 40):
+                info = updater.check()
+        self.assertTrue(info.available)
+        self.assertEqual((), info.changes)
+
+    def test_nothing_new_means_no_second_request(self) -> None:
+        with mock.patch.object(
+            updater.requests, "get", side_effect=_answers(_commit_answer("a" * 40))
+        ) as get:
+            with mock.patch.object(updater, "local_commit", return_value="a" * 40):
+                updater.check()
+        self.assertEqual(1, get.call_count, "comparing a commit with itself is pointless")
+
+    def test_the_comparison_runs_from_local_to_remote(self) -> None:
+        with mock.patch.object(
+            updater.requests,
+            "get",
+            side_effect=_answers(_commit_answer("b" * 40), _compare_answer("One")),
+        ) as get:
+            with mock.patch.object(updater, "local_commit", return_value="a" * 40):
+                updater.check()
+        url = get.call_args_list[1].args[0]
+        self.assertIn(f"compare/{'a' * 40}...{'b' * 40}", url)
+
+
+class BehindTests(unittest.TestCase):
+    """
+    "Different commit" is not "newer commit".
+
+    Anyone working on Branchly itself sits on an unpushed commit of their own. The
+    check must not announce an update to them: there would be nothing to
+    fast-forward, so the notice would be a phantom that never goes away.
+    """
+
+    def test_a_branch_that_is_not_ahead_is_no_update(self) -> None:
+        with mock.patch.object(
+            updater.requests,
+            "get",
+            side_effect=_answers(_commit_answer("b" * 40), _compare_answer(ahead_by=0)),
+        ):
+            with mock.patch.object(updater, "local_commit", return_value="a" * 40):
+                info = updater.check()
+        self.assertTrue(info.known)
+        self.assertFalse(info.available, "the branch has nothing this installation lacks")
+        self.assertEqual(0, info.count)
+
+    def test_a_branch_that_is_ahead_is_an_update(self) -> None:
+        with mock.patch.object(
+            updater.requests,
+            "get",
+            side_effect=_answers(_commit_answer("b" * 40), _compare_answer("One", ahead_by=1)),
+        ):
+            with mock.patch.object(updater, "local_commit", return_value="a" * 40):
+                info = updater.check()
+        self.assertTrue(info.available)
+        self.assertEqual(1, info.count)
+
+    @requires_git
+    def test_a_commit_already_in_the_history_is_recognised(self) -> None:
+        with temp_repo() as repo:
+            first = repo.head()
+            repo.commit_file("later.txt", "later\n", "a later commit")
+            self.assertTrue(updater._already_contains(first, repo.root))  # noqa: SLF001
+
+    @requires_git
+    def test_an_unknown_commit_is_not_claimed_either_way(self) -> None:
+        with temp_repo() as repo:
+            # The object is not here, so the honest answer is "cannot tell", which
+            # must read as "not contained" rather than as a guess.
+            self.assertFalse(updater._already_contains("b" * 40, repo.root))  # noqa: SLF001
+
+    @requires_git
+    def test_a_fetched_remote_commit_blocks_the_phantom_update(self) -> None:
+        """
+        The unpushed-work case end to end: GitHub cannot compare an unpushed local
+        commit, so git is asked instead.
+        """
+
+        with temp_repo_pair() as (first, second, _origin):
+            shared = first.head()
+            second.commit_file("mine.txt", "mine\n", "my unpushed commit")
+            # GitHub answers 404 for the unpushed local commit; the branch head it
+            # reports is a commit the clone already contains.
+            with mock.patch.object(
+                updater.requests,
+                "get",
+                side_effect=_answers(
+                    _commit_answer(shared), _Response(status_code=404, payload={})
+                ),
+            ):
+                with mock.patch.object(updater, "local_commit", return_value=second.head()):
+                    info = updater.check(second.root)
+        self.assertTrue(info.known)
+        self.assertFalse(info.available, "an unpushed commit of your own is not an update")
 
 
 class ThrottleTests(unittest.TestCase):
@@ -446,7 +644,8 @@ class PayloadTests(unittest.TestCase):
         ) as get:
             with mock.patch.object(updater, "local_commit", return_value="a" * 40):
                 updater.check()
-        url = get.call_args.args[0]
+        # The first call is the branch head; a second one compares against it.
+        url = get.call_args_list[0].args[0]
         self.assertIn("joruf/branchly", url)
         self.assertIn(f"commits/{updater.UPDATE_BRANCH}", url)
 
@@ -456,7 +655,7 @@ class PayloadTests(unittest.TestCase):
         ) as get:
             with mock.patch.object(updater, "local_commit", return_value="a" * 40):
                 updater.check()
-        headers = get.call_args.kwargs["headers"]
+        headers = get.call_args_list[0].kwargs["headers"]
         self.assertIn("Branchly", headers["User-Agent"])
 
     def test_no_token_is_ever_sent(self) -> None:
@@ -470,9 +669,11 @@ class PayloadTests(unittest.TestCase):
         ) as get:
             with mock.patch.object(updater, "local_commit", return_value="a" * 40):
                 updater.check()
-        headers = json.dumps(get.call_args.kwargs["headers"]).lower()
-        self.assertNotIn("authorization", headers)
-        self.assertNotIn("token", headers)
+        self.assertGreaterEqual(len(get.call_args_list), 1)
+        for call in get.call_args_list:
+            headers = json.dumps(call.kwargs["headers"]).lower()
+            self.assertNotIn("authorization", headers)
+            self.assertNotIn("token", headers)
 
 
 if __name__ == "__main__":

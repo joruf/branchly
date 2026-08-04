@@ -21,7 +21,9 @@ from config.app_settings import (
     AppSettings,
     load_settings,
     normalize_auto_check_minutes,
+    normalize_commit,
     normalize_diff_mode,
+    normalize_summary,
     normalize_timestamp,
     normalize_update_check_hours,
     save_settings,
@@ -71,6 +73,25 @@ class NormalizationTests(unittest.TestCase):
 
     def test_a_real_check_time_survives(self) -> None:
         self.assertEqual(1_700_000_000.0, normalize_timestamp(1_700_000_000))
+
+    def test_a_commit_hash_is_accepted_in_any_length(self) -> None:
+        self.assertEqual("a" * 40, normalize_commit("A" * 40))
+        self.assertEqual("fa5cf9e424", normalize_commit("  fa5cf9e424 "))
+
+    def test_anything_that_is_not_a_hash_is_dropped(self) -> None:
+        # A hand-edited value must not be able to become a path or an option.
+        for value in (None, 42, "", "../etc/passwd", "--upload-pack", "z" * 10, "a" * 41):
+            self.assertEqual("", normalize_commit(value))
+
+    def test_a_summary_keeps_one_line(self) -> None:
+        self.assertEqual("Fix the graph", normalize_summary("  Fix the graph\nand more\n"))
+
+    def test_a_long_summary_is_truncated(self) -> None:
+        self.assertEqual(200, len(normalize_summary("x" * 500)))
+
+    def test_an_unusable_summary_is_dropped(self) -> None:
+        for value in (None, "", "   ", 42, []):
+            self.assertEqual("", normalize_summary(value))
 
 
 class AppSettingsTests(unittest.TestCase):
@@ -126,6 +147,19 @@ class PersistenceTests(unittest.TestCase):
             loaded = load_settings(target)
             self.assertFalse(loaded.check_updates)
             self.assertEqual(1_700_000_000.0, loaded.update_checked_at)
+
+    def test_a_pending_update_survives_a_round_trip(self) -> None:
+        # This is what stops "not now" from silencing Branchly until the next
+        # check is due: the find has to outlive the process.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "settings.json"
+            save_settings(
+                AppSettings(update_remote_commit="fa5cf9e424", update_remote_summary="Faster graph"),
+                target,
+            )
+            loaded = load_settings(target)
+            self.assertEqual("fa5cf9e424", loaded.update_remote_commit)
+            self.assertEqual("Faster graph", loaded.update_remote_summary)
 
     def test_missing_file_yields_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
