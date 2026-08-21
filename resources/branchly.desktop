@@ -5,8 +5,9 @@ Name=Branchly
 GenericName=Git client
 Comment=Manage your Git projects without the command line
 Comment[de]=Git-Projekte verwalten ohne Kommandozeile
-Exec=/home/joruf/Applications/branchly/branchly.sh %f
-Icon=/home/joruf/Applications/branchly/resources/branchly.png
+# %k is this .desktop file. branchly.sh lives in the project root, one directory up.
+Exec=/bin/bash -c "cd \\$(dirname \\$(readlink -f \\$0))/.. && exec ./branchly.sh \\"\\$@\\"" %k %f
+Icon=branchly
 Terminal=false
 Categories=Development;RevisionControl;
 Keywords=git;version control;repository;commit;merge;

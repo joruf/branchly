@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Branchly">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#1f2430"/>
+  <g fill="none" stroke="#2f7dd1" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 16v32"/>
+    <path d="M22 32c0-8 8-10 16-10"/>
+    <path d="M38 22v10"/>
+  </g>
+  <circle cx="22" cy="16" r="5" fill="#2f7dd1"/>
+  <circle cx="22" cy="48" r="5" fill="#4ec98a"/>
+  <circle cx="38" cy="22" r="5" fill="#4591e4"/>
+</svg>
