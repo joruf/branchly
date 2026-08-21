@@ -1,12 +1,12 @@
 [Desktop Entry]
-Type=Application
 Version=1.0
+Type=Application
 Name=Branchly
 GenericName=Git client
 Comment=Manage your Git projects without the command line
 Comment[de]=Git-Projekte verwalten ohne Kommandozeile
-# %k is this .desktop file. branchly.sh lives in the project root, one directory up.
-Exec=/bin/bash -c "cd \\$(dirname \\$(readlink -f \\$0))/.. && exec ./branchly.sh \\"\\$@\\"" %k %f
+# %k is this .desktop file, so ./branchly.sh is always the one in the same folder.
+Exec=/bin/bash -c "cd \\$(dirname \\$(readlink -f \\$0)) && exec ./branchly.sh \\"\\$@\\"" %k %f
 Icon=branchly
 Terminal=false
 Categories=Development;RevisionControl;
