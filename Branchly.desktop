@@ -9,7 +9,7 @@ Comment[de]=Git-Projekte verwalten ohne Kommandozeile
 # folder was copied to. The same path repairs Icon= in place: a .desktop file cannot point at its
 # icon with a relative path (the spec reads one as a theme name), so the launcher writes the
 # absolute path of the icon next to it whenever the folder has moved.
-Exec=/bin/bash -c "s=\\$(readlink -f \\"\\$0\\"); d=\\${s%/*}; i=\\$d/resources/branchly.svg; grep -qxF \\"Icon=\\$i\\" \\"\\$s\\" || { I=\\$i awk '/^Icon=/{print \\"Icon=\\" ENVIRON[\\"I\\"]; next}1' \\"\\$s\\" > \\"\\$s.new\\" && mv -f \\"\\$s.new\\" \\"\\$s\\"; }; cd \\"\\$d\\" && exec ./branchly.sh \\"\\$@\\"" %k %f
+Exec=/bin/bash -c "s=\\$(readlink -f \\"\\$0\\"); d=\\${s%%/*}; i=\\$d/resources/branchly.svg; grep -qxF \\"Icon=\\$i\\" \\"\\$s\\" || { I=\\$i awk '/^Icon=/{print \\"Icon=\\" ENVIRON[\\"I\\"]; next}1' \\"\\$s\\" > \\"\\$s.new\\" && mv -f \\"\\$s.new\\" \\"\\$s\\"; }; cd \\"\\$d\\" && exec ./branchly.sh \\"\\$@\\"" %k %f
 Icon=/home/joruf/Applications/branchly/resources/branchly.svg
 Terminal=false
 Categories=Development;RevisionControl;
