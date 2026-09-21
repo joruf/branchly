@@ -13,6 +13,7 @@ good at: two nested colours per line, a gutter, and a monospace body.
 from __future__ import annotations
 
 import html
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -36,6 +37,8 @@ import i18n
 from config.app_settings import DIFF_SIDE_BY_SIDE, DIFF_UNIFIED, normalize_diff_mode
 from config.theme import ThemeColors, get_theme_colors
 from constants import DIFF_MAX_LINE_LENGTH
+from gitops import blobs
+from gitops.blobs import BinaryComparison, BlobFacts
 from gitops.diff import (
     IMAGE_SUFFIXES,
     LINE_ADDED,
@@ -54,6 +57,11 @@ from ui.widgets import EmptyState, InlineMessage, apply_monospace
 
 TAB_WIDTH = 4
 
+
+# How large a preview picture may get before it is scaled down, and how much
+# room an empty preview keeps so the two columns stay the same height.
+PREVIEW_MAX_SIZE = 900
+PREVIEW_MIN_HEIGHT = 160
 
 # Narrowest either side of a comparison may become, in pixels. Wide enough
 # for the line numbers plus a few words of code.
@@ -615,6 +623,281 @@ class ComparisonPanes(QWidget):
         return self._old, self._new
 
 
+def _format_timestamp(value: float | None) -> str:
+    """
+    Renders a timestamp for display.
+
+    Args:
+        value: Unix timestamp, or None when it is not known.
+
+    Returns:
+        str: Date and time, or a dash. A date that cannot be established is shown
+            as a dash rather than guessed at.
+    """
+
+    if value is None:
+        return "\u2014"
+    try:
+        return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M")
+    except (OSError, OverflowError, ValueError):
+        return "\u2014"
+
+
+def _source_label(facts: BlobFacts) -> str:
+    """
+    Names where one side of a comparison comes from.
+
+    Args:
+        facts: The side.
+
+    Returns:
+        str: A short description, empty when the side does not exist at all.
+    """
+
+    if facts.source == blobs.SOURCE_WORKTREE:
+        return i18n.t("diff.source_worktree")
+    if facts.source == blobs.SOURCE_INDEX:
+        return i18n.t("diff.source_index")
+    if facts.source == blobs.SOURCE_REVISION and facts.revision:
+        return i18n.t("diff.source_revision", revision=facts.revision)
+    return ""
+
+
+def _facts_html(facts: BlobFacts) -> str:
+    """
+    Renders the size and the date of one side.
+
+    Args:
+        facts: The side.
+
+    Returns:
+        str: Rich text with one line per fact.
+    """
+
+    if not facts.exists:
+        return ""
+    size = _escape(blobs.format_size(facts.size))
+    when = _escape(_format_timestamp(facts.modified))
+    return (
+        f"{_escape(i18n.t('diff.file_size'))}: <b>{size}</b><br>"
+        f"{_escape(i18n.t('diff.file_modified'))}: <b>{when}</b>"
+    )
+
+
+def _type_badge(path: str) -> str:
+    """
+    Builds a stand-in for a file that cannot be shown.
+
+    Args:
+        path: File path.
+
+    Returns:
+        str: The suffix in capitals, or a generic word when there is none.
+    """
+
+    suffix = Path(path).suffix.lstrip(".").upper()
+    return suffix or i18n.t("diff.file_generic")
+
+
+def _summary_text(comparison: BinaryComparison) -> str:
+    """
+    Sums up what changed between the two versions.
+
+    Args:
+        comparison: The two versions.
+
+    Returns:
+        str: One sentence, empty when there is nothing to say.
+    """
+
+    before, after = comparison.before, comparison.after
+    if not before.exists and after.exists:
+        return i18n.t("diff.binary_added", size=blobs.format_size(after.size))
+    if before.exists and not after.exists:
+        return i18n.t("diff.binary_removed", size=blobs.format_size(before.size))
+    if not before.exists and not after.exists:
+        return ""
+
+    delta = comparison.size_delta
+    if delta > 0:
+        return i18n.t("diff.binary_grew", size=blobs.format_size(delta))
+    if delta < 0:
+        return i18n.t("diff.binary_shrank", size=blobs.format_size(-delta))
+    return i18n.t("diff.binary_same_size")
+
+
+class BinaryComparisonView(QWidget):
+    """
+    Both versions of a file that has no readable diff, side by side.
+
+    A picture gets shown as a picture. Anything else gets the two facts that are
+    true of every file, its size and when it was last written, on both sides. The
+    point is the same either way: a new version of a file is a change, and a
+    panel that says only "this is not a text file" leaves the user with no way to
+    tell whether anything happened at all.
+
+    A side that does not exist says so rather than showing an empty box: a file
+    that was just added has no "before", and that is information, not a gap.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        """
+        Args:
+            parent: Parent widget.
+        """
+
+        super().__init__(parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        area = QScrollArea(self)
+        area.setWidgetResizable(True)
+        holder = QWidget(area)
+        column = QVBoxLayout(holder)
+        column.setContentsMargins(16, 16, 16, 16)
+        column.setSpacing(12)
+
+        row = QHBoxLayout()
+        row.setSpacing(16)
+        self._sides: list[dict[str, QLabel]] = []
+        for caption_key in ("diff.image_before", "diff.image_after"):
+            side, widgets = self._build_side(holder, i18n.t(caption_key))
+            row.addWidget(side, 1)
+            self._sides.append(widgets)
+        column.addLayout(row)
+
+        self._summary = QLabel("", holder)
+        self._summary.setObjectName("Muted")
+        self._summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._summary.setWordWrap(True)
+        column.addWidget(self._summary)
+        column.addStretch(1)
+
+        area.setWidget(holder)
+        outer.addWidget(area)
+
+    def _build_side(self, parent: QWidget, caption: str) -> tuple[QWidget, dict[str, QLabel]]:
+        """
+        Builds one of the two columns.
+
+        Args:
+            parent: Parent widget.
+            caption: Heading for this side.
+
+        Returns:
+            tuple[QWidget, dict[str, QLabel]]: The column and its labels, keyed by
+                what they hold.
+        """
+
+        colors = get_theme_colors()
+        holder = QWidget(parent)
+        column = QVBoxLayout(holder)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(6)
+
+        heading = QLabel(caption, holder)
+        heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        heading.setObjectName("Heading")
+        column.addWidget(heading)
+
+        source = QLabel("", holder)
+        source.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        source.setObjectName("Muted")
+        column.addWidget(source)
+
+        preview = QLabel("", holder)
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setMinimumHeight(PREVIEW_MIN_HEIGHT)
+        column.addWidget(preview, 1)
+
+        facts = QLabel("", holder)
+        facts.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        facts.setTextFormat(Qt.TextFormat.RichText)
+        facts.setStyleSheet(f"color: {colors.text};")
+        column.addWidget(facts)
+
+        return holder, {"source": source, "preview": preview, "facts": facts}
+
+    def show_comparison(self, comparison: BinaryComparison) -> None:
+        """
+        Fills both columns from a comparison.
+
+        Args:
+            comparison: The two versions and what is known about them.
+
+        Returns:
+            None
+        """
+
+        pairs = (
+            (comparison.before, comparison.before_bytes),
+            (comparison.after, comparison.after_bytes),
+        )
+        for widgets, (facts, payload) in zip(self._sides, pairs, strict=True):
+            widgets["source"].setText(_source_label(facts))
+            self._fill_preview(widgets["preview"], facts, payload, comparison)
+            widgets["facts"].setText(_facts_html(facts))
+
+        self._summary.setText(_summary_text(comparison))
+
+    def _fill_preview(
+        self,
+        label: QLabel,
+        facts: BlobFacts,
+        payload: bytes | None,
+        comparison: BinaryComparison,
+    ) -> None:
+        """
+        Puts the picture, or something honest in its place, into one column.
+
+        Args:
+            label: The preview label to fill.
+            facts: What is known about this side.
+            payload: Raw content, when it was loaded.
+            comparison: The whole comparison, for the reasons a preview is absent.
+
+        Returns:
+            None
+        """
+
+        colors = get_theme_colors()
+        label.setPixmap(QPixmap())
+
+        if not facts.exists:
+            label.setText(i18n.t("diff.side_absent"))
+            label.setStyleSheet(f"color: {colors.text_muted};")
+            return
+
+        if comparison.is_image and payload is not None:
+            pixmap = QPixmap()
+            if pixmap.loadFromData(payload):
+                if pixmap.width() > PREVIEW_MAX_SIZE or pixmap.height() > PREVIEW_MAX_SIZE:
+                    pixmap = pixmap.scaled(
+                        PREVIEW_MAX_SIZE,
+                        PREVIEW_MAX_SIZE,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                label.setText("")
+                label.setStyleSheet(f"border: 1px solid {colors.border};")
+                label.setPixmap(pixmap)
+                return
+
+        if comparison.is_image and comparison.preview_skipped:
+            reason = i18n.t("diff.preview_too_large")
+        elif comparison.is_image:
+            reason = i18n.t("diff.preview_failed")
+        else:
+            reason = _type_badge(comparison.path)
+        label.setText(reason)
+        label.setStyleSheet(
+            f"color: {colors.text_muted}; border: 1px dashed {colors.border};"
+            " padding: 24px; font-size: 15px;"
+        )
+
+
 class DiffView(QWidget):
     """
     Shows the difference between two states of one file.
@@ -684,89 +967,11 @@ class DiffView(QWidget):
         notice_layout.addStretch(1)
         self._stack.addWidget(self._notice_holder)
 
-        self._images = self._build_image_view()
-        self._stack.addWidget(self._images)
+        self._binary = BinaryComparisonView(self)
+        self._stack.addWidget(self._binary)
 
         layout.addWidget(self._stack, 1)
         self._stack.setCurrentWidget(self._empty)
-
-    def _build_image_view(self) -> QWidget:
-        """
-        Builds the two-panel preview used for image files.
-
-        Returns:
-            QWidget: Scrollable holder with a "before" and an "after" panel.
-        """
-
-        area = QScrollArea(self)
-        area.setWidgetResizable(True)
-        holder = QWidget(area)
-        row = QHBoxLayout(holder)
-        row.setContentsMargins(16, 16, 16, 16)
-        row.setSpacing(16)
-
-        self._image_before_caption = QLabel(i18n.t("diff.image_before"), holder)
-        self._image_before_caption.setObjectName("Muted")
-        self._image_before = QLabel(holder)
-        self._image_before.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self._image_after_caption = QLabel(i18n.t("diff.image_after"), holder)
-        self._image_after_caption.setObjectName("Muted")
-        self._image_after = QLabel(holder)
-        self._image_after.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        for caption, image in (
-            (self._image_before_caption, self._image_before),
-            (self._image_after_caption, self._image_after),
-        ):
-            column = QVBoxLayout()
-            column.setSpacing(6)
-            caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            column.addWidget(caption)
-            column.addWidget(image, 1)
-            wrapper = QWidget(holder)
-            wrapper.setLayout(column)
-            row.addWidget(wrapper, 1)
-
-        area.setWidget(holder)
-        return area
-
-    def show_images(self, before: bytes | None, after: bytes | None) -> None:
-        """
-        Shows an image file's two versions next to each other.
-
-        Args:
-            before: Raw content of the old version, or None when it did not exist.
-            after: Raw content of the new version, or None when it was deleted.
-
-        Returns:
-            None
-        """
-
-        colors = get_theme_colors()
-        for payload, label in ((before, self._image_before), (after, self._image_after)):
-            if payload is None:
-                label.setPixmap(QPixmap())
-                label.setText("—")
-                label.setStyleSheet(f"color: {colors.text_muted};")
-                continue
-            pixmap = QPixmap()
-            if not pixmap.loadFromData(payload):
-                label.setPixmap(QPixmap())
-                label.setText(i18n.t("diff.binary"))
-                label.setStyleSheet(f"color: {colors.text_muted};")
-                continue
-            if pixmap.width() > 900 or pixmap.height() > 900:
-                pixmap = pixmap.scaled(
-                    900,
-                    900,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            label.setText("")
-            label.setStyleSheet(f"border: 1px solid {colors.border};")
-            label.setPixmap(pixmap)
-        self._stack.setCurrentWidget(self._images)
 
     def _build_toolbar(self, ignore_whitespace: bool, word_level: bool) -> QWidget:
         """
@@ -1018,8 +1223,8 @@ class DiffView(QWidget):
             self._show_notice(i18n.t("error.title"), i18n.t(diff.error_key), "danger")
             return
         if diff.binary:
-            # An image gets a real preview via show_images(); until the caller
-            # supplies the two blobs, the explanation stands in for it.
+            # The caller follows up with show_comparison(). Until it does, the
+            # explanation stands in, so the panel is never blank.
             self._show_notice(i18n.t("diff.binary"), i18n.t("diff.binary_hint"), "info")
             return
         if diff.is_empty:
@@ -1029,6 +1234,24 @@ class DiffView(QWidget):
             return
 
         self._rerender()
+
+    def show_comparison(self, comparison: BinaryComparison) -> None:
+        """
+        Shows both versions of a file that has no readable diff.
+
+        Args:
+            comparison: The two versions and what is known about them.
+
+        Returns:
+            None
+        """
+
+        self._path = comparison.path
+        self._open_button.setEnabled(bool(self._path))
+        self._reveal_button.setEnabled(bool(self._path))
+        self._counts.setText("")
+        self._binary.show_comparison(comparison)
+        self._stack.setCurrentWidget(self._binary)
 
     def show_many(self, diffs: list[FileDiff], caption: str = "") -> None:
         """

@@ -66,6 +66,11 @@ schreibt — eine Nachricht über das Programm darf dabei nicht verschwinden.
 
 ## Reiter Änderungen (`ui/changes_panel.py`)
 
+Rechts an jeder Zeile steht das Statuszeichen (`+` neu, `•` ersetzt, `−` gelöscht,
+`→` umbenannt, `!` Konflikt), gezeichnet von `StatusGlyphDelegate`. Ein Delegate
+und kein Widget pro Zeile, weil die Zeilen eine Ankreuzbox tragen, die die
+Ansicht selbst zeichnet: mit einem eigenen Widget müsste man die nachbauen.
+
 Dateiliste mit Häkchen; die Farbe der Zeile sagt die Art (geändert, neu, gelöscht,
 umbenannt, nicht erfasst, Konflikt). Konfliktdateien sind fett und **nicht**
 anhakbar — sie können erst nach der Entscheidung gespeichert werden.
@@ -125,7 +130,15 @@ Kopfzeile: Vergleichsziel, Darstellung, Abstände ignorieren, Wörter hervorhebe
 `+n −n`, „Datei öffnen", „Im Ordner zeigen".
 
 Fünf Zustände: Platzhalter („Wähle eine Datei"), eine Spalte, zwei Spalten,
-Hinweis (Binärdatei, Fehler), Bildvergleich Vorher/Nachher.
+Hinweis (Fehler), und `BinaryComparisonView` für alles, was keine vergleichbaren
+Zeilen hat.
+
+`BinaryComparisonView` hat zwei Spalten, Vorher und Nachher, jede mit Überschrift,
+Herkunft („Auf deiner Festplatte", „Stand HEAD", „Bereit zum Speichern"), Vorschau
+und darunter Größe und Datum. Die Vorschau ist bei einem Bild das Bild, sonst ein
+gestricheltes Feld mit dem Dateityp. Unter beiden Spalten steht ein Satz zur
+Größenänderung. Eine Seite, die es nicht gibt, schreibt das in ihr Vorschaufeld,
+statt leer zu bleiben.
 
 Die beiden Darstellungen sind zwei verschiedene Widgets, nicht zwei Varianten
 derselben HTML-Tabelle:
@@ -229,6 +242,7 @@ Kein Widget enthält einen Hex-Wert. Alles kommt aus `config/theme.py`:
 - `screenshots/graph-dark.png`, `graph-light.png`
 - `screenshots/conflict-assistant-dark.png`, `conflict-assistant-light.png`
 - `screenshots/github-panel-dark.png`, `github-panel-light.png`
+- `screenshots/binary-comparison-dark.png`, `binary-comparison-light.png`
 
 Neu erzeugen:
 

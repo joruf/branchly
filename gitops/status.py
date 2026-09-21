@@ -46,6 +46,21 @@ CHANGE_COLOR_TOKENS: dict[str, str] = {
     CHANGE_CONFLICTED: "status_conflict",
 }
 
+# One character per kind, the way GitHub Desktop marks its rows: a plus for
+# something that was not there before, a dot for something that was replaced, a
+# minus for something that is gone, an arrow for a move. Kept next to the kinds
+# themselves so the UI never maps status letters on its own.
+CHANGE_GLYPHS: dict[str, str] = {
+    CHANGE_MODIFIED: "\u2022",
+    CHANGE_ADDED: "+",
+    CHANGE_UNTRACKED: "+",
+    CHANGE_DELETED: "\u2212",
+    CHANGE_RENAMED: "\u2192",
+    CHANGE_COPIED: "\u2192",
+    CHANGE_TYPE_CHANGED: "\u2022",
+    CHANGE_CONFLICTED: "!",
+}
+
 _XY_TO_KIND = {
     "M": CHANGE_MODIFIED,
     "A": CHANGE_ADDED,
@@ -130,6 +145,17 @@ class FileChange:
         """
 
         return CHANGE_LABEL_KEYS.get(self.kind, "status.modified")
+
+    @property
+    def glyph(self) -> str:
+        """
+        Returns the one-character marker for this change.
+
+        Returns:
+            str: The marker, or a dot for a kind that has none of its own.
+        """
+
+        return CHANGE_GLYPHS.get(self.kind, CHANGE_GLYPHS[CHANGE_MODIFIED])
 
     @property
     def color_token(self) -> str:

@@ -44,6 +44,7 @@ from config.theme import build_application_stylesheet, set_current_theme
 from constants import APP_NAME, APP_VERSION
 from github_api import token as token_store
 from github_api.client import GitHubClient
+from gitops import blobs
 from gitops import branch as branch_mod
 from gitops import conflict as conflict_mod
 from gitops import diff as diff_mod
@@ -667,9 +668,11 @@ class MainWindow(QMainWindow):
             return
 
         if untracked:
-            self._diff.show_diff(
-                diff_mod.untracked_file_diff(entry.path, path, self._diff.word_level)
-            )
+            parsed = diff_mod.untracked_file_diff(entry.path, path, self._diff.word_level)
+            if parsed.binary:
+                self._show_binary_comparison(entry, path, untracked=True)
+                return
+            self._diff.show_diff(parsed)
             return
 
         parsed = diff_mod.file_diff(
@@ -679,18 +682,33 @@ class MainWindow(QMainWindow):
             self._diff.ignore_whitespace,
             self._diff.word_level,
         )
-        if parsed.is_image:
-            before = diff_mod.blob_bytes(entry.path, "HEAD", path)
-            after = None
-            candidate = Path(entry.path) / path
-            try:
-                if candidate.is_file():
-                    after = candidate.read_bytes()
-            except OSError:
-                after = None
-            self._diff.show_images(before, after)
+        if parsed.binary:
+            # Every file git calls binary gets the two versions compared, not
+            # only the ones that happen to be pictures: a new version of a PDF
+            # is a change, and saying "not a text file" says nothing about it.
+            self._show_binary_comparison(entry, path, untracked=False)
             return
         self._diff.show_diff(parsed)
+
+    def _show_binary_comparison(self, entry: RepoEntry, path: str, untracked: bool) -> None:
+        """
+        Puts both versions of a non-text file side by side.
+
+        Args:
+            entry: Repository the file belongs to.
+            path: Repository-relative path.
+            untracked: Whether git does not track the file yet, in which case
+                there is no older version to look for.
+
+        Returns:
+            None
+        """
+
+        # The single-file view only ever compares against the working tree, the
+        # index or HEAD; two selected commits go through the multi-file path.
+        self._diff.show_comparison(
+            blobs.compare(entry.path, path, target=self._diff.target, untracked=untracked)
+        )
 
     def _reload_diff(self) -> None:
         """

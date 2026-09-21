@@ -645,5 +645,19 @@
   "ignore.already_there": "{pattern} steht schon in .gitignore",
   "ignore.pattern_empty": "Hier gibt es nichts zu ignorieren",
   "ignore.unreadable": ".gitignore konnte nicht gelesen werden",
-  "ignore.write_failed": ".gitignore konnte nicht geschrieben werden"
+  "ignore.write_failed": ".gitignore konnte nicht geschrieben werden",
+  "diff.side_absent": "Nicht vorhanden",
+  "diff.source_worktree": "Auf deiner Festplatte",
+  "diff.source_index": "Bereit zum Speichern",
+  "diff.source_revision": "Stand {revision}",
+  "diff.file_size": "Größe",
+  "diff.file_modified": "Geschrieben",
+  "diff.file_generic": "Datei",
+  "diff.preview_too_large": "Zu groß für die Vorschau",
+  "diff.preview_failed": "Lässt sich nicht darstellen",
+  "diff.binary_added": "Neue Datei, {size}",
+  "diff.binary_removed": "Gelöscht, war {size}",
+  "diff.binary_grew": "{size} größer als vorher",
+  "diff.binary_shrank": "{size} kleiner als vorher",
+  "diff.binary_same_size": "Gleiche Größe, Inhalt unterscheidet sich"
 }

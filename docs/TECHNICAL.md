@@ -348,6 +348,45 @@ Ob etwas *schon* ignoriert ist, kann nur git beantworten, denn dafür zählen al
 `.gitignore` nach oben, `.git/info/exclude` und die globale Ausschlussdatei. Das
 geht über `git check-ignore`.
 
+### Dateien ohne vergleichbare Zeilen
+
+`gitops/blobs.py` beantwortet für beide Seiten einer Gegenüberstellung zwei Fragen:
+wie groß ist diese Fassung, und wann ist sie entstanden. Das Unangenehme daran ist,
+dass die beiden Seiten selten dasselbe Ding sind:
+
+| Seite | Größe | Datum |
+|---|---|---|
+| Arbeitsverzeichnis | `os.stat` | `st_mtime` |
+| Commit | `git cat-file -s <rev>:<pfad>` | `git log -1 --format=%ct <rev> -- <pfad>` |
+| Index | `git cat-file -s :<pfad>` | `mtime` aus `git ls-files --debug` |
+
+Ein Blob hat **kein** eigenes Datum. Das einzig sinnvolle Datum für eine
+committete Fassung ist das des Commits, der den Pfad zuletzt angefasst hat, und
+genau das wird genommen. Der Index ist die eine Stelle, an der git einen
+Dateisystem-Zeitstempel führt, deshalb gibt es dort überhaupt eine Antwort.
+
+**Wo sich kein Datum ermitteln lässt, steht ein Strich.** Ein erfundener
+Zeitstempel in einer Gegenüberstellung ist schlimmer als eine Lücke.
+
+Welche zwei Fassungen ein Vergleichsziel meint, steht in `comparison_sides()` an
+einer Stelle, statt an jeder Aufrufstelle neu abgeleitet zu werden.
+
+Vorschaubytes werden nur für Bilder gelesen und nur bis `MAX_PREVIEW_BYTES`. Ein
+dreißig Megabyte großes Bild würde ohnehin auf ein paar hundert Pixel skaliert;
+es dafür ganz in den Speicher zu lesen wäre kein guter Handel. Dass die Vorschau
+deswegen fehlt, wird gesagt, nicht als leeres Feld gezeigt.
+
+### Die Statuszeichen in der Dateiliste
+
+`CHANGE_GLYPHS` steht in `gitops/status.py`, direkt neben den Zustandskonstanten,
+damit die Oberfläche nie selbst Statusbuchstaben auf Zeichen abbildet.
+
+Gezeichnet werden sie von `StatusGlyphDelegate` (`ui/changes_panel.py`), nicht von
+einem Widget pro Zeile. Der Grund ist die Ankreuzbox: die zeichnet die Ansicht
+selbst, und ein `setItemWidget` pro Zeile hieße, sie nachzubauen. Das Delegate
+verkleinert zuerst das Textrechteck um die Breite des Zeichens, sonst liefe ein
+langer Pfad darunter hindurch statt vorher gekürzt zu werden.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`

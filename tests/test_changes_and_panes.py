@@ -174,6 +174,32 @@ class SelectionTests(unittest.TestCase):
             panel._set_all_checked(True)
             self.assertEqual(set(), panel.deselected_paths())
 
+    def test_every_row_carries_its_status_marker(self) -> None:
+        from ui.changes_panel import _ROLE_GLYPH, _ROLE_GLYPH_TOKEN
+
+        with temp_repo() as repo:
+            repo.write("kept.txt", "one\n")
+            repo.commit("first")
+            repo.write("kept.txt", "one\ntwo\n")
+            repo.write("brandnew.txt", "x\n")
+
+            from gitops.status import read_state
+
+            panel = self._panel()
+            panel.set_state(read_state(repo.root), "main", deselected=set())
+
+            markers = {
+                panel._list.item(index).data(int(Qt.ItemDataRole.UserRole)): (
+                    panel._list.item(index).data(_ROLE_GLYPH),
+                    panel._list.item(index).data(_ROLE_GLYPH_TOKEN),
+                )
+                for index in range(panel._list.count())
+            }
+            # A plus for what was not there before, a dot for what was replaced.
+            self.assertEqual("+", markers["brandnew.txt"][0])
+            self.assertEqual("\u2022", markers["kept.txt"][0])
+            self.assertTrue(markers["brandnew.txt"][1])
+
     def test_committing_clears_the_memory_for_those_files(self) -> None:
         with temp_repo() as repo:
             panel = self._panel()
