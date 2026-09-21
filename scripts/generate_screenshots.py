@@ -337,6 +337,64 @@ def capture_github(theme: str, config_dir: Path) -> Path:
     return target
 
 
+def capture_binary(theme: str, base: Path) -> Path:
+    """
+    Photographs the comparison of a file that has no readable diff.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo repository in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from gitops import blobs
+    from ui.diff_view import BinaryComparisonView
+
+    i18n.set_language("de")
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    root = base / f"binary-{theme}"
+    root.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(root),
+            "GIT_CONFIG_GLOBAL": str(root / ".gitconfig"),
+            "GIT_CONFIG_SYSTEM": str(root / ".gitconfig-system"),
+            "GIT_AUTHOR_NAME": "Jo Ruf",
+            "GIT_AUTHOR_EMAIL": "jo@example.invalid",
+            "GIT_COMMITTER_NAME": "Jo Ruf",
+            "GIT_COMMITTER_EMAIL": "jo@example.invalid",
+            "GIT_AUTHOR_DATE": "2026-09-14T10:15:00",
+            "GIT_COMMITTER_DATE": "2026-09-14T10:15:00",
+            "LC_ALL": "C",
+        }
+    )
+    _git(["init", "-b", "main"], root, env)
+    (root / "handbuch.pdf").write_bytes(b"%PDF-1.4\n" + b"\x00\x01" * 9000)
+    _git(["add", "-A"], root, env)
+    _git(["commit", "-m", "Handbuch hinzufügen"], root, env)
+    (root / "handbuch.pdf").write_bytes(b"%PDF-1.4\n" + b"\x00\x01" * 14500)
+
+    view = BinaryComparisonView()
+    view.resize(900, 460)
+    view.show_comparison(blobs.compare(root, "handbuch.pdf"))
+    view.show()
+    app.processEvents()
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    target = OUTPUT_DIR / f"binary-comparison-{theme}.png"
+    view.grab().save(str(target))
+    view.close()
+    return target
+
+
 def capture_conflict(theme: str, base: Path) -> Path:
     """
     Builds a repository with a real conflict and photographs the assistant.
@@ -424,6 +482,7 @@ def main() -> int:
         for theme in (THEME_DARK, THEME_LIGHT):
             print(f"wrote {capture(theme, repositories, config_dir)}")
             print(f"wrote {capture_github(theme, config_dir)}")
+            print(f"wrote {capture_binary(theme, base)}")
             print(f"wrote {capture_conflict(theme, base)}")
     return 0
 

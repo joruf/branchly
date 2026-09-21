@@ -9,8 +9,8 @@ built around. Staging still happens underneath — the tick boxes are turned int
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication
+from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
@@ -31,9 +33,14 @@ from config.theme import get_theme_colors
 from gitops import ignore as ignore_mod
 from gitops.commit import CommitDraft
 from gitops.status import CHANGE_UNTRACKED, RepositoryState
-from ui.widgets import EmptyState, InlineMessage, SectionHeader
+from ui.widgets import EmptyState, InlineMessage, SectionHeader, token_color
 
 # Which wording the ignore submenu uses for each kind of offer.
+# How much room the marker gets at the right edge, and how far it sits from
+# the edge itself.
+GLYPH_WIDTH = 22
+GLYPH_MARGIN = 8
+
 _IGNORE_LABEL_KEYS = {
     ignore_mod.KIND_FILE: "ignore.this_file",
     ignore_mod.KIND_EXTENSION: "ignore.this_extension",
@@ -43,6 +50,72 @@ _IGNORE_LABEL_KEYS = {
 _ROLE_PATH = int(Qt.ItemDataRole.UserRole)
 _ROLE_UNTRACKED = int(Qt.ItemDataRole.UserRole) + 1
 _ROLE_CONFLICTED = int(Qt.ItemDataRole.UserRole) + 2
+_ROLE_GLYPH = int(Qt.ItemDataRole.UserRole) + 3
+_ROLE_GLYPH_TOKEN = int(Qt.ItemDataRole.UserRole) + 4
+
+
+class StatusGlyphDelegate(QStyledItemDelegate):
+    """
+    Draws the change marker at the right edge of a row.
+
+    A delegate rather than a widget per row, because the rows carry a tick box
+    and the view draws that itself: replacing the row with a widget would mean
+    rebuilding the tick box by hand. The delegate keeps everything the view does
+    and only adds the marker.
+
+    The text is given a narrower rectangle first, so a long path is elided before
+    it reaches the marker instead of running underneath it.
+    """
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        """
+        Draws one row.
+
+        Args:
+            painter: Painter to draw with.
+            option: Style options, including the row rectangle.
+            index: Model index of the row.
+
+        Returns:
+            None
+        """
+
+        glyph = index.data(_ROLE_GLYPH)
+        if not isinstance(glyph, str) or not glyph:
+            super().paint(painter, option, index)
+            return
+
+        narrowed = QStyleOptionViewItem(option)
+        narrowed.rect = option.rect.adjusted(0, 0, -GLYPH_WIDTH, 0)
+        super().paint(painter, narrowed, index)
+
+        token = index.data(_ROLE_GLYPH_TOKEN)
+        painter.save()
+        painter.setPen(QColor(token_color(token if isinstance(token, str) else "info")))
+        font = QFont(option.font)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(
+            option.rect.adjusted(0, 0, -GLYPH_MARGIN, 0),
+            int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+            glyph,
+        )
+        painter.restore()
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:  # noqa: N802
+        """
+        Reserves room for the marker.
+
+        Args:
+            option: Style options.
+            index: Model index of the row.
+
+        Returns:
+            QSize: The size the row wants.
+        """
+
+        size = super().sizeHint(option, index)
+        return QSize(size.width() + GLYPH_WIDTH, size.height())
 
 
 class ChangesPanel(QWidget):
@@ -115,6 +188,9 @@ class ChangesPanel(QWidget):
         self._list = QListWidget(self)
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._show_context_menu)
+        self._list.setItemDelegate(StatusGlyphDelegate(self._list))
+        # A long path loses its middle rather than its file name.
+        self._list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
         # Paths the user unticked. Kept here rather than read back off the list,
         # so a file that vanishes from the working tree and comes back later is
         # still unticked.
@@ -222,6 +298,8 @@ class ChangesPanel(QWidget):
             item.setData(_ROLE_UNTRACKED, change.kind == CHANGE_UNTRACKED)
             item.setData(_ROLE_CONFLICTED, change.conflicted)
             item.setText(f"{change.display_path}")
+            item.setData(_ROLE_GLYPH, change.glyph)
+            item.setData(_ROLE_GLYPH_TOKEN, change.color_token)
             item.setToolTip(f"{i18n.t(change.label_key)} · {change.path}")
             item.setForeground(QBrush(QColor(getattr(colors, change.color_token, colors.text))))
             if change.conflicted:

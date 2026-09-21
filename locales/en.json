@@ -645,5 +645,19 @@
   "ignore.already_there": "{pattern} is already in .gitignore",
   "ignore.pattern_empty": "There is nothing to ignore here",
   "ignore.unreadable": ".gitignore could not be read",
-  "ignore.write_failed": ".gitignore could not be written"
+  "ignore.write_failed": ".gitignore could not be written",
+  "diff.side_absent": "Not present",
+  "diff.source_worktree": "On your disk",
+  "diff.source_index": "Ready to commit",
+  "diff.source_revision": "At {revision}",
+  "diff.file_size": "Size",
+  "diff.file_modified": "Written",
+  "diff.file_generic": "File",
+  "diff.preview_too_large": "Too large to show here",
+  "diff.preview_failed": "Cannot be shown",
+  "diff.binary_added": "New file, {size}",
+  "diff.binary_removed": "Deleted, was {size}",
+  "diff.binary_grew": "{size} larger than before",
+  "diff.binary_shrank": "{size} smaller than before",
+  "diff.binary_same_size": "Same size, contents differ"
 }

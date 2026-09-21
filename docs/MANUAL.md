@@ -135,6 +135,22 @@ Sobald eine Datei in einem Commit gelandet ist, ist die Sache erledigt und
 Branchly vergisst sie. Eine spätere, ganz andere Änderung an derselben Datei ist
 also wieder angehakt.
 
+### Was in der Liste steht
+
+Rechts an jeder Zeile steht ein Zeichen, das sagt, was mit der Datei passiert ist,
+genau wie in GitHub Desktop:
+
+| Zeichen | Bedeutung |
+| --- | --- |
+| `+` | neu angelegt, git kannte sie vorher nicht |
+| `•` | ersetzt, es gab sie schon |
+| `−` | gelöscht |
+| `→` | umbenannt oder verschoben |
+| `!` | Konflikt, muss erst entschieden werden |
+
+Die Farbe der Zeile sagt dasselbe noch einmal, damit es auch erkennbar bleibt,
+wenn die Zeichen schwer zu unterscheiden sind.
+
 ### Rechtsklick auf eine Datei
 
 **Datei öffnen** (Standardprogramm), **Im Ordner zeigen**, **Pfad kopieren**,
@@ -195,9 +211,36 @@ Platz braucht als die andere.
 | Zwei ausgewählte Stände | Im Graph zwei Commits markieren |
 | Zwei Branches | Zwei Zweige vollständig |
 
-Bilder werden als **Vorher/Nachher** gezeigt. Bei anderen Binärdateien sagt
-Branchly, dass es keine Zeilen vergleichen kann, statt Datenmüll anzuzeigen.
-Sehr große Diffs werden gekürzt, mit Hinweis.
+### Dateien ohne Zeilen
+
+Nicht jede Datei besteht aus Zeilen, die sich vergleichen lassen. Gegenübergestellt
+werden sie trotzdem, denn eine neue Fassung ist eine Änderung, und „das ist keine
+Textdatei" sagt darüber nichts aus.
+
+**Bilder** stehen als Vorher und Nachher nebeneinander, beide auf Fenstergröße
+verkleinert, wenn sie zu groß sind.
+
+**Alles andere** bekommt statt des Bildes ein Feld mit dem Dateityp, und darunter
+stehen auf beiden Seiten die zwei Angaben, die es zu jeder Datei gibt: **Größe**
+und **wann sie geschrieben wurde**. Darunter steht in einem Satz, was sich
+geändert hat, etwa „11 KB größer als vorher".
+
+Woher das Datum kommt, hängt von der Seite ab:
+
+| Seite | Größe | Datum |
+| --- | --- | --- |
+| Auf deiner Festplatte | die echte Dateigröße | wann die Datei zuletzt geschrieben wurde |
+| Ein Commit | die Größe im Repository | das Datum des Commits, der die Datei zuletzt geändert hat |
+| Bereit zum Speichern | die Größe im Index | wann die Datei beim Bereitstellen geschrieben wurde |
+
+Lässt sich ein Datum nicht ermitteln, steht dort ein Strich. Ein erfundenes Datum
+in einer Gegenüberstellung wäre schlimmer als gar keins.
+
+Eine Seite, die es nicht gibt, sagt das ausdrücklich: eine gerade erst angelegte
+Datei hat kein „Vorher", und das ist eine Information, keine Lücke.
+
+Sehr große Diffs werden gekürzt, mit Hinweis. Bei einem sehr großen Bild wird die
+Vorschau ausgelassen, die Größe und das Datum stehen trotzdem da.
 
 ## Graph
 

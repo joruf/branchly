@@ -34,7 +34,15 @@ something new" — locally *and* on the server.
 - Whitespace-only changes can be hidden
 - Comparison targets: your edits vs. staged, staged vs. last commit, your edits
   vs. last commit, one commit vs. another, one branch vs. another
-- Images are shown before/after instead of as unreadable bytes
+- Every file gets compared, not only the ones made of lines. Images are shown
+  before and after; anything else gets its size and the date it was written on
+  both sides, plus a sentence saying what changed. A side that does not exist says
+  so, and a date that cannot be established is a dash rather than a guess
+- Each row in the list carries its marker the way GitHub Desktop does it: `+` for
+  a file that was not there before, `•` for one that was replaced, `−` for a
+  deletion, `→` for a move, `!` for a conflict
+
+![Comparing a file with no readable diff](docs/screenshots/binary-comparison-dark.png)
 - Any file opens in your default program, or in its folder
 
 **Everyday Git without the vocabulary**
