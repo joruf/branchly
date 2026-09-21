@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import paths
 from gitops.runner import repository_root
@@ -91,9 +92,12 @@ class Registry:
                 self._entries.append(entry)
         for item in data.get("categories", []) or []:
             category = Category.from_dict(item)
-            if category is not None and not category.is_uncategorized:
-                if not self._find_category(category.name):
-                    self._categories.append(category)
+            if (
+                category is not None
+                and not category.is_uncategorized
+                and not self._find_category(category.name)
+            ):
+                self._categories.append(category)
 
         # A category referenced by a repository but missing from the list would
         # make that repository disappear from the sidebar.

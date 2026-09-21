@@ -179,10 +179,7 @@ def create_branch(repo: Path | str, name: str, start_point: str = "", checkout: 
     if start_point and not is_valid_revision(start_point):
         return _refused("branch", "invalid start point")
     invalidate_branch_cache(repo)
-    if checkout:
-        args = ["switch", "--create", name]
-    else:
-        args = ["branch", name]
+    args = ["switch", "--create", name] if checkout else ["branch", name]
     if start_point:
         args.append(start_point)
     return run(args, cwd=repo)

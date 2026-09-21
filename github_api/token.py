@@ -43,7 +43,7 @@ class TokenState:
     error: str = ""
 
 
-def _backend():  # noqa: ANN201 - keyring's backend type is not worth importing
+def _backend():  # noqa: ANN202 - keyring's backend type is not worth importing for a hint
     """
     Returns the keyring module, or None when it is unusable.
 

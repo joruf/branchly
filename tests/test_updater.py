@@ -60,7 +60,7 @@ class _Response:
             raise ValueError(self._payload)
         return self._payload
 
-    def iter_content(self, chunk_size: int = 1) -> "list[bytes]":
+    def iter_content(self, chunk_size: int = 1) -> list[bytes]:
         """
         Yields the body in one or more chunks.
 
@@ -73,7 +73,7 @@ class _Response:
 
         return [self._body[at : at + chunk_size] for at in range(0, len(self._body), chunk_size)]
 
-    def __enter__(self) -> "_Response":
+    def __enter__(self) -> _Response:
         return self
 
     def __exit__(self, *args: object) -> bool:
@@ -375,14 +375,14 @@ class BehindTests(unittest.TestCase):
         with temp_repo() as repo:
             first = repo.head()
             repo.commit_file("later.txt", "later\n", "a later commit")
-            self.assertTrue(updater._already_contains(first, repo.root))  # noqa: SLF001
+            self.assertTrue(updater._already_contains(first, repo.root))
 
     @requires_git
     def test_an_unknown_commit_is_not_claimed_either_way(self) -> None:
         with temp_repo() as repo:
             # The object is not here, so the honest answer is "cannot tell", which
             # must read as "not contained" rather than as a guess.
-            self.assertFalse(updater._already_contains("b" * 40, repo.root))  # noqa: SLF001
+            self.assertFalse(updater._already_contains("b" * 40, repo.root))
 
     @requires_git
     def test_a_fetched_remote_commit_blocks_the_phantom_update(self) -> None:
@@ -595,7 +595,7 @@ class RestartTests(unittest.TestCase):
 
         def fake_popen(command: list[str], **kwargs: object) -> None:
             seen.update(kwargs)
-            return None
+            return
 
         with mock.patch.dict(os.environ, {updater.REEXEC_MARKER: "1"}, clear=False):
             with mock.patch.object(paths, "is_windows", return_value=True):
@@ -612,7 +612,7 @@ class RestartTests(unittest.TestCase):
 
         def fake_popen(command: list[str], **kwargs: object) -> None:
             seen.update(kwargs)
-            return None
+            return
 
         with mock.patch.object(paths, "is_windows", return_value=True):
             with mock.patch.object(updater.subprocess, "Popen", fake_popen):

@@ -32,9 +32,12 @@ from PySide6.QtWidgets import (
 
 import i18n
 import paths
+from github_api.client import GitHubClient
 from gitops import clone as clone_mod
 from gitops import remote_url
 from models.category import Category
+from ui.github_dialogs import RepositoryPickerDialog
+from ui.github_worker import ApiRunner
 from ui.widgets import InlineMessage
 
 
@@ -91,10 +94,20 @@ class CloneDialog(QDialog):
     Asks for an address and a destination, then clones.
     """
 
-    def __init__(self, categories: list[Category], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        categories: list[Category],
+        initial_url: str = "",
+        client: GitHubClient | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         """
         Args:
             categories: Categories offered for filing the new project.
+            initial_url: Address to start from, used when the repository was just
+                created on GitHub and its address is already known.
+            client: GitHub client, so the account's own repositories can be
+                picked from a list instead of typed. None hides that button.
             parent: Parent widget.
         """
 
@@ -114,10 +127,24 @@ class CloneDialog(QDialog):
         form = QFormLayout()
         form.setSpacing(8)
 
-        self._url = QLineEdit(self)
+        self._client = client
+        self._runner = ApiRunner(self) if client is not None and client.has_token else None
+
+        url_row = QWidget(self)
+        url_layout = QHBoxLayout(url_row)
+        url_layout.setContentsMargins(0, 0, 0, 0)
+        url_layout.setSpacing(6)
+        self._url = QLineEdit(url_row)
         self._url.setPlaceholderText(i18n.t("clone.url_placeholder"))
         self._url.textChanged.connect(self._on_url_changed)
-        form.addRow(i18n.t("clone.url_label"), self._url)
+        if initial_url:
+            self._url.setText(initial_url)
+        url_layout.addWidget(self._url, 1)
+        self._pick_remote = QPushButton(i18n.t("clone.from_github"), url_row)
+        self._pick_remote.clicked.connect(self._on_pick_remote)
+        self._pick_remote.setVisible(self._runner is not None)
+        url_layout.addWidget(self._pick_remote)
+        form.addRow(i18n.t("clone.url_label"), url_row)
 
         parent_row = QWidget(self)
         parent_layout = QHBoxLayout(parent_row)
@@ -197,6 +224,42 @@ class CloneDialog(QDialog):
         return self._result_category
 
     # --------------------------------------------------------------- validation
+
+    def _on_pick_remote(self) -> None:
+        """
+        Loads the account's repositories and offers them for picking.
+
+        Returns:
+            None
+        """
+
+        if self._runner is None or self._client is None:
+            return
+        self._pick_remote.setEnabled(False)
+        self._runner.submit(lambda: self._client.repositories(), self._show_remote_picker)
+
+    def _show_remote_picker(self, outcome: object) -> None:
+        """
+        Shows the repository picker and takes the chosen address.
+
+        Args:
+            outcome: What the repository list returned.
+
+        Returns:
+            None
+        """
+
+        self._pick_remote.setEnabled(True)
+        if isinstance(outcome, Exception) or not getattr(outcome, "ok", False):
+            detail = getattr(outcome, "detail", "") or str(outcome)
+            self._notice.set_message(i18n.t("clone.repo_list_failed"), detail, "warning")
+            self._notice.setVisible(True)
+            return
+
+        dialog = RepositoryPickerDialog(list(outcome.payload or []), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.chosen:
+            return
+        self._url.setText(dialog.chosen)
 
     def _pick_directory(self) -> None:
         """

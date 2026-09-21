@@ -175,12 +175,12 @@ class MainWindowSmokeTests(unittest.TestCase):
             auto_check_minutes=0, github_enabled=False, check_updates=False, language="en"
         )
         window = MainWindow(settings)
-        outcome, entry = window._registry.add(repo_path)  # noqa: SLF001 - setup shortcut
+        outcome, entry = window._registry.add(repo_path)
         self.assertIsNotNone(entry)
         del outcome
-        window._sidebar.refresh()  # noqa: SLF001
+        window._sidebar.refresh()
         assert entry is not None
-        window._activate(entry)  # noqa: SLF001
+        window._activate(entry)
         return window
 
     def test_clean_repository_shows_nothing_changed(self) -> None:
@@ -190,8 +190,8 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    self.assertEqual("main", window._branch_label.text())  # noqa: SLF001
-                    self.assertEqual([], window._changes.checked_paths())  # noqa: SLF001
+                    self.assertEqual("main", window._branch_label.text())
+                    self.assertEqual([], window._changes.checked_paths())
                 finally:
                     window.close()
 
@@ -204,7 +204,7 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    ticked = window._changes.checked_paths()  # noqa: SLF001
+                    ticked = window._changes.checked_paths()
                     self.assertEqual({"README.md", "extra.txt"}, set(ticked))
                 finally:
                     window.close()
@@ -218,8 +218,8 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._show_file_diff("app.py", False)  # noqa: SLF001
-                    self.assertEqual("app.py", window._diff.current_path())  # noqa: SLF001
+                    window._show_file_diff("app.py", False)
+                    self.assertEqual("app.py", window._diff.current_path())
                 finally:
                     window.close()
 
@@ -231,9 +231,9 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._tabs.setCurrentIndex(1)  # noqa: SLF001
+                    window._tabs.setCurrentIndex(1)
                     self.app.processEvents()
-                    tree = window._graph._tree  # noqa: SLF001
+                    tree = window._graph._tree
                     self.assertEqual(2, tree.topLevelItemCount())
                     self.assertIn("second commit", tree.topLevelItem(0).text(1))
                 finally:
@@ -249,7 +249,7 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._do_commit(CommitDraft(summary="add a note"), ["note.txt"])  # noqa: SLF001
+                    window._do_commit(CommitDraft(summary="add a note"), ["note.txt"])
                     details = commit_details(repo.root, "HEAD")
                     self.assertIsNotNone(details)
                     assert details is not None
@@ -273,11 +273,11 @@ class MainWindowSmokeTests(unittest.TestCase):
                 window = self._window(repo_path, config)
                 try:
                     shutil.rmtree(repo_path)
-                    entry = window._registry.entries[0]  # noqa: SLF001
-                    window._activate(entry)  # noqa: SLF001
+                    entry = window._registry.entries[0]
+                    window._activate(entry)
                     # The window is never shown in tests, so isVisible() is
                     # always False; isVisibleTo asks the question that matters.
-                    self.assertTrue(window._notice.isVisibleTo(window))  # noqa: SLF001
+                    self.assertTrue(window._notice.isVisibleTo(window))
                 finally:
                     window.close()
 
@@ -311,13 +311,13 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._scans._running = True  # noqa: SLF001
-                    window._sidebar.pull_all_requested.emit()  # noqa: SLF001
+                    window._scans._running = True
+                    window._sidebar.pull_all_requested.emit()
                     self.assertEqual(
                         i18n.t("pull_all.busy"), window.statusBar().currentMessage()
                     )
                 finally:
-                    window._scans._running = False  # noqa: SLF001
+                    window._scans._running = False
                     window.close()
 
     def test_a_bulk_pull_without_projects_says_so(self) -> None:
@@ -327,10 +327,10 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    for entry in list(window._registry.entries):  # noqa: SLF001
-                        window._registry.remove(entry)  # noqa: SLF001
-                    window._pull_all()  # noqa: SLF001
-                    self.assertTrue(window._notice.isVisibleTo(window))  # noqa: SLF001
+                    for entry in list(window._registry.entries):
+                        window._registry.remove(entry)
+                    window._pull_all()
+                    self.assertTrue(window._notice.isVisibleTo(window))
                 finally:
                     window.close()
 
@@ -345,11 +345,11 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
-                    window._show_update_banner(info)  # noqa: SLF001
-                    self.assertTrue(window._update_banner.isVisibleTo(window))  # noqa: SLF001
-                    window._on_update_banner_action(ACTION_UPDATE_LATER)  # noqa: SLF001
-                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    self.assertFalse(window._update_banner.isVisibleTo(window))
+                    window._show_update_banner(info)
+                    self.assertTrue(window._update_banner.isVisibleTo(window))
+                    window._on_update_banner_action(ACTION_UPDATE_LATER)
+                    self.assertFalse(window._update_banner.isVisibleTo(window))
                     self.assertFalse(window.wants_restart())
                 finally:
                     window.close()
@@ -363,8 +363,8 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._on_update_checked(UpdateInfo(error_key=ERROR_OFFLINE))  # noqa: SLF001
-                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    window._on_update_checked(UpdateInfo(error_key=ERROR_OFFLINE))
+                    self.assertFalse(window._update_banner.isVisibleTo(window))
                 finally:
                     window.close()
 
@@ -378,15 +378,15 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._on_update_checked(info)  # noqa: SLF001
-                    self.assertEqual("b" * 10, window._settings.update_remote_commit)  # noqa: SLF001
-                    self.assertEqual("Faster graph", window._settings.update_remote_summary)  # noqa: SLF001
+                    window._on_update_checked(info)
+                    self.assertEqual("b" * 10, window._settings.update_remote_commit)
+                    self.assertEqual("Faster graph", window._settings.update_remote_summary)
 
                     # A later check that finds nothing must clear the note again.
-                    window._on_update_checked(  # noqa: SLF001
+                    window._on_update_checked(
                         UpdateInfo(available=False, local="b" * 10, remote="b" * 10)
                     )
-                    self.assertEqual("", window._settings.update_remote_commit)  # noqa: SLF001
+                    self.assertEqual("", window._settings.update_remote_commit)
                 finally:
                     window.close()
 
@@ -403,13 +403,13 @@ class MainWindowSmokeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    window._settings.update_remote_commit = "b" * 10  # noqa: SLF001
-                    window._settings.update_remote_summary = "Faster graph"  # noqa: SLF001
-                    window._show_pending_update()  # noqa: SLF001
-                    self.assertTrue(window._update_banner.isVisibleTo(window))  # noqa: SLF001
+                    window._settings.update_remote_commit = "b" * 10
+                    window._settings.update_remote_summary = "Faster graph"
+                    window._show_pending_update()
+                    self.assertTrue(window._update_banner.isVisibleTo(window))
                     # Re-checking is left to the install click, so the live result
                     # stays empty and cannot be installed from stale data.
-                    self.assertIsNone(window._update_info)  # noqa: SLF001
+                    self.assertIsNone(window._update_info)
                 finally:
                     window.close()
 
@@ -425,11 +425,11 @@ class MainWindowSmokeTests(unittest.TestCase):
                     from services import updater
 
                     head = updater.local_commit()
-                    window._settings.update_remote_commit = head[:10]  # noqa: SLF001
-                    window._settings.update_remote_summary = "Already installed"  # noqa: SLF001
-                    window._show_pending_update()  # noqa: SLF001
-                    self.assertFalse(window._update_banner.isVisibleTo(window))  # noqa: SLF001
-                    self.assertEqual("", window._settings.update_remote_commit)  # noqa: SLF001
+                    window._settings.update_remote_commit = head[:10]
+                    window._settings.update_remote_summary = "Already installed"
+                    window._show_pending_update()
+                    self.assertFalse(window._update_banner.isVisibleTo(window))
+                    self.assertEqual("", window._settings.update_remote_commit)
                 finally:
                     window.close()
 
@@ -447,8 +447,8 @@ class UpdateDialogTests(unittest.TestCase):
         info = UpdateInfo(available=True, local="a" * 10, remote="b" * 10, summary="Faster graph")
         dialog = UpdateDialog(info)
         try:
-            self.assertTrue(dialog._install.isVisibleTo(dialog))  # noqa: SLF001
-            self.assertIn("b" * 10, dialog._detail.text())  # noqa: SLF001
+            self.assertTrue(dialog._install.isVisibleTo(dialog))
+            self.assertIn("b" * 10, dialog._detail.text())
             self.assertFalse(dialog.restart_wanted)
         finally:
             dialog.close()
@@ -460,7 +460,7 @@ class UpdateDialogTests(unittest.TestCase):
         info = UpdateInfo(available=False, local="a" * 10, remote="a" * 10)
         dialog = UpdateDialog(info)
         try:
-            self.assertFalse(dialog._install.isVisibleTo(dialog))  # noqa: SLF001
+            self.assertFalse(dialog._install.isVisibleTo(dialog))
         finally:
             dialog.close()
 
@@ -470,8 +470,8 @@ class UpdateDialogTests(unittest.TestCase):
 
         dialog = UpdateDialog(UpdateInfo(error_key=ERROR_OFFLINE, detail="no route to host"))
         try:
-            self.assertFalse(dialog._install.isVisibleTo(dialog))  # noqa: SLF001
-            self.assertIn("no route", dialog._detail.text())  # noqa: SLF001
+            self.assertFalse(dialog._install.isVisibleTo(dialog))
+            self.assertIn("no route", dialog._detail.text())
         finally:
             dialog.close()
 
@@ -515,8 +515,8 @@ class UpdateDialogTests(unittest.TestCase):
         )
         dialog = UpdateDialog(info)
         try:
-            self.assertTrue(dialog._changes_area.isVisibleTo(dialog))  # noqa: SLF001
-            listed = dialog._changes.text()  # noqa: SLF001
+            self.assertTrue(dialog._changes_area.isVisibleTo(dialog))
+            listed = dialog._changes.text()
             for subject in info.changes:
                 self.assertIn(subject, listed)
             self.assertNotIn("…and", listed, "nothing was left out here")
@@ -536,7 +536,7 @@ class UpdateDialogTests(unittest.TestCase):
         )
         dialog = UpdateDialog(info)
         try:
-            self.assertIn(i18n.t("update.changes_more", count=15), dialog._changes.text())  # noqa: SLF001
+            self.assertIn(i18n.t("update.changes_more", count=15), dialog._changes.text())
         finally:
             dialog.close()
 
@@ -546,8 +546,8 @@ class UpdateDialogTests(unittest.TestCase):
 
         dialog = UpdateDialog(UpdateInfo(available=True, local="a" * 10, remote="b" * 10))
         try:
-            self.assertFalse(dialog._changes_area.isVisibleTo(dialog))  # noqa: SLF001
-            self.assertFalse(dialog._changes_title.isVisibleTo(dialog))  # noqa: SLF001
+            self.assertFalse(dialog._changes_area.isVisibleTo(dialog))
+            self.assertFalse(dialog._changes_title.isVisibleTo(dialog))
         finally:
             dialog.close()
 
@@ -589,7 +589,7 @@ class PullAllWordingTests(unittest.TestCase):
 
         dialog = PullAllDialog([])
         try:
-            self.assertFalse(dialog._start.isEnabled())  # noqa: SLF001
+            self.assertFalse(dialog._start.isEnabled())
             self.assertEqual([], dialog.results)
         finally:
             dialog.close()
@@ -621,9 +621,9 @@ class PullAllRunTests(unittest.TestCase):
         import time
 
         deadline = time.monotonic() + timeout
-        while dialog._running and time.monotonic() < deadline:  # noqa: SLF001
+        while dialog._running and time.monotonic() < deadline:
             self.app.processEvents()
-        self.assertFalse(dialog._running, "the batch never finished")  # noqa: SLF001
+        self.assertFalse(dialog._running, "the batch never finished")
 
     def test_one_project_is_pulled_and_another_is_skipped(self) -> None:
         from services.puller import RESULT_PULLED, RESULT_SKIPPED, SKIP_NO_REMOTE, PullJob
@@ -639,7 +639,7 @@ class PullAllRunTests(unittest.TestCase):
                 ]
                 dialog = PullAllDialog(jobs)
                 try:
-                    dialog._begin()  # noqa: SLF001
+                    dialog._begin()
                     self._drain(dialog)
 
                     by_key = {item.key: item for item in dialog.results}
@@ -650,9 +650,9 @@ class PullAllRunTests(unittest.TestCase):
                     self.assertEqual(SKIP_NO_REMOTE, by_key["lonely"].reason_key)
 
                     # The report is on screen, and the window can be left again.
-                    self.assertEqual(2, dialog._list.count())  # noqa: SLF001
-                    self.assertTrue(dialog._close.isEnabled())  # noqa: SLF001
-                    self.assertFalse(dialog._start.isVisibleTo(dialog))  # noqa: SLF001
+                    self.assertEqual(2, dialog._list.count())
+                    self.assertTrue(dialog._close.isEnabled())
+                    self.assertFalse(dialog._start.isVisibleTo(dialog))
                     self.assertEqual(first.head(), second.head())
                 finally:
                     dialog.close()
@@ -671,15 +671,15 @@ class PullAllRunTests(unittest.TestCase):
             left: list[bool] = []
             dialog.rejected.connect(lambda: left.append(True))
             try:
-                dialog._running = True  # noqa: SLF001
+                dialog._running = True
                 dialog.reject()
                 self.assertEqual([], left, "the dialog left while a batch was running")
 
-                dialog._running = False  # noqa: SLF001
+                dialog._running = False
                 dialog.reject()
                 self.assertEqual([True], left, "and closes normally once it is done")
             finally:
-                dialog._running = False  # noqa: SLF001
+                dialog._running = False
                 dialog.close()
 
 
@@ -722,10 +722,10 @@ class ConflictAssistantTests(unittest.TestCase):
             files = conflict_mod.load_all(repo.root)
             dialog = ConflictDialog(Path(repo.root), files, None)
             try:
-                dialog._show_current_decision()  # noqa: SLF001
-                self.assertIn("1", dialog._progress_label.text())  # noqa: SLF001
-                ours = dialog._ours_view.toPlainText()  # noqa: SLF001
-                theirs = dialog._theirs_view.toPlainText()  # noqa: SLF001
+                dialog._show_current_decision()
+                self.assertIn("1", dialog._progress_label.text())
+                ours = dialog._ours_view.toPlainText()
+                theirs = dialog._theirs_view.toPlainText()
                 self.assertIn("8080", ours)
                 self.assertIn("3000", theirs)
                 for view_text in (ours, theirs):
@@ -747,9 +747,9 @@ class ConflictAssistantTests(unittest.TestCase):
             files = conflict_mod.load_all(repo.root)
             dialog = ConflictDialog(Path(repo.root), files, None)
             try:
-                dialog._show_current_decision()  # noqa: SLF001
-                dialog._choose(conflict_mod.CHOICE_OURS)  # noqa: SLF001
-                dialog._write_and_finish()  # noqa: SLF001
+                dialog._show_current_decision()
+                dialog._choose(conflict_mod.CHOICE_OURS)
+                dialog._write_and_finish()
             finally:
                 dialog.deleteLater()
 
@@ -771,11 +771,11 @@ class ConflictAssistantTests(unittest.TestCase):
             files = conflict_mod.load_all(repo.root)
             dialog = ConflictDialog(Path(repo.root), files, None)
             try:
-                dialog._show_current_decision()  # noqa: SLF001
-                self.assertEqual("", dialog._result_view.toPlainText())  # noqa: SLF001
-                dialog._decisions[0].set_choice(conflict_mod.CHOICE_BOTH)  # noqa: SLF001
-                dialog._show_current_decision()  # noqa: SLF001
-                result = dialog._result_view.toPlainText()  # noqa: SLF001
+                dialog._show_current_decision()
+                self.assertEqual("", dialog._result_view.toPlainText())
+                dialog._decisions[0].set_choice(conflict_mod.CHOICE_BOTH)
+                dialog._show_current_decision()
+                result = dialog._result_view.toPlainText()
                 self.assertIn("8080", result)
                 self.assertIn("3000", result)
             finally:
@@ -789,7 +789,7 @@ class ConflictAssistantTests(unittest.TestCase):
         with temp_repo() as repo:
             dialog = ConflictDialog(Path(repo.root), [], None)
             try:
-                self.assertEqual(2, dialog._stack.currentIndex())  # noqa: SLF001
+                self.assertEqual(2, dialog._stack.currentIndex())
             finally:
                 dialog.deleteLater()
 

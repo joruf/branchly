@@ -56,6 +56,14 @@ jobs:
           git config --global user.name "Branchly CI"
           git config --global init.defaultBranch main
 
+      - name: Install development tools
+        run: |
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: |
+          ruff check .
+
       - name: Run the safety-critical tests first
         env:
           QT_QPA_PLATFORM: offscreen

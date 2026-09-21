@@ -203,15 +203,145 @@ Weg. Speichere oder verwirf vorher.
 Lehnt der Server einen Push ab, heißt das fast immer: jemand anderes war
 schneller. Erst holen, dann senden.
 
-## Pull Requests und Issues
+## GitHub
 
-Nur für Projekte auf GitHub und nur mit hinterlegtem Zugriffstoken
-(Einstellungen → GitHub). Ohne Token oder bei GitLab und selbst gehosteten
-Servern sagt das Panel das ausdrücklich; alles andere funktioniert normal weiter.
+Der Reiter *GitHub* zeigt alles, was das ausgewählte Projekt auf dem Server hat,
+und lässt es auch bearbeiten. Nur für Projekte auf GitHub und nur mit hinterlegtem
+Zugriffstoken (Einstellungen → GitHub). Ohne Token oder bei GitLab und selbst
+gehosteten Servern sagt das Panel das ausdrücklich, alles andere funktioniert
+normal weiter.
+
+### Das Token
 
 Ein Token legst du auf github.com unter *Settings → Developer settings →
 Personal access tokens* an. Es landet im Schlüsselspeicher des Systems, nie in
 einer Datei. Branchly prüft es sofort und zeigt, als wer du angemeldet bist.
+
+Welche Berechtigungen es braucht, hängt davon ab, was du tun willst:
+
+| Berechtigung | Wofür |
+| --- | --- |
+| `repo` | alles Lesen, Issues, Pull Requests, Releases, Einstellungen |
+| `workflow` | Actions-Läufe neu starten, abbrechen, löschen |
+| `delete_repo` | ein Repository löschen |
+| `read:org` | Repositories in einer Organisation anlegen |
+
+Fehlt eine Berechtigung, lehnt GitHub die Aktion ab und Branchly sagt, dass
+vermutlich dem Token etwas fehlt. Ein fein granulares Token (*fine-grained*)
+meldet seine Rechte nicht, dort lässt sich das vorher nicht prüfen.
+
+### Pull Requests
+
+Der Filter oben schaltet zwischen offenen, geschlossenen und allen. Die Auswahl
+lädt darunter Beschreibung, Labels, Zuweisungen, Prüfungen und Kommentare.
+
+Möglich sind: anlegen, Titel, Text und Zielbranch ändern, kommentieren, prüfen
+(zustimmen, Änderungen anfordern, nur kommentieren), eine Prüfung bei jemandem
+anfordern, zusammenführen, schließen, wieder öffnen, einen Entwurf freigeben oder
+wieder zum Entwurf machen, und den Branch auschecken.
+
+Die Detailansicht listet außerdem die geänderten Dateien mit ihren Zeilenzahlen
+und die Commits des Pull Requests.
+
+Beim Zusammenführen wählst du die Methode und kannst den Quellbranch gleich
+danach löschen lassen. Angeboten werden nur die Methoden, die das Repository
+erlaubt; eine abgeschaltete steht grau da und der Tooltip sagt, warum. Löscht das
+Repository gemergte Branches ohnehin selbst, ist das Häkchen schon gesetzt. Branchly schickt dabei den Commit mit, den es zu
+verschmelzen glaubt. Hat jemand in der Zwischenzeit gepusht, lehnt GitHub den
+Merge ab, statt etwas anderes zusammenzuführen als das, was du gesehen hast.
+
+Ein Entwurf lässt sich nicht zusammenführen. Der Knopf ist dann abgeschaltet und
+der Tooltip sagt, warum.
+
+### Issues
+
+Wie bei den Pull Requests filtert der Knopf oben nach Zustand. Anlegen, Titel und
+Text ändern, Labels, Zuweisungen und Meilenstein setzen, kommentieren, schließen
+und wieder öffnen.
+
+Beim Schließen unterscheidet Branchly die beiden Gründe, die GitHub kennt:
+*erledigt* und *nicht geplant*. Der zweite steht im Menü „Mehr".
+
+Unter „Mehr → Labels und Meilensteine…" lassen sich beide anlegen, umbenennen
+und löschen. Ein gelöschtes Label verschwindet aus jedem Issue, das es trägt; ein
+gelöschter Meilenstein lässt die Issues stehen und nimmt ihnen nur die Zuordnung.
+Für einen abgeschlossenen Meilenstein ist *Schließen* meist das Richtige, denn
+dann bleibt er in der Historie stehen.
+
+### Releases
+
+Anlegen mit Tag, Titel und Versionshinweisen, wahlweise als Entwurf oder als
+Vorabversion, und auf Wunsch schreibt GitHub die Änderungsliste selbst. Bestehende
+Releases lassen sich ändern und löschen, Dateien anhängen und wieder entfernen.
+
+Ein gelöschtes Release nimmt sein Tag nicht mit. Das ist Absicht: ein Tag, das
+jemand schon geholt hat, kommt durch Neuanlegen nicht zurück. Das Tag selbst
+entfernst du über „Mehr → Tag löschen…".
+
+„Mehr → Änderungsliste von GitHub holen…" lässt GitHub die Liste der Änderungen
+seit dem vorherigen Tag schreiben und öffnet damit den Bearbeiten-Dialog, sodass
+du sie noch anpassen kannst, bevor sie gespeichert wird.
+
+### Actions
+
+Die Läufe der Workflows, neuester zuerst, wahlweise nur für den aktuellen Branch.
+Die Auswahl zeigt die einzelnen Jobs mit ihrem Ergebnis. Ein fertiger Lauf lässt
+sich neu starten, wahlweise nur mit den fehlgeschlagenen Jobs, ein laufender
+abbrechen, ein alter aus der Liste löschen.
+
+Über „Mehr → Workflow starten…" lässt sich ein Workflow von Hand anstoßen. Das
+geht nur bei Workflows, die `workflow_dispatch` deklarieren; bei allen anderen
+lehnt GitHub es mit einer Begründung ab, die Branchly weiterreicht.
+
+Die vollständigen Logs bleiben im Browser. Branchly zeigt pro Job das Ergebnis,
+ein Log-Betrachter hätte ein ZIP-Archiv auspacken müssen und wäre ein eigenes
+Fenster geworden.
+
+### Repository-Einstellungen
+
+Der Knopf *Repository-Einstellungen…* oben rechts öffnet Beschreibung, Website,
+Themen, Standard-Branch, Sichtbarkeit, die Schalter für Issues, Wiki,
+Projekt-Boards und Diskussionen, die erlaubten Merge-Methoden sowie das
+Archivieren. Gesendet wird nur, was du wirklich geändert hast.
+
+Im selben Dialog stehen die Personen mit Zugriff. Jemanden einladen geht mit
+Kontoname und Zugriffsstufe (Lesen, Triage, Schreiben, Verwalten,
+Administrieren), Zugriff entziehen mit Auswahl und Knopf. Eine Einladung wirkt
+erst, wenn die eingeladene Person sie annimmt, deshalb taucht sie nicht sofort in
+der Liste auf.
+
+Branch-Schutzregeln sind bewusst nicht dabei: GitHub hat dafür inzwischen zwei
+parallele Systeme (klassische Protection und Rulesets), und ein Dialog, der nur
+eines davon kennt, richtet mehr Schaden an als er nützt.
+
+Im selben Dialog liegt *Repository löschen…*. Das ist die einzige Aktion in
+Branchly, die sich nicht rückgängig machen lässt, deshalb genügt dort kein Ja/Nein:
+der vollständige Name muss eingetippt werden, genau wie auf github.com. Danach
+fragt Branchly, ob auch die lokale Kopie aus der Projektliste verschwinden soll.
+Der Ordner auf der Festplatte bleibt in jedem Fall liegen.
+
+Darf das Konto die Einstellungen nicht ändern, öffnet sich der Dialog trotzdem,
+zeigt aber alles gesperrt und sagt den Grund. Ein leerer Dialog oder ein Fehler
+nach dem Speichern wäre die schlechtere Antwort.
+
+### Neues Repository auf GitHub
+
+*Projekt → Neues Repository auf GitHub…* legt eines an: Name, Beschreibung,
+persönliches Konto oder Organisation, privat oder öffentlich, `.gitignore`-Vorlage
+und Lizenz. Voreingestellt ist **privat**, denn ein versehentlich öffentliches
+Repository lässt sich nicht ungesehen machen, der umgekehrte Fehler kostet einen
+Klick.
+
+Ist „Direkt nach dem Anlegen klonen" angehakt, öffnet sich danach der gewohnte
+Klon-Dialog mit bereits eingetragener Adresse.
+
+### Ein vorhandenes Repository von GitHub klonen
+
+Im Klon-Dialog steht neben dem Adressfeld *Von GitHub…*. Der Knopf lädt alle
+Repositories, die dein Token sehen kann, mit Suche über Name und Beschreibung,
+und trägt die Klon-Adresse des gewählten ein. Das ist die einzige Stelle, an der
+das ganze Konto aufgelistet wird, und sie ist dort, weil „welches meiner
+Repositories" genau beim Klonen die eigentliche Frage ist.
 
 ## Branchly aktuell halten
 

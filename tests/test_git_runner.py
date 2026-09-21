@@ -137,11 +137,19 @@ class GitResultTests(unittest.TestCase):
         self.assertEqual(ERROR_NOT_A_REPO, result.error_key())
 
     def test_recognises_index_lock(self) -> None:
-        result = GitResult(returncode=128, stdout="", stderr="fatal: Unable to create '.git/index.lock': File exists")
+        result = GitResult(
+            returncode=128,
+            stdout="",
+            stderr="fatal: Unable to create '.git/index.lock': File exists",
+        )
         self.assertEqual(ERROR_LOCKED, result.error_key())
 
     def test_recognises_offline(self) -> None:
-        result = GitResult(returncode=128, stdout="", stderr="fatal: unable to access: Could not resolve host: github.com")
+        result = GitResult(
+            returncode=128,
+            stdout="",
+            stderr="fatal: unable to access: Could not resolve host: github.com",
+        )
         self.assertEqual(ERROR_OFFLINE, result.error_key())
 
     def test_message_prefers_stderr(self) -> None:

@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -27,7 +28,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import i18n  # noqa: E402
 from config.app_settings import AppSettings  # noqa: E402
-from config.theme import THEME_DARK, THEME_LIGHT, build_application_stylesheet, set_current_theme  # noqa: E402
+from config.theme import (  # noqa: E402
+    THEME_DARK,
+    THEME_LIGHT,
+    build_application_stylesheet,
+    set_current_theme,
+)
 
 OUTPUT_DIR = _ROOT / "docs" / "screenshots"
 WINDOW_SIZE = (1400, 880)
@@ -149,19 +155,19 @@ def capture(theme: str, repositories: list[Path], config_dir: Path) -> Path:
     window = MainWindow(settings)
     window.resize(*WINDOW_SIZE)
 
-    registry = window._registry  # noqa: SLF001 - the demo needs a populated registry
+    registry = window._registry
     registry.add_category("Arbeit")
     registry.add_category("Privat")
     for index, path in enumerate(repositories):
         _outcome, entry = registry.add(path, "Arbeit" if index == 0 else "Privat")
         if entry is not None and index == 0:
             entry.favorite = True
-    window._sidebar.refresh()  # noqa: SLF001
+    window._sidebar.refresh()
 
     first = registry.entries[0]
-    window._sidebar.select_key(first.key)  # noqa: SLF001
-    window._activate(first)  # noqa: SLF001
-    window._changes._list.setCurrentRow(0)  # noqa: SLF001
+    window._sidebar.select_key(first.key)
+    window._activate(first)
+    window._changes._list.setCurrentRow(0)
     window.show()
     app.processEvents()
 
@@ -170,12 +176,164 @@ def capture(theme: str, repositories: list[Path], config_dir: Path) -> Path:
     window.grab().save(str(target))
 
     # The graph tab, which is the other view worth showing.
-    window._tabs.setCurrentIndex(1)  # noqa: SLF001
+    window._tabs.setCurrentIndex(1)
     app.processEvents()
     graph_target = OUTPUT_DIR / f"graph-{theme}.png"
     window.grab().save(str(graph_target))
 
     window.close()
+    return target
+
+
+DEMO_OWNER = "joruf"
+DEMO_REPO = "branchly"
+
+
+def _demo_github_routes(server: object) -> None:
+    """
+    Fills the stand-in server with something worth photographing.
+
+    Args:
+        server: The ``FakeGitHub`` instance to register routes on.
+
+    Returns:
+        None
+    """
+
+    def person(login: str) -> dict:
+        return {"login": login, "avatar_url": ""}
+
+    base = f"/repos/{DEMO_OWNER}/{DEMO_REPO}"
+    server.json("GET", base, {
+        "name": DEMO_REPO,
+        "full_name": f"{DEMO_OWNER}/{DEMO_REPO}",
+        "owner": person(DEMO_OWNER),
+        "default_branch": "main",
+        "private": False,
+        "permissions": {"push": True, "admin": True},
+    })
+    server.json("GET", f"{base}/branches", [
+        {"name": "main", "commit": {"sha": "a" * 40}},
+        {"name": "konflikt-assistent", "commit": {"sha": "b" * 40}},
+    ])
+    server.json("GET", f"{base}/pulls", [
+        {
+            "number": 42, "title": "Konflikte einzeln entscheiden statt Marker zeigen",
+            "state": "open", "draft": False, "user": person("joruf"),
+            "head": {"ref": "konflikt-assistent", "sha": "b" * 40}, "base": {"ref": "main"},
+            "labels": [{"name": "feature"}], "assignees": [person("joruf")],
+            "updated_at": "2026-09-18T09:20:00Z",
+            "body": "Drei Spalten, vier Knöpfe, keine `<<<<<<<` mehr.\n\n"
+                    "Nichts wird geschrieben, bevor jede Entscheidung gefallen ist.",
+        },
+        {
+            "number": 41, "title": "Alle Projekte in einem Rutsch holen",
+            "state": "open", "draft": True, "user": person("joruf"),
+            "head": {"ref": "pull-all", "sha": "c" * 40}, "base": {"ref": "main"},
+            "updated_at": "2026-09-17T16:05:00Z",
+        },
+    ])
+    server.json("GET", f"{base}/pulls/42", {
+        "number": 42, "title": "Konflikte einzeln entscheiden statt Marker zeigen",
+        "state": "open", "draft": False, "user": person("joruf"),
+        "head": {"ref": "konflikt-assistent", "sha": "b" * 40}, "base": {"ref": "main"},
+        "labels": [{"name": "feature"}], "assignees": [person("joruf")],
+        "mergeable": True, "mergeable_state": "clean", "updated_at": "2026-09-18T09:20:00Z",
+        "body": "Drei Spalten, vier Knöpfe, keine `<<<<<<<` mehr.\n\n"
+                "Nichts wird geschrieben, bevor jede Entscheidung gefallen ist.",
+    })
+    server.json("GET", f"{base}/issues/42/comments", [
+        {"id": 1, "user": person("joruf"), "created_at": "2026-09-18T10:02:00Z",
+         "body": "Getestet gegen ein Repo mit drei Konflikten in einer Datei."},
+    ])
+    server.json("GET", f"{base}/pulls/42/reviews", [])
+    server.json("GET", f"{base}/pulls/42/commits", [
+        {"sha": "b" * 40, "commit": {"message": "Konfliktregionen aus den Index-Stufen lesen"}},
+    ])
+    server.json("GET", f"{base}/pulls/42/files", [
+        {"filename": "gitops/conflict.py", "status": "added", "additions": 412, "deletions": 0},
+        {"filename": "ui/conflict_dialog.py", "status": "added", "additions": 638, "deletions": 0},
+    ])
+    server.json("GET", f"{base}/commits/konflikt-assistent/status", {"total_count": 1, "state": "success"})
+    server.json("GET", f"{base}/commits/konflikt-assistent/check-runs", {"check_runs": []})
+    for path in ("/issues", "/labels", "/assignees", "/milestones", "/releases", "/tags"):
+        server.json("GET", base + path, [])
+    server.json("GET", f"{base}/actions/runs", {"workflow_runs": []})
+
+
+def capture_github(theme: str, config_dir: Path) -> Path:
+    """
+    Photographs the GitHub panel against a stand-in server.
+
+    The data has to come from somewhere, and pointing the real client at a fake
+    server is the honest way: the panel goes through the same code it does in
+    the application, rather than being filled by hand for the picture. The
+    server is the one the tests use, which is why a script imports from
+    ``tests``.
+
+    Args:
+        theme: Theme to render.
+        config_dir: Directory used for settings and registry files.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from github_api.client import GitHubClient
+    from tests.support_github import FakeGitHub
+    from ui.github_lists import GitHubContext
+    from ui.github_panel import GitHubPanel
+
+    os.environ["XDG_CONFIG_HOME"] = str(config_dir / f"{theme}-github")
+    i18n.set_language("de")
+    set_current_theme(theme)
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    server = FakeGitHub()
+    try:
+        _demo_github_routes(server)
+        client = GitHubClient("ghp_" + "x" * 36, api_root=server.root)
+        panel = GitHubPanel(client, show_avatars=False)
+        panel.resize(1100, 760)
+        panel.set_context(
+            GitHubContext(
+                owner=DEMO_OWNER,
+                repo=DEMO_REPO,
+                viewer_login=DEMO_OWNER,
+                local_branch="konflikt-assistent",
+                default_branch="main",
+            )
+        )
+        panel.show()
+        # The panel loads on a worker thread, so the event loop has to run until
+        # the list and the detail are actually there.
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            app.processEvents()
+            if not panel._runner.busy and panel._pulls._list.count() > 1:
+                break
+            time.sleep(0.02)
+        panel._pulls._list.setCurrentRow(0)
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            app.processEvents()
+            if not panel._runner.busy:
+                break
+            time.sleep(0.02)
+        app.processEvents()
+
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        target = OUTPUT_DIR / f"github-panel-{theme}.png"
+        panel.grab().save(str(target))
+        panel.stop()
+        panel.close()
+        client.close()
+    finally:
+        server.stop()
     return target
 
 
@@ -235,7 +393,7 @@ def capture_conflict(theme: str, base: Path) -> Path:
 
     dialog = ConflictDialog(repo, conflict_mod.load_all(repo), None)
     dialog.resize(980, 560)
-    dialog._show_current_decision()  # noqa: SLF001
+    dialog._show_current_decision()
     dialog.show()
     app.processEvents()
 
@@ -265,6 +423,7 @@ def main() -> int:
         config_dir.mkdir()
         for theme in (THEME_DARK, THEME_LIGHT):
             print(f"wrote {capture(theme, repositories, config_dir)}")
+            print(f"wrote {capture_github(theme, config_dir)}")
             print(f"wrote {capture_conflict(theme, base)}")
     return 0
 

@@ -212,9 +212,10 @@ def _report_missing_git() -> int:
         from PySide6.QtWidgets import QApplication, QMessageBox
 
         app = QApplication.instance() or QApplication(sys.argv)
-        assert isinstance(app, QApplication)
+        # QApplication.instance() is typed as QCoreApplication.
+        assert isinstance(app, QApplication)  # noqa: S101
         QMessageBox.critical(None, APP_NAME, message)
-    except Exception:
+    except Exception:  # noqa: BLE001 - reporting a failure must never fail itself
         print(message, file=sys.stderr)
     return 2
 

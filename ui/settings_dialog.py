@@ -39,7 +39,12 @@ from config.app_settings import (
 )
 from config.theme import THEME_DARK, THEME_LIGHT, available_themes
 from github_api import token as token_store
-from github_api.client import GitHubClient
+from github_api.client import (
+    SCOPE_DELETE_REPO,
+    SCOPE_REPO,
+    SCOPE_WORKFLOW,
+    GitHubClient,
+)
 from models.sort import SORT_MODE_LABEL_KEYS, VALID_SORT_MODES
 from ui.widgets import InlineMessage
 
@@ -53,11 +58,15 @@ class _TokenCheckWorker(QObject):
     """
     Asks GitHub who a token belongs to, off the UI thread.
 
+    It also reports what the token may not do and how much of the hourly budget
+    is left. Both are questions the user otherwise only gets answered by an
+    action failing halfway through.
+
     Attributes:
-        finished: Emitted with ``(login, scopes, error_key)``.
+        finished: Emitted with ``(login, scopes, missing, budget, error_key)``.
     """
 
-    finished = Signal(str, str, str)
+    finished = Signal(str, str, str, str, str)
 
     def __init__(self, token: str) -> None:
         """
@@ -79,12 +88,26 @@ class _TokenCheckWorker(QObject):
         client = GitHubClient(self._token)
         try:
             viewer, error = client.viewer()
+            if viewer is None:
+                self.finished.emit("", "", "", "", error or "settings.github_token_invalid")
+                return
+            missing = client.missing_scopes_for(
+                SCOPE_REPO, SCOPE_WORKFLOW, SCOPE_DELETE_REPO, "read:org"
+            )
+            budget = ""
+            limits = client.rate_limit_state()
+            if limits.ok:
+                core = limits.data.get("resources", {})
+                core = core.get("core", {}) if isinstance(core, dict) else {}
+                if isinstance(core, dict) and isinstance(core.get("limit"), int):
+                    budget = i18n.t(
+                        "settings.github_budget",
+                        remaining=core.get("remaining", 0),
+                        limit=core.get("limit", 0),
+                    )
         finally:
             client.close()
-        if viewer is None:
-            self.finished.emit("", "", error or "settings.github_token_invalid")
-            return
-        self.finished.emit(viewer.login, viewer.scope_summary, "")
+        self.finished.emit(viewer.login, viewer.scope_summary, ", ".join(missing), budget, "")
 
 
 class SettingsDialog(QDialog):
@@ -431,13 +454,17 @@ class SettingsDialog(QDialog):
         self._thread = thread
         thread.start()
 
-    def _on_token_checked(self, login: str, scopes: str, error_key: str) -> None:
+    def _on_token_checked(
+        self, login: str, scopes: str, missing: str, budget: str, error_key: str
+    ) -> None:
         """
         Shows the outcome of a token check.
 
         Args:
             login: Account the token belongs to.
             scopes: Readable scope list.
+            missing: Scopes the token does not carry, comma separated.
+            budget: How much of the hourly request budget is left.
             error_key: Translation key when the check failed.
 
         Returns:
@@ -453,8 +480,19 @@ class SettingsDialog(QDialog):
         if error_key:
             self._token_notice.set_message(i18n.t(error_key), "", "danger")
             return
+
+        detail = " ".join(
+            part
+            for part in (
+                i18n.t("settings.github_missing_scopes", scopes=missing) if missing else "",
+                budget,
+            )
+            if part
+        )
         self._token_notice.set_message(
-            i18n.t("settings.github_token_valid", login=login, scopes=scopes), "", "success"
+            i18n.t("settings.github_token_valid", login=login, scopes=scopes),
+            detail,
+            "warning" if missing else "success",
         )
 
     # ------------------------------------------------------------------ results

@@ -117,7 +117,7 @@ class PullResult:
         return self.state in (RESULT_SKIPPED, RESULT_FAILED)
 
 
-def build_jobs(entries: list) -> list[PullJob]:  # noqa: ANN001 - list[RepoEntry]
+def build_jobs(entries: list) -> list[PullJob]:
     """
     Turns registry entries into pull jobs.
 

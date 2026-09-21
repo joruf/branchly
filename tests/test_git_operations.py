@@ -14,7 +14,7 @@ from gitops import conflict as conflict_mod
 from gitops import history as history_mod
 from gitops import remote as remote_mod
 from gitops.status import read_state
-from tests.support import requires_git, temp_repo, temp_repo_pair
+from tests.support import TempRepo, requires_git, temp_repo, temp_repo_pair
 
 
 @requires_git
@@ -142,7 +142,7 @@ class RemoteTests(unittest.TestCase):
             self.assertEqual("", state.error_key)
 
     def test_clone_pair_shares_an_origin(self) -> None:
-        with temp_repo_pair() as (first, second, _origin):
+        with temp_repo_pair() as (first, _second, _origin):
             self.assertIn("origin", remote_mod.remotes(first.root))
             self.assertTrue(remote_mod.remote_fetch_url(first.root).endswith("origin.git"))
             self.assertEqual("origin/main", remote_mod.upstream_of(first.root))
@@ -388,7 +388,7 @@ class Diff3ParsingTests(unittest.TestCase):
 
 @requires_git
 class RealConflictTests(unittest.TestCase):
-    def _conflicting_repo(self, repo) -> None:
+    def _conflicting_repo(self, repo: TempRepo) -> None:
         """
         Creates a text conflict on the ``main`` branch.
 
@@ -576,8 +576,14 @@ class ClonePrepareTests(unittest.TestCase):
             self.assertIsNone(clone_mod.prepare("https://github.com/u/p.git", tmp, ".."))
 
     def test_progress_percentages_are_parsed(self) -> None:
-        self.assertEqual(("Receiving objects", 47), clone_mod.parse_progress("Receiving objects:  47% (94/200)"))
-        self.assertEqual(("Resolving deltas", 100), clone_mod.parse_progress("Resolving deltas: 100% (12/12), done."))
+        self.assertEqual(
+            ("Receiving objects", 47),
+            clone_mod.parse_progress("Receiving objects:  47% (94/200)"),
+        )
+        self.assertEqual(
+            ("Resolving deltas", 100),
+            clone_mod.parse_progress("Resolving deltas: 100% (12/12), done."),
+        )
 
     def test_lines_without_a_percentage_are_ignored(self) -> None:
         self.assertIsNone(clone_mod.parse_progress("Cloning into 'project'..."))
@@ -587,7 +593,7 @@ class ClonePrepareTests(unittest.TestCase):
 @requires_git
 class RealCloneTests(unittest.TestCase):
     def test_clone_from_a_local_origin(self) -> None:
-        with temp_repo_pair() as (first, _second, origin):
+        with temp_repo_pair() as (_first, _second, origin):
             with tempfile.TemporaryDirectory() as tmp:
                 request = clone_mod.prepare(str(origin), tmp, "fresh")
                 assert request is not None

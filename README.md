@@ -53,10 +53,32 @@ words and four buttons. No `<<<<<<<` markers, no "ours" and "theirs", no SHAs.
 Nothing is written until every decision is made, and backing out restores exactly
 the state from before.
 
-**GitHub, when it applies**
-- Pull requests with build status, check out a PR branch in one click
-- Issues, author avatars, CI traffic lights in the graph
-- Non-GitHub remotes say so plainly instead of showing empty panels
+**GitHub, read and write**
+- Pull requests: open them, edit them, comment, review (approve, request changes,
+  comment), merge with the method of your choice, close, reopen, release a draft.
+  A merge sends the commit it believes it is merging, so a push in the meantime
+  cancels it instead of merging something you never saw
+- Issues: the full list in every state, create, edit, labels, assignees,
+  milestones, comments, close as done or as not planned, reopen
+- Releases: publish, edit, delete, attach and remove files, and let GitHub write
+  the changelog. Deleting a release leaves its tag alone, because a tag someone
+  already fetched does not come back by being recreated
+- Actions: see the runs and their jobs, start one again, repeat only the failed
+  jobs, cancel one that is going, remove an old one
+- Repository settings: description, website, topics, default branch, visibility,
+  the switches for issues, wiki and boards, archiving. Only what you changed is
+  sent
+- Create a repository on GitHub and clone it in the same step. Private by default:
+  a repository made public by mistake cannot be made unseen
+- Delete a repository, behind the only confirmation in this program that asks you
+  to type the name, because it is the only action that cannot be undone
+- Build status as traffic lights, author avatars, and non-GitHub remotes say so
+  plainly instead of showing empty panels
+- Labels, milestones and collaborators are managed here too, and a review can
+  be requested from anyone who can be assigned
+- An action the token may not perform is disabled with the reason, not hidden
+
+![GitHub panel](docs/screenshots/github-panel-dark.png)
 
 **Two languages, two themes**
 - German and English; a new language is one JSON file in `locales/`
@@ -109,8 +131,11 @@ where most of its safety comes from. On top of that:
 
 - **No credentials are stored.** Git operations use your existing Git credential
   helper (libsecret on Linux, Credential Manager on Windows). The GitHub API
-  token — the one thing Branchly does keep — goes into the system keychain, never
+  token, the one thing Branchly does keep, goes into the system keychain, never
   into a config file. Without a keychain, the GitHub features stay off.
+- **Writing to GitHub is never implicit.** Nothing is created, changed or deleted
+  without a click that says so, and every list is read-only until the token says
+  the account may write. Deleting a repository asks for its full name, typed out.
 - **No shell, ever.** Every Git call is an argument list with `shell=False`, so a
   branch named `feature/x; rm -rf ~` is just a branch name.
 - **Remote URLs are validated before Git sees them.** Carriage returns and
@@ -140,9 +165,16 @@ where most of its safety comes from. On top of that:
 ## Development
 
 ```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/ruff check .
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -v
 QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/generate_screenshots.py
 ```
+
+The lint rules live in `ruff.toml` and are picked to match what the code already
+does rather than to impose a new style. ruff is a development tool and is
+deliberately not in `requirements.txt`: installing Branchly must not pull in a
+linter.
 
 The suite builds throwaway repositories with their own Git config, so it behaves
 the same on a developer machine and on a bare CI runner.

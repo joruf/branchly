@@ -8,12 +8,14 @@ entry in ``config.theme`` rather than a hunt through the UI.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
+    QLayoutItem,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -518,3 +520,179 @@ def theme_colors() -> ThemeColors:
     """
 
     return get_theme_colors()
+
+
+class FlowLayout(QLayout):
+    """
+    A horizontal layout that wraps onto the next line instead of overflowing.
+
+    Qt ships nothing like this, and a plain ``QHBoxLayout`` of eight buttons in a
+    panel the user can make narrow does not shrink gracefully: it clips the last
+    buttons off the right edge, where they are neither visible nor reachable.
+    This lays the items out left to right and starts a new row when the next one
+    would not fit.
+    """
+
+    def __init__(self, parent: QWidget | None = None, spacing: int = 6) -> None:
+        """
+        Args:
+            parent: Parent widget.
+            spacing: Gap between items, horizontally and vertically.
+        """
+
+        super().__init__(parent)
+        self._items: list[QLayoutItem] = []
+        self._spacing = spacing
+        self.setSpacing(spacing)
+
+    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802 - Qt override
+        """
+        Takes ownership of one item.
+
+        Args:
+            item: The item to lay out.
+
+        Returns:
+            None
+        """
+
+        self._items.append(item)
+
+    def count(self) -> int:
+        """
+        Returns how many items the layout holds.
+
+        Returns:
+            int: The count.
+        """
+
+        return len(self._items)
+
+    def itemAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt override
+        """
+        Returns one item.
+
+        Args:
+            index: Position of the item.
+
+        Returns:
+            QLayoutItem | None: The item, or None when the index is past the end.
+        """
+
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int) -> QLayoutItem | None:  # noqa: N802 - Qt override
+        """
+        Removes one item and hands it back.
+
+        Args:
+            index: Position of the item.
+
+        Returns:
+            QLayoutItem | None: The removed item, or None.
+        """
+
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self) -> Qt.Orientations:  # noqa: N802 - Qt override
+        """
+        Reports that the layout wants no extra space of its own.
+
+        Returns:
+            Qt.Orientations: No direction.
+        """
+
+        return Qt.Orientations(0)
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 - Qt override
+        """
+        Reports that the height depends on the width, which is the whole point.
+
+        Returns:
+            bool: Always True.
+        """
+
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 - Qt override
+        """
+        Works out how tall the layout is at a given width.
+
+        Args:
+            width: Width available.
+
+        Returns:
+            int: Required height.
+        """
+
+        return self._arrange(QRect(0, 0, width, 0), apply=False)
+
+    def setGeometry(self, rect: QRect) -> None:  # noqa: N802 - Qt override
+        """
+        Places the items.
+
+        Args:
+            rect: Area to lay out in.
+
+        Returns:
+            None
+        """
+
+        super().setGeometry(rect)
+        self._arrange(rect, apply=True)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        """
+        Returns the size the layout would like.
+
+        Returns:
+            QSize: The minimum size, since the layout never asks for more.
+        """
+
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:  # noqa: N802 - Qt override
+        """
+        Returns the smallest size the layout can work in.
+
+        Returns:
+            QSize: Wide enough for the widest single item.
+        """
+
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        return size + QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+
+    def _arrange(self, rect: QRect, apply: bool) -> int:
+        """
+        Lays the items out, or only measures them.
+
+        Args:
+            rect: Area to work in.
+            apply: Whether to actually move the items.
+
+        Returns:
+            int: The height the items need.
+        """
+
+        margins = self.contentsMargins()
+        left = rect.x() + margins.left()
+        top = rect.y() + margins.top()
+        right = rect.right() - margins.right()
+
+        x = left
+        y = top
+        row_height = 0
+        for item in self._items:
+            hint = item.sizeHint()
+            if x > left and x + hint.width() > right:
+                x = left
+                y += row_height + self._spacing
+                row_height = 0
+            if apply:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + self._spacing
+            row_height = max(row_height, hint.height())
+        return y + row_height - rect.y() + margins.bottom()

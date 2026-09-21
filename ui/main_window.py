@@ -49,22 +49,26 @@ from gitops import conflict as conflict_mod
 from gitops import diff as diff_mod
 from gitops import remote as remote_mod
 from gitops import stage as stage_mod
-from gitops.commit import CommitDraft, commit as do_commit
+from gitops.commit import CommitDraft
+from gitops.commit import commit as do_commit
 from gitops.history import read_history
 from gitops.refname import suggest_branch_name
 from gitops.remote_url import github_slug
 from gitops.runner import GitResult
 from gitops.status import RepositoryState, read_state
 from models.repository import RepoEntry
-from services import avatars, open_with, puller, scanner, updater
+from services import open_with, puller, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, ScanCoordinator
 from ui.changes_panel import ChangesPanel
 from ui.clone_dialog import CloneDialog
 from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
+from ui.github_dialogs import CreateRepositoryDialog
+from ui.github_lists import GitHubContext
+from ui.github_panel import GitHubPanel
+from ui.github_worker import ApiRunner
 from ui.graph_view import GraphView
-from ui.pr_panel import PullRequestPanel, build_snapshot_thread
 from ui.pull_all_dialog import PullAllDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
@@ -101,9 +105,11 @@ class MainWindow(QMainWindow):
         self._entry: RepoEntry | None = None
         self._state: RepositoryState | None = None
         self._github = GitHubClient(token_store.load() if settings.github_enabled else "")
-        self._github_thread = None
-        self._github_worker = None
+        # The sidebar badge is fetched here rather than in the panel: it has to
+        # keep working while the user is looking at a different tab.
+        self._github_runner = ApiRunner(self)
         self._pending_github_key = ""
+        self._viewer_login = ""
         self._update_thread = None
         self._update_worker = None
         self._update_info: updater.UpdateInfo | None = None
@@ -167,10 +173,10 @@ class MainWindow(QMainWindow):
         self._tabs = QTabWidget(content)
         self._changes = ChangesPanel(self._tabs)
         self._graph = GraphView(self._tabs)
-        self._pull_requests = PullRequestPanel(self._settings.show_avatars, self._tabs)
+        self._pull_requests = GitHubPanel(self._github, self._settings.show_avatars, self._tabs)
         self._tabs.addTab(self._changes, i18n.t("changes.title"))
         self._tabs.addTab(self._graph, i18n.t("changes.graph"))
-        self._tabs.addTab(self._pull_requests, i18n.t("github.pull_requests"))
+        self._tabs.addTab(self._pull_requests, i18n.t("github.title"))
         content.addWidget(self._tabs)
 
         self._diff = DiffView(
@@ -267,7 +273,8 @@ class MainWindow(QMainWindow):
 
         repo_menu = bar.addMenu(i18n.t("menu.repository"))
         repo_menu.addAction(i18n.t("sidebar.add_repo"), self._prompt_add_repo)
-        repo_menu.addAction(i18n.t("sidebar.clone_repo"), self._open_clone_dialog)
+        repo_menu.addAction(i18n.t("sidebar.clone_repo"), lambda: self._open_clone_dialog())
+        repo_menu.addAction(i18n.t("github.repo_new"), self._create_github_repository)
         repo_menu.addSeparator()
         refresh_action = QAction(i18n.t("action.refresh"), self)
         refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
@@ -338,6 +345,7 @@ class MainWindow(QMainWindow):
         self._pull_requests.open_url_requested.connect(self._open_url)
         self._pull_requests.checkout_branch_requested.connect(self._checkout_branch)
         self._pull_requests.refresh_requested.connect(self._reload_github)
+        self._pull_requests.repository_removed.connect(self._on_remote_repo_deleted)
 
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -511,7 +519,9 @@ class MainWindow(QMainWindow):
             return
         self._notice.setVisible(False)
 
-    def _show_notice(self, title_key: str, detail_key: str = "", token: str = "info", **params) -> None:
+    def _show_notice(
+        self, title_key: str, detail_key: str = "", token: str = "info", **params: object
+    ) -> None:
         """
         Shows the message strip above the tabs.
 
@@ -1032,14 +1042,13 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        if mode == branch_mod.RESET_HARD:
-            if not self._confirm(
-                i18n.t("confirm.reset_hard_title"),
-                i18n.t("confirm.reset_hard_hint", version=oid[:7]),
-                i18n.t("confirm.reset_hard_action"),
-                destructive=True,
-            ):
-                return
+        if mode == branch_mod.RESET_HARD and not self._confirm(
+            i18n.t("confirm.reset_hard_title"),
+            i18n.t("confirm.reset_hard_hint", version=oid[:7]),
+            i18n.t("confirm.reset_hard_action"),
+            destructive=True,
+        ):
+            return
         result = branch_mod.reset(entry.path, oid, mode)
         if result.failed:
             self._report(result)
@@ -1227,15 +1236,19 @@ class MainWindow(QMainWindow):
         self._activate(entry)
         self._start_scan(entry.key)
 
-    def _open_clone_dialog(self) -> None:
+    def _open_clone_dialog(self, initial_url: str = "") -> None:
         """
         Opens the clone dialog and registers whatever it produced.
+
+        Args:
+            initial_url: Address to start from, used right after a repository was
+                created on GitHub.
 
         Returns:
             None
         """
 
-        dialog = CloneDialog(self._registry.categories, self)
+        dialog = CloneDialog(self._registry.categories, initial_url, self._github, self)
         if dialog.exec() != CloneDialog.DialogCode.Accepted:
             return
         target = dialog.cloned_path
@@ -1376,7 +1389,13 @@ class MainWindow(QMainWindow):
 
     def _reload_github(self) -> None:
         """
-        Fetches pull requests and issues for the current repository.
+        Points the GitHub panel at the current repository.
+
+        What the panel needs before it can show anything is not in the registry:
+        which account the token belongs to, what the default branch is called on
+        the server, and whether this account may write here. Those are fetched
+        first, and the panel is switched over in one step once they are known,
+        rather than being set up twice and reloading itself in between.
 
         Returns:
             None
@@ -1385,10 +1404,7 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        if not self._settings.github_enabled:
-            self._pull_requests.show_message("github.no_token", "github.no_token_hint", "info")
-            return
-        if not self._github.has_token:
+        if not self._settings.github_enabled or not self._github.has_token:
             self._pull_requests.show_message("github.no_token", "github.no_token_hint", "info")
             return
 
@@ -1397,61 +1413,194 @@ class MainWindow(QMainWindow):
         if slug is None:
             self._pull_requests.show_message("github.not_github", "github.not_github_hint", "info")
             return
-        if self._github_thread is not None:
-            return
 
         owner, repo = slug
-        ref = self._state.display_branch if self._state else ""
-        thread, worker = build_snapshot_thread(self._github, owner, repo, ref, self)
-        worker.finished.connect(self._on_github_snapshot)
-        self._github_thread = thread
-        self._github_worker = worker
-        self._pending_github_key = entry.key
-        thread.start()
+        branch = self._state.display_branch if self._state else ""
+        key = entry.key
+        self._pending_github_key = key
+        self._pull_requests.show_message("github.loading", "", "info")
+        self._github_runner.submit(
+            lambda: self._fetch_github_context(owner, repo, branch),
+            lambda outcome: self._on_github_context(key, owner, repo, branch, outcome),
+        )
 
-    def _on_github_snapshot(self, snapshot) -> None:  # noqa: ANN001 - RepositorySnapshot
+    def _fetch_github_context(self, owner: str, repo: str, branch: str) -> tuple:
         """
-        Shows a fetched snapshot and prefetches its avatars.
+        Collects what the panel and the sidebar badge need, on a worker thread.
 
         Args:
-            snapshot: What the client returned.
+            owner: Repository owner.
+            repo: Repository name.
+            branch: Branch checked out locally.
+
+        Returns:
+            tuple: ``(viewer login, repository result, open pull requests, check
+                state)``.
+        """
+
+        login = self._viewer_login
+        if not login:
+            viewer, _error = self._github.viewer()
+            login = viewer.login if viewer is not None else ""
+        repository = self._github.repository(owner, repo)
+        count, check, _error = self._github.repository_badge(owner, repo, branch)
+        return login, repository, count, check
+
+    def _on_github_context(
+        self, key: str, owner: str, repo: str, branch: str, outcome: object
+    ) -> None:
+        """
+        Switches the panel over once the repository is known.
+
+        Args:
+            key: Registry key the fetch was started for.
+            owner: Repository owner.
+            repo: Repository name.
+            branch: Branch checked out locally.
+            outcome: What the fetch returned or raised.
 
         Returns:
             None
         """
 
-        if self._github_thread is not None:
-            self._github_thread.quit()
-            self._github_thread.wait(5000)
-            self._github_thread = None
-        self._github_worker = None
-
-        entry = self._entry
-        if entry is None or entry.key != self._pending_github_key:
+        # The user may have selected a different project while this was running.
+        if key != self._pending_github_key:
+            return
+        if isinstance(outcome, Exception):
+            self._pull_requests.show_message("error.title", "error.git_failed", "danger")
             return
 
-        if snapshot.ok:
-            entry.status.open_pull_requests = len(snapshot.pull_requests)
-            entry.status.check_state = snapshot.head_check_state
+        login, repository, count, check = outcome
+        self._viewer_login = login
+        if not repository.ok:
+            self._pull_requests.show_message("error.title", repository.error_key, "danger")
+            return
+
+        details = repository.payload
+        self._pull_requests.set_context(
+            GitHubContext(
+                owner=owner,
+                repo=repo,
+                viewer_login=login,
+                local_branch=branch,
+                default_branch=details.default_branch,
+                can_push=details.can_push,
+                can_administer=details.can_administer,
+                merge_methods=tuple(
+                    name for name, allowed in details.merge_methods.items() if allowed
+                ),
+                delete_branch_on_merge=details.delete_branch_on_merge,
+            )
+        )
+
+        entry = self._find(key)
+        if entry is not None:
+            entry.status.open_pull_requests = count
+            entry.status.check_state = check
             self._sidebar.update_entry(entry)
-            if self._settings.show_avatars:
-                QTimer.singleShot(0, lambda: self._prefetch_avatars(snapshot))
-        self._pull_requests.show_snapshot(snapshot)
 
-    @staticmethod
-    def _prefetch_avatars(snapshot) -> None:  # noqa: ANN001 - RepositorySnapshot
+    def _create_github_repository(self) -> None:
         """
-        Warms the avatar cache for a snapshot.
-
-        Args:
-            snapshot: Snapshot whose authors should be cached.
+        Creates a repository on GitHub and offers to clone it.
 
         Returns:
             None
         """
 
-        for item in (*snapshot.pull_requests, *snapshot.issues):
-            avatars.fetch(item.avatar_url)
+        if not self._settings.github_enabled or not self._github.has_token:
+            QMessageBox.information(
+                self, i18n.t("github.no_token"), i18n.t("github.no_token_hint")
+            )
+            return
+        self._github_runner.submit(self._github.organizations, self._prompt_new_repository)
+
+    def _prompt_new_repository(self, outcome: object) -> None:
+        """
+        Shows the creation dialog once the organisation list is known.
+
+        Args:
+            outcome: The organisations result.
+
+        Returns:
+            None
+        """
+
+        organizations: list[str] = []
+        if not isinstance(outcome, Exception) and getattr(outcome, "ok", False):
+            organizations = list(outcome.payload or [])
+
+        dialog = CreateRepositoryDialog(organizations, self)
+        if dialog.exec() != CreateRepositoryDialog.DialogCode.Accepted:
+            return
+        draft = dialog.draft()
+        self._github_runner.submit(
+            lambda: self._github.create_repository(
+                draft.name,
+                description=draft.description,
+                private=draft.private,
+                organization=draft.organization,
+                auto_init=draft.auto_init,
+                gitignore_template=draft.gitignore_template,
+                license_template=draft.license_template,
+            ),
+            lambda result: self._on_repository_created(draft.clone_after, result),
+        )
+
+    def _on_repository_created(self, clone_after: bool, outcome: object) -> None:
+        """
+        Reports the new repository and opens the clone dialog for it.
+
+        Args:
+            clone_after: Whether the user asked to clone it straight away.
+            outcome: What the creation returned.
+
+        Returns:
+            None
+        """
+
+        if isinstance(outcome, Exception) or not getattr(outcome, "ok", False):
+            detail = getattr(outcome, "detail", "") or str(outcome)
+            box = QMessageBox(self)
+            box.setWindowTitle(i18n.t("error.title"))
+            box.setText(i18n.t("github.repo_create_failed"))
+            if detail:
+                box.setInformativeText(detail)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.exec()
+            return
+
+        repository = outcome.payload
+        self.statusBar().showMessage(
+            i18n.t("github.repo_created", repo=repository.full_name), 6000
+        )
+        if not clone_after:
+            return
+        # The clone dialog owns destination validation and the clone itself, so
+        # the address is handed to it rather than the clone being repeated here.
+        self._open_clone_dialog(repository.clone_url)
+
+    def _on_remote_repo_deleted(self, full_name: str) -> None:
+        """
+        Offers to forget the local copy after the server copy was deleted.
+
+        Args:
+            full_name: ``owner/name`` of the deleted repository.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        if not self._confirm(
+            i18n.t("github.repo_deleted", repo=full_name),
+            i18n.t("github.repo_forget_question", name=entry.name),
+            i18n.t("action.remove"),
+            destructive=False,
+        ):
+            return
+        self._prompt_remove_repo(entry.key)
 
     # ------------------------------------------------------------------- desktop
 
@@ -1606,6 +1755,7 @@ class MainWindow(QMainWindow):
         self._sidebar.set_sort_mode(self._settings.sort_mode)
         self._pull_requests.set_show_avatars(self._settings.show_avatars)
         self._github.set_token(token_store.load() if self._settings.github_enabled else "")
+        self._viewer_login = ""
         self._scheduler.configure(self._settings.auto_check_minutes)
         self._reload_github()
 
@@ -1950,10 +2100,8 @@ class MainWindow(QMainWindow):
         """
 
         self._scheduler.stop()
-        if self._github_thread is not None:
-            self._github_thread.quit()
-            self._github_thread.wait(2000)
-            self._github_thread = None
+        self._pull_requests.stop()
+        self._github_runner.stop()
         if self._update_thread is not None:
             self._update_thread.quit()
             self._update_thread.wait(2000)

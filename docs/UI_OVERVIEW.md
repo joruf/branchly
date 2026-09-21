@@ -79,14 +79,45 @@ Lanes in Spalte 0, gezeichnet von einem Delegate. Punkt = Commit, Ring = „hier
 stehst du", Farbe je Lane aus den Theme-Tokens. Rechts Betreff mit Branch- und
 Tag-Namen, Autor, Datum. Kontextmenü mit allen Aktionen; Destruktives fragt nach.
 
-## Reiter Pull Requests (`ui/pr_panel.py`)
+## Reiter GitHub (`ui/github_panel.py`)
 
-Zwei Unterreiter mit Anzahl im Titel. Pro Zeile Check-Ampel, Titel, Nummer, Autor,
-Zielbranch und Avatar. Unten „Diesen Branch auschecken" und „Im Browser öffnen".
+Kopfzeile mit dem Repository-Namen, „Repository-Einstellungen…" und
+„Aktualisieren". Darunter vier Unterreiter: *Pull Requests*, *Issues*, *Releases*,
+*Actions*.
 
-Jeder Zustand wird ausgesprochen — kein Token, kein GitHub-Projekt, Rate-Limit,
+Alle vier haben denselben Aufbau (`ui/github_lists.py`, Klasse `RemoteTab`):
+Filterzeile, Liste, Detailansicht, Aktionsleiste. Eine Listenzeile trägt je nach
+Reiter eine Ampel, zwei Zeilen Text und einen Avatar. Die Detailansicht ist ein
+`QTextBrowser`, der Markdown rendert, denn Beschreibungen, Versionshinweise und
+Kommentare sind auf GitHub Markdown.
+
+Was nicht in die Aktionsleiste passt, liegt hinter „Mehr…". Aktionen, die gerade
+nicht gehen, sind abgeschaltet und nicht versteckt, und der Tooltip nennt den
+Grund: fehlendes Schreibrecht, ein archiviertes Repository, ein Entwurf, der noch
+nicht zusammengeführt werden kann, eine Merge-Methode, die das Repository
+abgeschaltet hat.
+
+Die Aktionsleiste benutzt `FlowLayout` aus `ui/widgets.py` und bricht um, statt
+überzulaufen. Acht Knöpfe passen bei voller Fensterbreite in eine Zeile, in einem
+schmal gezogenen Panel werden daraus zwei oder drei. Ein `QHBoxLayout` hätte die
+letzten Knöpfe rechts abgeschnitten, wo sie weder sichtbar noch erreichbar sind.
+
+Jeder Zustand wird ausgesprochen: kein Token, kein GitHub-Projekt, Rate-Limit,
 oder wirklich nichts offen. Eine leere Liste ohne Erklärung ist das, was Programme
 kaputt aussehen lässt.
+
+Kein Aufruf läuft im UI-Thread. Alles geht durch `ApiRunner`
+(`ui/github_worker.py`), der die Aufrufe der Reihe nach abarbeitet.
+
+## GitHub-Dialoge (`ui/github_dialogs.py`)
+
+Issue, Pull Request, Merge, Prüfung, Kommentar, Release, Repository-Einstellungen
+und Repository anlegen. Alle mit derselben Hülle: Formular, Hinweisstreifen für
+die Prüfung der Eingabe, OK/Abbrechen. Keiner davon ruft die API auf, sie sammeln
+nur Eingaben. Das Senden und das Melden des Ergebnisses liegt beim Panel.
+
+Der Löschdialog für ein Repository ist bewusst anders: kein Ja/Nein, sondern der
+vollständige Name zum Eintippen, und der Knopf bleibt bis dahin gesperrt.
 
 ## Gegenüberstellung (`ui/diff_view.py`)
 
@@ -183,6 +214,7 @@ Kein Widget enthält einen Hex-Wert. Alles kommt aus `config/theme.py`:
 - `screenshots/main-window-dark.png`, `main-window-light.png`
 - `screenshots/graph-dark.png`, `graph-light.png`
 - `screenshots/conflict-assistant-dark.png`, `conflict-assistant-light.png`
+- `screenshots/github-panel-dark.png`, `github-panel-light.png`
 
 Neu erzeugen:
 

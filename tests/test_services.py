@@ -188,7 +188,7 @@ class RegistryCategoryTests(unittest.TestCase):
 
     def test_renaming_moves_the_repositories_along(self) -> None:
         self.registry.add_category("Old")
-        entry = self.registry._entries  # noqa: SLF001 - direct setup for the test
+        entry = self.registry._entries
         from models.repository import RepoEntry
 
         entry.append(RepoEntry(path=Path("/tmp/demo"), category="Old"))
@@ -204,7 +204,7 @@ class RegistryCategoryTests(unittest.TestCase):
         from models.repository import RepoEntry
 
         self.registry.add_category("Doomed")
-        self.registry._entries.append(RepoEntry(path=Path("/tmp/demo"), category="Doomed"))  # noqa: SLF001
+        self.registry._entries.append(RepoEntry(path=Path("/tmp/demo"), category="Doomed"))
         self.assertTrue(self.registry.remove_category("Doomed"))
         self.assertEqual([], self.registry.categories)
         self.assertEqual("", self.registry.entries[0].category)
@@ -227,7 +227,7 @@ class RegistryGroupingTests(unittest.TestCase):
         self.registry = Registry(Path(tempfile.mkdtemp()) / "repos.json")
         self.registry.add_category("Work")
         self.registry.add_category("Private")
-        self.registry._entries.extend(  # noqa: SLF001
+        self.registry._entries.extend(
             [
                 RepoEntry(path=Path("/tmp/pmtool"), name="pmtool", category="Work"),
                 RepoEntry(path=Path("/tmp/snappix"), name="snappix", category="Work", favorite=True),
@@ -241,11 +241,11 @@ class RegistryGroupingTests(unittest.TestCase):
         self.assertEqual(["Work", "Private", ""], names)
 
     def test_favorites_come_first_inside_a_group(self) -> None:
-        groups = dict((category.name, entries) for category, entries in self.registry.grouped(SORT_NAME_ASC))
+        groups = {category.name: entries for category, entries in self.registry.grouped(SORT_NAME_ASC)}
         self.assertEqual(["snappix", "pmtool"], [item.name for item in groups["Work"]])
 
     def test_empty_named_categories_are_kept(self) -> None:
-        groups = dict((category.name, entries) for category, entries in self.registry.grouped(SORT_NAME_ASC))
+        groups = {category.name: entries for category, entries in self.registry.grouped(SORT_NAME_ASC)}
         self.assertIn("Private", groups)
         self.assertEqual([], groups["Private"])
 
@@ -346,7 +346,10 @@ class BadgeTests(unittest.TestCase):
 
     def test_conflicts_come_first(self) -> None:
         badges = scanner.describe(RepoStatus(conflicted_files=1, changed_files=2, ahead=1, incoming=3))
-        self.assertEqual(["conflict", "changed", "incoming", "ahead"], [kind for kind, _token, _count in badges])
+        self.assertEqual(
+            ["conflict", "changed", "incoming", "ahead"],
+            [kind for kind, _token, _count in badges],
+        )
 
     def test_changed_counts_staged_and_unstaged_together(self) -> None:
         badges = scanner.describe(RepoStatus(changed_files=2, staged_files=3))

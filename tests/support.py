@@ -13,9 +13,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 GIT_AVAILABLE = shutil.which("git") is not None
 

@@ -291,16 +291,11 @@ def render_many(diffs: list[FileDiff], mode: str, colors: ThemeColors, word_leve
         name = diff.path or diff.old_path or "?"
         counts = f"+{diff.added} −{diff.removed}"
         blocks.append(
-            '<table><tr><td colspan="{columns}" style="background-color:{bg};color:{fg};'
-            'padding:6px;font-weight:bold;">{name}'
-            '<span style="color:{muted};font-weight:normal;">  {counts}</span></td></tr>'.format(
-                columns=columns,
-                bg=colors.surface_alt,
-                fg=colors.text,
-                muted=colors.text_muted,
-                name=_escape(name),
-                counts=_escape(counts),
-            )
+            f'<table><tr><td colspan="{columns}" '
+            f'style="background-color:{colors.surface_alt};color:{colors.text};'
+            f'padding:6px;font-weight:bold;">{_escape(name)}'
+            f'<span style="color:{colors.text_muted};font-weight:normal;">'
+            f'  {_escape(counts)}</span></td></tr>'
         )
         if diff.binary:
             blocks.append(
@@ -726,7 +721,8 @@ class DiffView(QWidget):
         self._open_button.setEnabled(bool(self._path))
         self._reveal_button.setEnabled(bool(self._path))
         self._counts.setText(
-            f"{i18n.t('diff.lines_added', count=diff.added)}  {i18n.t('diff.lines_removed', count=diff.removed)}"
+            f"{i18n.t('diff.lines_added', count=diff.added)}  "
+            f"{i18n.t('diff.lines_removed', count=diff.removed)}"
         )
 
         if diff.error_key:

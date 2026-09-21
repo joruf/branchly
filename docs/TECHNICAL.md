@@ -22,6 +22,9 @@ run.py                     Bootstrap: Argumente, Sprache, Theme, QApplication
 ├── models/                Reine Daten: RepoEntry, Category, Sortierung
 ├── gitops/                Die EINZIGE Schicht, die git aufruft
 ├── github_api/            REST-Client, Token-Ablage, Antwortmodelle
+│   ├── http.py            Transport: Cache, Paginierung, Rate-Limit, Fehler
+│   ├── repos/issues/…     je eine Gruppe von Endpunkten, als Mixin
+│   └── client.py          setzt die Gruppen zu einer Klasse zusammen
 ├── services/              Registry, Scanner, Scheduler, Puller, Updater, Desktop
 └── ui/                    Qt-Widgets; kennt gitops, aber nie subprocess
 ```
@@ -231,6 +234,64 @@ Der Zeitstempel der letzten *erfolgreichen* Prüfung liegt in `settings.json`;
 gescheiterte Prüfungen setzen ihn nicht, damit eine Woche offline nicht als
 „geprüft" durchgeht.
 
+### Die GitHub-Schicht
+
+`github_api/` ist in Transport und Endpunkte getrennt. Der Transport (`http.py`)
+beantwortet eine Frage an genau einer Stelle: was passiert, wenn der Server etwas
+anderes sagt als „bitte sehr". Die Endpunktmodule beschreiben nur, wonach gefragt
+wird, und werden als Mixins zu `GitHubClient` zusammengesetzt.
+
+Fünf Dinge erledigt der Transport:
+
+| Maßnahme | Warum |
+|---|---|
+| ETag-Cache | Die häufige Frage „gibt es Neues" kostet meist nur ein 304 |
+| Jeder Schreibzugriff leert den Cache | Eine Liste, die vor einer Sekunde stimmte, stimmt nach einem Anlegen nicht mehr |
+| Paginierung über den `Link`-Header | Wer „alle Issues" will, soll nicht wissen müssen, dass eine Seite bei 100 endet |
+| Statuscode plus GitHubs eigener Satz | „name already exists on this account" ist brauchbar, „etwas ging schief" nicht |
+| Timeout auf allem | Ein langsames Netz darf keinen Worker-Thread länger blockieren als nötig |
+
+**Rate-Limit wird als Zustand geführt, nicht als Fehler.** Sagt GitHub „warte",
+hört der Client auf zu fragen und meldet, wie lange. Ein 403 ist dabei doppeldeutig
+(fehlende Berechtigung oder verbrauchtes Kontingent), unterschieden wird über den
+Header `X-RateLimit-Remaining`, nicht über den Status.
+
+**GraphQL nur, wo REST nichts anbietet.** Einen Entwurf als bereit zu markieren
+gibt es ausschließlich als GraphQL-Mutation. Deswegen kennt der Transport
+`graphql()`, und deswegen prüft der dortige Code den Antwortkörper statt des
+Status: GraphQL antwortet auch auf Fehler mit 200.
+
+**Ergebnisse sind einheitlich.** Jeder Aufruf gibt ein `ApiResult` zurück, mit
+`ok`, Nutzlast, Übersetzungsschlüssel, GitHubs eigenem Satz und der Wartezeit bei
+einem Limit. Die vier ursprünglichen Lesemethoden (`viewer`, `pull_requests`,
+`issues`, `check_state`) behalten ihre alte Signatur, damit bestehende Aufrufer
+unverändert bleiben.
+
+### GitHub-Aufrufe und der UI-Thread
+
+Qt zeichnet nichts, solange ein Slot läuft, also ruft kein Widget den Client
+direkt auf. `ui/github_worker.py` nimmt den Aufruf entgegen, führt ihn auf einem
+QThread aus und liefert das Ergebnis per Signal zurück.
+
+Der Runner arbeitet **einen Aufruf nach dem anderen** ab. Das ist kein
+Kompromiss bei der Geschwindigkeit, sondern der Zweck: ein Schreibzugriff leert den
+Cache, und würde die nachfolgende Liste den Schreibzugriff überholen, sähe der
+Nutzer den Stand von vor seiner eigenen Änderung.
+
+Ein Aufruf, der beim Schließen noch läuft, wird nicht abgewartet. Sein Ergebnis
+wird verworfen, denn ein Panel, das es nicht mehr gibt, kann nichts mehr anzeigen,
+und ein Fensterschließen 15 Sekunden am Request hängen zu lassen wäre schlimmer als
+ein verschwendeter Request.
+
+### Was beim Löschen eines Repositories anders ist
+
+Alles andere in Branchly ist wiederherstellbar: eine verworfene Änderung, ein
+gelöschter Branch, ein zurückgesetzter Commit. Ein gelöschtes Repository nicht.
+Deshalb ist die Bestätigung dort von anderer Art als überall sonst: der
+vollständige Name muss eingetippt werden, genau wie in GitHubs eigener Oberfläche,
+und der Knopf bleibt bis dahin gesperrt. Lokal wird nichts angefasst, Branchly
+fragt danach nur, ob der Eintrag aus der Projektliste verschwinden soll.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`
@@ -254,8 +315,48 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -v
 liefert zwei Clones eines Bare-Repos — die Form, die jeder Sync- und Konflikttest
 braucht.
 
+`tests/support_github.py` startet einen echten HTTP-Server auf localhost als
+Ersatz für api.github.com, statt `requests.Session` zu stubben. Genau die Stellen,
+die eine Attrappe verdecken würde, sind die interessanten: dem `Link`-Header
+folgen, ein 304 richtig deuten, Rate-Limit-Header lesen, aus einem 422 einen Satz
+machen. Das GitHub-Panel wird gegen denselben Server gefahren, damit der ganze
+Weg geprüft ist: ein Klick wird zum Request, die Antwort wird zu Zeilen, und auf
+einen Schreibzugriff folgt ein Nachladen, das nicht aus dem Cache kommen kann.
+
+Ein Detail, das man einmal falsch macht: das Panel meldet Fehler in einem modalen
+Dialog. Im Test würde dessen `exec()` auf einen Klick warten, der nie kommt, also
+ersetzt `tests/test_github_ui.py` die `QMessageBox` durch eine, die nur
+mitschreibt.
+
 Die Tests der Sicherheitsschicht laufen in der CI **zuerst**, in einem eigenen
 Schritt. Fällt dort etwas um, ist der Rest nicht mehr interessant.
+
+## Linting
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/ruff check .
+```
+
+Die Regeln stehen in `ruff.toml` und sind danach ausgewählt, was der Code ohnehin
+tut, nicht um einen neuen Stil durchzusetzen. Maßstab waren die vorhandenen
+`# noqa:`-Kommentare: sie nennen `SLF001`, `ANN`, `BLE001`, `N802` und die
+Bandit-Codes, und ein solcher Kommentar bedeutet nur etwas, wenn die Regel auch
+eingeschaltet ist.
+
+Zwei Entscheidungen, die man sonst nachschlagen müsste:
+
+- **`S105`, `S106` und `S107` sind global aus.** Sie greifen auf den *Namen* einer
+  Variablen, also auch auf `ERROR_NO_TOKEN` und auf eine Themefarbe namens
+  `check_pass`. Branchly legt per Entwurf kein Geheimnis in eine Datei, das Token
+  liegt im Schlüsselspeicher. Jeder Treffer wäre ein Name, kein Geheimnis.
+- **`SLF001` ist in `tests/` aus.** Ein Panel-Test, der nicht in die Liste des
+  Panels schauen darf, ist kein Test. Vorher standen 134 Marker „das ist
+  Absicht" im Testcode, was den Marker bedeutungslos machte.
+
+ruff ist ein Entwicklungswerkzeug und steht deshalb in `requirements-dev.txt`,
+nicht in `requirements.txt`: wer Branchly installiert, soll keinen Linter
+mitinstallieren. Die CI lintet vor den Tests.
 
 ## Plattformen
 
