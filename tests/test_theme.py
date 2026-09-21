@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import unittest
-from dataclasses import fields
+from dataclasses import FrozenInstanceError, fields
 
 from config.theme import (
     DEFAULT_THEME,
@@ -98,7 +98,9 @@ class ThemeCompletenessTests(unittest.TestCase):
 
     def test_themes_are_frozen(self) -> None:
         colors = get_theme_colors(THEME_DARK)
-        with self.assertRaises(Exception):
+        # A frozen dataclass raises FrozenInstanceError, which is what is
+        # being checked: the theme cannot be edited in place.
+        with self.assertRaises(FrozenInstanceError):
             colors.accent = "#000000"  # type: ignore[misc]
 
 

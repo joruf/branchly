@@ -1,0 +1,107 @@
+# Linting rules for Branchly.
+#
+# The set is picked to match what the code already does rather than to impose a
+# new style. Every rule family here is one the code was written against: the
+# `# noqa:` comments scattered through it name SLF001, ANN, BLE001, N802 and the
+# bandit codes, and those comments only mean something if the rules are on. That
+# is also why the test files are not blanket-exempted from SLF001 and ANN: a test
+# reaching into a widget says so at the line where it does it.
+#
+# Run it with:
+#
+#     .venv/bin/ruff check .
+#     .venv/bin/ruff check --fix .
+#
+# ruff is a development tool, not a runtime dependency, so it is deliberately
+# not in requirements.txt: installing Branchly must not pull in a linter.
+
+line-length = 110
+target-version = "py311"
+extend-exclude = [".venv", "docs"]
+
+[lint]
+select = [
+    "F",      # pyflakes: genuinely broken code
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "I",      # import order
+    "N",      # naming, with the Qt overrides marked by noqa
+    "UP",     # constructs this Python version made obsolete
+    "B",      # bugbear: the mistakes that look fine
+    "SIM",    # simplifications
+    "RET",    # return statements
+    "C4",     # comprehensions
+    "ANN",    # missing annotations, which this codebase does carry
+    "BLE",    # blind excepts, allowed only where a noqa says why
+    "SLF",    # reaching into another object's privates
+    "S",      # bandit: the security rules
+    "RUF",    # ruff's own, including unused noqa
+]
+
+ignore = [
+    # `Any` is used deliberately where the shape really is unknown: a parsed API
+    # body before it is validated, a Qt payload, a callback's result.
+    "ANN401",
+    # A dataclass field or a Qt signal is not a mutable class default in the
+    # sense this rule means.
+    "RUF012",
+    # `contextlib.suppress` hides which exception is expected behind a call. The
+    # explicit try/except with a comment saying why is the house style.
+    "SIM105",
+    # Nested `with` blocks read better than one line holding three context
+    # managers, especially in the fixtures.
+    "SIM117",
+    # The em dash and the middle dot are used on purpose in user-facing text.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # These three match on the *name* of a variable or argument, so they fire on
+    # `ERROR_NO_TOKEN` and on a theme colour called `check_pass`. Branchly keeps
+    # no secret in any file by design: the GitHub token goes to the system
+    # keychain and git credentials are the credential helper's business. Every
+    # hit is therefore a name, not a secret.
+    "S105",
+    "S106",
+    "S107",
+]
+
+[lint.per-file-ignores]
+# Fixture tokens and passwords are literals on purpose; that is what makes them
+# fixtures, and `assert` is how unittest is written around. SLF001 is off here
+# for a different reason: a panel test that may not look at the panel's list is
+# not a test, so the access is the norm rather than the exception. Marking every
+# one of the 130-odd lines as deliberate made the marker meaningless.
+"tests/*" = ["S101", "S108", "S603", "S607", "SLF001"]
+# The scripts and the installer run external programs by design, which is the
+# whole reason they exist. The screenshot script also drives the widgets from
+# outside, the same way a test does, because the picture has to show the panel
+# in the state a user would see it in.
+"scripts/*" = ["S603", "S607", "SLF001"]
+"install_dependencies.py" = ["S603", "S607"]
+"installer_ui.py" = ["S603", "S607"]
+# This module exists to start git. Every call goes through one hardened `run()`,
+# which is documented at length and is the reason a blanket ignore here is safe
+# rather than lazy.
+"gitops/runner.py" = ["S603"]
+"services/updater.py" = ["S603", "S606"]
+# Opening a file with the system's default program and re-executing the
+# interpreter are both process starts that the modules around them guard.
+"services/open_with.py" = ["S603"]
+"run.py" = ["S603", "S606"]
+
+[lint.flake8-annotations]
+suppress-none-returning = false
+
+[lint.isort]
+known-first-party = [
+    "config",
+    "constants",
+    "github_api",
+    "gitops",
+    "i18n",
+    "models",
+    "paths",
+    "services",
+    "tests",
+    "ui",
+]

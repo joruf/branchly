@@ -1,0 +1,10 @@
+# Tools used while developing Branchly, deliberately separate from
+# requirements.txt: installing the application must not pull in a linter.
+#
+#     .venv/bin/pip install -r requirements-dev.txt
+#     .venv/bin/ruff check .
+#
+# Pinned for the same reason the runtime dependencies are: a new ruff release
+# adds rules, and a lint run that fails because of the day it ran on is a lint
+# run nobody trusts.
+ruff==0.16.8

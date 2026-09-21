@@ -54,7 +54,7 @@ def _prefer_language() -> str:
         from config.app_settings import load_settings
 
         return i18n.set_language(load_settings().language)
-    except Exception:
+    except Exception:  # noqa: BLE001 - any settings problem falls back to the locale
         env = (os.environ.get("LANG") or os.environ.get("LC_ALL") or "en").lower()
         if env.startswith("de"):
             return i18n.set_language("de")
@@ -548,13 +548,12 @@ class InstallerApp:
             None
         """
 
-        if self._busy:
-            if not messagebox.askyesno(
-                APP_NAME,
-                i18n.t("installer.close_busy"),
-                parent=self._root,
-            ):
-                return
+        if self._busy and not messagebox.askyesno(
+            APP_NAME,
+            i18n.t("installer.close_busy"),
+            parent=self._root,
+        ):
+            return
         self._root.destroy()
 
     def run(self) -> int:

@@ -30,9 +30,9 @@ import os
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 from constants import GIT_TIMEOUT_LOCAL
 
@@ -61,7 +61,7 @@ ERROR_OFFLINE = "sync.offline"
 ERROR_PUSH_REJECTED = "sync.push_rejected"
 
 
-class UnsafeGitArgument(ValueError):
+class UnsafeGitArgument(ValueError):  # noqa: N818 - the name is part of this module's API
     """
     Raised when an argument is refused before git is started.
 
@@ -450,7 +450,9 @@ def run_streaming(
 
     buffer = bytearray()
     stream = process.stdout
-    assert stream is not None
+    # Popen was given stdout=PIPE, so this cannot be None. The check is for
+    # the type checker, not for a case that can happen.
+    assert stream is not None  # noqa: S101
     try:
         while True:
             if should_cancel is not None and should_cancel():

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 APP_NAME = "Branchly"
 APP_SLUG = "branchly"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 APP_URL = "https://github.com/joruf/branchly"
 
 # Set in the child process of a re-exec or a restart-after-update, so neither can

@@ -639,7 +639,7 @@ def restart() -> None:
     environment.pop(REEXEC_MARKER, None)
     if paths.is_windows():
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        subprocess.Popen(  # noqa: S603 - fixed command, no shell
+        subprocess.Popen(
             command, env=environment, close_fds=True, shell=False, creationflags=creation_flags
         )
         return

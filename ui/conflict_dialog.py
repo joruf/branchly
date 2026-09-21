@@ -452,7 +452,8 @@ class ConflictDialog(QDialog):
         """
 
         region = decision.region
-        assert region is not None
+        # Only decisions carrying a region reach this method.
+        assert region is not None  # noqa: S101
 
         self._reason.setText(i18n.t(region.reason_key))
         self._ours_view.setPlainText("\n".join(region.ours))
@@ -591,7 +592,7 @@ class ConflictDialog(QDialog):
             return
         current = self._decisions[self._index]
         choice = current.choice
-        if choice == CHOICE_PENDING or choice == CHOICE_CUSTOM:
+        if choice in (CHOICE_PENDING, CHOICE_CUSTOM):
             return
         for decision in self._decisions:
             if decision.is_whole_file:

@@ -193,7 +193,7 @@ class UnifiedDiffParsingTests(unittest.TestCase):
 
     def test_word_spans_mark_only_the_changed_part(self) -> None:
         hunk = diff_mod.parse_unified(self.PAYLOAD).hunks[0]
-        added = [line for line in hunk.lines if line.kind == diff_mod.LINE_ADDED][0]
+        added = next(line for line in hunk.lines if line.kind == diff_mod.LINE_ADDED)
         self.assertTrue(added.spans)
         start, end = added.spans[0]
         self.assertEqual("3000", added.text[start:end])

@@ -275,7 +275,7 @@ def assign_lanes(commits: list[Commit]) -> History:
     index_of = {row.commit.oid: position for position, row in enumerate(rows)}
     for row in rows:
         resolved: list[tuple[int, int]] = []
-        for (parent_lane, _), parent_oid in zip(row.edges, row.commit.parents):
+        for (parent_lane, _), parent_oid in zip(row.edges, row.commit.parents, strict=False):
             resolved.append((parent_lane, index_of.get(parent_oid, -1)))
         row.edges = tuple(resolved)
 

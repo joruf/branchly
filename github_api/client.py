@@ -1,317 +1,157 @@
 """
-The GitHub REST client.
+The GitHub client.
 
-Three things it takes care of beyond issuing requests:
+One class assembled from the endpoint groups, so a caller holds a single object
+rather than five. The transport underneath it (``github_api.http``) owns caching,
+pagination, rate limits and error translation; the endpoint modules own what to
+ask for; this module owns the few calls that belong to no group, plus the
+snapshot the repository panel is built on.
 
-* An ETag cache, so the frequent "is anything new" poll usually costs a 304 and
-  does not eat into the rate limit.
-* Rate-limit awareness. When GitHub says to wait, the client stops asking and
-  reports how long, instead of hammering away and getting the user blocked.
-* A short timeout on everything, so a slow network never blocks a scan thread for
-  longer than a scan is worth.
-
-The token is passed in, never read from storage here — that keeps this module
-free of any opinion about where secrets live.
+The error constants are re-exported here because callers have always imported
+them from this module, and moving them would have been churn for its own sake.
 """
 
 from __future__ import annotations
 
-import threading
-import time
-from dataclasses import dataclass
-from typing import Any
-
-import requests
-
-from constants import GITHUB_API_ROOT, GITHUB_USER_AGENT
+from github_api.actions import ActionEndpoints
+from github_api.http import (  # noqa: F401 - re-exported for callers
+    ERROR_CONFLICT,
+    ERROR_FORBIDDEN,
+    ERROR_GENERIC,
+    ERROR_NO_TOKEN,
+    ERROR_NOT_FOUND,
+    ERROR_NOT_MERGEABLE,
+    ERROR_OFFLINE,
+    ERROR_RATE_LIMITED,
+    ERROR_UNAUTHORIZED,
+    ERROR_VALIDATION,
+    REQUEST_TIMEOUT,
+    ApiResult,
+    HttpTransport,
+    RateLimit,
+    missing_scopes,
+)
+from github_api.issues import IssueEndpoints
 from github_api.models import (
     CHECK_NONE,
     Issue,
     PullRequest,
-    RepositorySnapshot,
     Viewer,
     combine_check_states,
     normalize_check_state,
 )
+from github_api.pulls import PullRequestEndpoints
+from github_api.releases import ReleaseEndpoints
+from github_api.repos import RepositoryEndpoints
 
-REQUEST_TIMEOUT = 15
 MAX_ITEMS_PER_LIST = 50
 
-ERROR_NO_TOKEN = "github.no_token"
-ERROR_RATE_LIMITED = "github.rate_limited"
-ERROR_UNAUTHORIZED = "settings.github_token_invalid"
-ERROR_OFFLINE = "sync.offline"
-ERROR_GENERIC = "error.git_failed"
+# Scopes the write features need, so the settings dialog can name a missing one
+# instead of letting the user discover it as a 403 halfway through an action.
+SCOPE_REPO = "repo"
+SCOPE_WORKFLOW = "workflow"
+SCOPE_DELETE_REPO = "delete_repo"
 
 
-@dataclass(slots=True)
-class _CacheEntry:
+class GitHubClient(
+    RepositoryEndpoints,
+    IssueEndpoints,
+    PullRequestEndpoints,
+    ReleaseEndpoints,
+    ActionEndpoints,
+    HttpTransport,
+):
     """
-    One cached response.
-
-    Attributes:
-        etag: ETag the server sent.
-        payload: Parsed body belonging to that ETag.
+    Reads and changes repositories, issues, pull requests, releases and runs.
     """
-
-    etag: str
-    payload: Any
-
-
-class GitHubClient:
-    """
-    Reads pull requests, issues and check states for GitHub repositories.
-    """
-
-    def __init__(self, token: str = "", api_root: str = GITHUB_API_ROOT) -> None:
-        """
-        Args:
-            token: Personal access token. An empty token means every call reports
-                ``github.no_token`` rather than trying and failing.
-            api_root: API base URL, overridable for tests.
-        """
-
-        self._token = token.strip()
-        self._api_root = api_root.rstrip("/")
-        self._session = requests.Session()
-        self._cache: dict[str, _CacheEntry] = {}
-        self._lock = threading.RLock()
-        self._blocked_until = 0.0
-
-    @property
-    def has_token(self) -> bool:
-        """
-        Reports whether a token is configured.
-
-        Returns:
-            bool: True when calls can be made.
-        """
-
-        return bool(self._token)
-
-    def set_token(self, token: str) -> None:
-        """
-        Replaces the token and clears the cache.
-
-        Args:
-            token: New token.
-
-        Returns:
-            None
-        """
-
-        with self._lock:
-            self._token = token.strip()
-            self._cache.clear()
-            self._blocked_until = 0.0
-
-    @property
-    def rate_limited_for_minutes(self) -> int:
-        """
-        Returns how long the client is holding off.
-
-        Returns:
-            int: Minutes remaining, zero when not limited.
-        """
-
-        remaining = self._blocked_until - time.time()
-        if remaining <= 0:
-            return 0
-        return max(1, int(remaining // 60) + 1)
-
-    def close(self) -> None:
-        """
-        Releases the HTTP session.
-
-        Returns:
-            None
-        """
-
-        self._session.close()
-
-    # ----------------------------------------------------------------- requests
-
-    def _headers(self, etag: str = "") -> dict[str, str]:
-        """
-        Builds the request headers.
-
-        Args:
-            etag: ETag to send for conditional requests.
-
-        Returns:
-            dict[str, str]: Headers.
-        """
-
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": GITHUB_USER_AGENT,
-            "Authorization": f"Bearer {self._token}",
-        }
-        if etag:
-            headers["If-None-Match"] = etag
-        return headers
-
-    def _get(self, path: str, params: dict[str, Any] | None = None) -> tuple[Any, str]:
-        """
-        Performs a cached GET.
-
-        Args:
-            path: Path below the API root, starting with a slash.
-            params: Query parameters.
-
-        Returns:
-            tuple[Any, str]: Parsed body and an error key. Exactly one of the two
-                is meaningful: on success the error key is empty.
-        """
-
-        if not self._token:
-            return None, ERROR_NO_TOKEN
-        if self.rate_limited_for_minutes:
-            return None, ERROR_RATE_LIMITED
-
-        cache_key = f"{path}?{sorted((params or {}).items())}"
-        with self._lock:
-            cached = self._cache.get(cache_key)
-
-        try:
-            response = self._session.get(
-                f"{self._api_root}{path}",
-                params=params,
-                headers=self._headers(cached.etag if cached else ""),
-                timeout=REQUEST_TIMEOUT,
-            )
-        except requests.RequestException:
-            return None, ERROR_OFFLINE
-
-        if response.status_code == 304 and cached is not None:
-            return cached.payload, ""
-        if response.status_code in {401, 403}:
-            # 403 is also how GitHub reports a used-up rate limit, so the two are
-            # told apart by the remaining-requests header rather than by status.
-            remaining = response.headers.get("X-RateLimit-Remaining")
-            if remaining == "0":
-                self._note_rate_limit(response.headers.get("X-RateLimit-Reset"))
-                return None, ERROR_RATE_LIMITED
-            return None, ERROR_UNAUTHORIZED
-        if response.status_code == 404:
-            return None, ERROR_GENERIC
-        if response.status_code >= 400:
-            return None, ERROR_GENERIC
-
-        try:
-            payload = response.json()
-        except ValueError:
-            return None, ERROR_GENERIC
-
-        etag = response.headers.get("ETag", "")
-        if etag:
-            with self._lock:
-                self._cache[cache_key] = _CacheEntry(etag=etag, payload=payload)
-        return payload, ""
-
-    def _note_rate_limit(self, reset_header: str | None) -> None:
-        """
-        Records how long to stay quiet after being rate limited.
-
-        Args:
-            reset_header: Value of ``X-RateLimit-Reset``, a Unix timestamp.
-
-        Returns:
-            None
-        """
-
-        try:
-            reset_at = float(reset_header or 0)
-        except ValueError:
-            reset_at = 0.0
-        # A missing or nonsensical header still deserves a pause.
-        self._blocked_until = reset_at if reset_at > time.time() else time.time() + 300
-
-    # -------------------------------------------------------------------- calls
 
     def viewer(self) -> tuple[Viewer | None, str]:
         """
         Asks who the token belongs to.
 
+        Deliberately uncached: this is the call the settings dialog makes to
+        verify a token that was just pasted, and an answer from before the change
+        would be worse than no answer.
+
         Returns:
             tuple[Viewer | None, str]: The account and an error key.
         """
 
-        if not self._token:
+        if not self.has_token:
             return None, ERROR_NO_TOKEN
-        try:
-            response = self._session.get(
-                f"{self._api_root}/user",
-                headers=self._headers(),
-                timeout=REQUEST_TIMEOUT,
-            )
-        except requests.RequestException:
-            return None, ERROR_OFFLINE
-        if response.status_code in {401, 403}:
-            return None, ERROR_UNAUTHORIZED
-        if response.status_code >= 400:
-            return None, ERROR_GENERIC
-        try:
-            payload = response.json()
-        except ValueError:
-            return None, ERROR_GENERIC
-        if not isinstance(payload, dict):
-            return None, ERROR_GENERIC
-
-        raw_scopes = response.headers.get("X-OAuth-Scopes", "")
-        scopes = tuple(item.strip() for item in raw_scopes.split(",") if item.strip())
+        result = self.send("GET", "/user")
+        if not result.ok:
+            return None, result.error_key
+        payload = result.data
         login = payload.get("login")
         if not isinstance(login, str) or not login:
             return None, ERROR_GENERIC
         name = payload.get("name")
-        return Viewer(login=login, name=name if isinstance(name, str) else "", scopes=scopes), ""
+        return Viewer(login=login, name=name if isinstance(name, str) else "", scopes=self.scopes), ""
 
-    def pull_requests(self, owner: str, repo: str) -> tuple[list[PullRequest], str]:
+    def rate_limit_state(self) -> ApiResult:
         """
-        Lists open pull requests.
+        Reads the current request budget from the server.
+
+        Returns:
+            ApiResult: Payload is the raw rate limit object.
+        """
+
+        return self.get("/rate_limit")
+
+    def missing_scopes_for(self, *required: str) -> list[str]:
+        """
+        Reports which of the given scopes the token is missing.
+
+        Args:
+            *required: Scope names the action needs.
+
+        Returns:
+            list[str]: Missing names, empty when nothing is missing or when the
+                token reports no scopes at all, which a fine-grained token does.
+        """
+
+        return missing_scopes(self.scopes, required)
+
+    # ------------------------------------------------- the original read calls
+
+    def pull_requests(
+        self, owner: str, repo: str, state: str = "open"
+    ) -> tuple[list[PullRequest], str]:
+        """
+        Lists pull requests.
 
         Args:
             owner: Repository owner.
             repo: Repository name.
+            state: ``open``, ``closed`` or ``all``.
 
         Returns:
             tuple[list[PullRequest], str]: Pull requests and an error key.
         """
 
-        payload, error = self._get(
-            f"/repos/{owner}/{repo}/pulls",
-            {"state": "open", "per_page": MAX_ITEMS_PER_LIST, "sort": "updated", "direction": "desc"},
-        )
-        if error:
-            return [], error
-        if not isinstance(payload, list):
-            return [], ERROR_GENERIC
-        found = [PullRequest.from_api(item) for item in payload]
-        return [item for item in found if item is not None], ""
+        result = self.list_pull_requests(owner, repo, state=state, limit=MAX_ITEMS_PER_LIST)
+        if not result.ok:
+            return [], result.error_key
+        return list(result.payload or []), ""
 
-    def issues(self, owner: str, repo: str) -> tuple[list[Issue], str]:
+    def issues(self, owner: str, repo: str, state: str = "open") -> tuple[list[Issue], str]:
         """
-        Lists open issues, excluding pull requests.
+        Lists issues, excluding pull requests.
 
         Args:
             owner: Repository owner.
             repo: Repository name.
+            state: ``open``, ``closed`` or ``all``.
 
         Returns:
             tuple[list[Issue], str]: Issues and an error key.
         """
 
-        payload, error = self._get(
-            f"/repos/{owner}/{repo}/issues",
-            {"state": "open", "per_page": MAX_ITEMS_PER_LIST, "sort": "updated", "direction": "desc"},
-        )
-        if error:
-            return [], error
-        if not isinstance(payload, list):
-            return [], ERROR_GENERIC
-        found = [Issue.from_api(item) for item in payload]
-        return [item for item in found if item is not None], ""
+        result = self.list_issues(owner, repo, state=state, limit=MAX_ITEMS_PER_LIST)
+        if not result.ok:
+            return [], result.error_key
+        return list(result.payload or []), ""
 
     def check_state(self, owner: str, repo: str, ref: str) -> tuple[str, str]:
         """
@@ -332,20 +172,21 @@ class GitHubClient:
         if not ref:
             return CHECK_NONE, ""
         states: list[str] = []
+        tolerated = {ERROR_GENERIC, ERROR_NOT_FOUND}
 
-        combined, error = self._get(f"/repos/{owner}/{repo}/commits/{ref}/status")
-        if error and error != ERROR_GENERIC:
-            return CHECK_NONE, error
-        if isinstance(combined, dict):
-            total = combined.get("total_count")
+        combined = self.get(f"/repos/{owner}/{repo}/commits/{ref}/status")
+        if not combined.ok and combined.error_key not in tolerated:
+            return CHECK_NONE, combined.error_key
+        if combined.ok:
+            total = combined.data.get("total_count")
             if isinstance(total, int) and total > 0:
-                states.append(normalize_check_state(combined.get("state")))
+                states.append(normalize_check_state(combined.data.get("state")))
 
-        runs, error = self._get(f"/repos/{owner}/{repo}/commits/{ref}/check-runs")
-        if error and error != ERROR_GENERIC:
-            return CHECK_NONE, error
-        if isinstance(runs, dict):
-            entries = runs.get("check_runs")
+        runs = self.get(f"/repos/{owner}/{repo}/commits/{ref}/check-runs")
+        if not runs.ok and runs.error_key not in tolerated:
+            return CHECK_NONE, runs.error_key
+        if runs.ok:
+            entries = runs.data.get("check_runs")
             if isinstance(entries, list):
                 for entry in entries:
                     if not isinstance(entry, dict):
@@ -358,47 +199,26 @@ class GitHubClient:
 
         return combine_check_states(states), ""
 
-    def snapshot(self, owner: str, repo: str, ref: str = "") -> RepositorySnapshot:
+    def repository_badge(self, owner: str, repo: str, ref: str = "") -> tuple[int, str, str]:
         """
-        Fetches everything the panels need for one repository.
+        Fetches just the two numbers the sidebar shows for a repository.
+
+        Deliberately not ``snapshot``: that one asks for the check state of every
+        open pull request, which is one request each. The sidebar needs the count
+        and the state of the current branch's tip, and nothing else, so it costs
+        two requests regardless of how many pull requests are open.
 
         Args:
             owner: Repository owner.
             repo: Repository name.
-            ref: Commit or branch whose check state should be read.
+            ref: Commit or branch whose check state is wanted.
 
         Returns:
-            RepositorySnapshot: Collected data, or one carrying an error key.
+            tuple[int, str, str]: Open pull requests, check state and an error key.
         """
 
-        pulls, error = self.pull_requests(owner, repo)
-        if error:
-            return RepositorySnapshot(
-                owner=owner,
-                repo=repo,
-                error_key=error,
-                retry_after_minutes=self.rate_limited_for_minutes,
-            )
-
-        found_issues, issue_error = self.issues(owner, repo)
-        head_state, _state_error = self.check_state(owner, repo, ref)
-
-        enriched: list[PullRequest] = []
-        for pull in pulls:
-            if pull.head_sha:
-                state, _error = self.check_state(owner, repo, pull.head_sha)
-                enriched.append(pull.with_check_state(state))
-            else:
-                enriched.append(pull)
-
-        # A failure fetching issues does not propagate: the pull requests were
-        # fetched successfully and throwing them away over a secondary panel
-        # would be the wrong trade. The issues list simply comes back empty.
-        del issue_error
-        return RepositorySnapshot(
-            owner=owner,
-            repo=repo,
-            pull_requests=tuple(enriched),
-            issues=tuple(found_issues),
-            head_check_state=head_state,
-        )
+        pulls = self.list_pull_requests(owner, repo, state="open", limit=MAX_ITEMS_PER_LIST)
+        if not pulls.ok:
+            return 0, CHECK_NONE, pulls.error_key
+        state, error = self.check_state(owner, repo, ref)
+        return len(pulls.payload or []), state, error

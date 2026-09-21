@@ -16,9 +16,9 @@ than a guess.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from constants import GIT_TIMEOUT_CLONE, GIT_TIMEOUT_NETWORK
 from gitops import remote_url

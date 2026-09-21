@@ -53,7 +53,8 @@ IMAGE_SUFFIXES = frozenset(
 )
 
 _HUNK_HEADER = re.compile(
-    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@(?P<heading>.*)$"
+    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))?"
+    r" \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@(?P<heading>.*)$"
 )
 
 _WORD_PATTERN = re.compile(r"\w+|\s+|[^\w\s]")
@@ -351,7 +352,7 @@ def annotate_word_diff(hunk: DiffHunk) -> None:
             index += 1
         removed = lines[removed_start:added_start]
         added = lines[added_start:index]
-        for old_line, new_line in zip(removed, added):
+        for old_line, new_line in zip(removed, added, strict=False):
             old_spans, new_spans = intra_line_spans(old_line.text, new_line.text)
             old_line.spans = old_spans
             new_line.spans = new_spans

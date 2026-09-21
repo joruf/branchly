@@ -11,7 +11,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from gitops.diff import DiffHunk, FileDiff, LINE_ADDED, LINE_NO_NEWLINE, LINE_REMOVED
+from gitops.diff import LINE_ADDED, LINE_NO_NEWLINE, LINE_REMOVED, DiffHunk, FileDiff
 from gitops.refname import is_safe_argument
 from gitops.runner import GitResult, run
 

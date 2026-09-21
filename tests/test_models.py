@@ -23,7 +23,7 @@ from models.sort import (
 )
 
 
-def _entry(name: str, **kwargs) -> RepoEntry:
+def _entry(name: str, **kwargs: object) -> RepoEntry:
     """
     Builds an entry with a throwaway path.
 
@@ -187,7 +187,10 @@ class SortTests(unittest.TestCase):
         conflicted.status.conflicted_files = 1
         unpushed = _entry("unpushed")
         unpushed.status.ahead = 3
-        ordered = [item.name for item in sort_entries([clean, unpushed, dirty, conflicted], SORT_CHANGES_FIRST)]
+        ordered = [
+            item.name
+            for item in sort_entries([clean, unpushed, dirty, conflicted], SORT_CHANGES_FIRST)
+        ]
         self.assertEqual(["conflicted", "dirty", "unpushed", "clean"], ordered)
 
     def test_manual_order(self) -> None:

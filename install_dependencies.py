@@ -231,7 +231,8 @@ def run_command(
             raise SystemExit(1) from error
         return 1
 
-    assert process.stdout is not None
+    # stdout=PIPE was passed, so this is a type narrowing rather than a check.
+    assert process.stdout is not None  # noqa: S101
     for line in process.stdout:
         emit(line.rstrip("\n"))
     code = process.wait()
