@@ -31,6 +31,28 @@ def _load(code: str) -> dict[str, str]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _duplicate_keys(code: str) -> list[str]:
+    """
+    Finds keys a locale file lists more than once.
+
+    Args:
+        code: Language code.
+
+    Returns:
+        list[str]: Duplicated keys, sorted.
+    """
+
+    seen: list[str] = []
+
+    def collect(pairs: list[tuple[str, object]]) -> dict:
+        seen.extend(key for key, _value in pairs)
+        return dict(pairs)
+
+    path = i18n.LOCALES_DIR / f"{code}.json"
+    json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=collect)
+    return sorted({key for key in seen if seen.count(key) > 1})
+
+
 class LocaleFileTests(unittest.TestCase):
     def test_locales_directory_exists(self) -> None:
         self.assertTrue(i18n.LOCALES_DIR.is_dir())
@@ -43,6 +65,14 @@ class LocaleFileTests(unittest.TestCase):
     def test_every_locale_has_a_label(self) -> None:
         for code, label in i18n.available_languages():
             self.assertTrue(label, f"{code} has no display label")
+
+    def test_no_key_is_written_twice(self) -> None:
+        # JSON keeps the last of two identical keys and says nothing, so a
+        # duplicate silently replaces an earlier text with an unrelated one.
+        # Only the raw file can show it; the parsed catalog cannot.
+        for code in ("en", "de"):
+            with self.subTest(code=code):
+                self.assertEqual([], _duplicate_keys(code))
 
     def test_key_sets_are_identical(self) -> None:
         english = set(_load("en"))

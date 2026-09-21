@@ -257,6 +257,7 @@ class Sidebar(QWidget):
         column.setSpacing(6)
 
         self._search = QLineEdit(holder)
+        self._search.setToolTip(i18n.t("tip.search"))
         self._search.setPlaceholderText(i18n.t("sidebar.search"))
         self._search.setClearButtonEnabled(True)
         self._search.textChanged.connect(lambda _text: self.refresh())
@@ -270,6 +271,7 @@ class Sidebar(QWidget):
         row.addWidget(label)
 
         self._sort = QComboBox(holder)
+        self._sort.setToolTip(i18n.t("tip.sort"))
         for mode in VALID_SORT_MODES:
             self._sort.addItem(i18n.t(SORT_MODE_LABEL_KEYS[mode]), mode)
         index = self._sort.findData(self._sort_mode)
@@ -294,6 +296,7 @@ class Sidebar(QWidget):
         column.setSpacing(4)
 
         self._summary = QLabel("", holder)
+        self._summary.setToolTip(i18n.t("tip.sidebar_summary"))
         self._summary.setObjectName("Muted")
         self._summary.setWordWrap(True)
         column.addWidget(self._summary)
@@ -304,6 +307,7 @@ class Sidebar(QWidget):
         column.addWidget(self._progress)
 
         self._check_all = QPushButton(i18n.t("sidebar.check_all"), holder)
+        self._check_all.setToolTip(i18n.t("tip.check_all"))
         self._check_all.clicked.connect(lambda: self.check_requested.emit(""))
         column.addWidget(self._check_all)
 

@@ -242,7 +242,9 @@ class InlineMessage(QFrame):
             self._token = token
         self.refresh()
 
-    def add_action(self, label: str, action_id: str, primary: bool = False) -> QPushButton:
+    def add_action(
+        self, label: str, action_id: str, primary: bool = False, tip: str = ""
+    ) -> QPushButton:
         """
         Adds a button to the strip.
 
@@ -250,12 +252,17 @@ class InlineMessage(QFrame):
             label: Button text.
             action_id: Identifier emitted by ``action_clicked``.
             primary: Whether it is styled as the main action.
+            tip: Tooltip text. A strip's button often appears out of nowhere in
+                reaction to something, so saying what it does matters more here
+                than for a button that has always been on screen.
 
         Returns:
             QPushButton: The button, for callers that need to disable it later.
         """
 
         button = QPushButton(label)
+        if tip:
+            button.setToolTip(tip)
         if primary:
             button.setObjectName("Primary")
         button.clicked.connect(lambda: self.action_clicked.emit(action_id))

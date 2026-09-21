@@ -221,6 +221,7 @@ class IssueEditorDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_title"), self._title)
 
         self._body = QPlainTextEdit(start.body, self)
+        self._body.setToolTip(i18n.t("tip.issue_body"))
         self._body.setMinimumHeight(BODY_MIN_HEIGHT)
         self._form.addRow(i18n.t("github.field_body"), self._body)
 
@@ -231,6 +232,7 @@ class IssueEditorDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_assignees"), self._assignees)
 
         self._milestone = QComboBox(self)
+        self._milestone.setToolTip(i18n.t("tip.field_milestone"))
         self._milestone.addItem(i18n.t("github.milestone_none"), None)
         for number, title in milestones:
             self._milestone.addItem(title, number)
@@ -321,6 +323,7 @@ class PullRequestEditorDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_title"), self._title)
 
         self._head = QComboBox(self)
+        self._head.setToolTip(i18n.t("tip.field_head"))
         self._head.addItems(branches)
         if start.head:
             self._select(self._head, start.head)
@@ -328,16 +331,19 @@ class PullRequestEditorDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_head"), self._head)
 
         self._base = QComboBox(self)
+        self._base.setToolTip(i18n.t("tip.field_base"))
         self._base.addItems(branches)
         if start.base:
             self._select(self._base, start.base)
         self._form.addRow(i18n.t("github.field_base"), self._base)
 
         self._body = QPlainTextEdit(start.body, self)
+        self._body.setToolTip(i18n.t("tip.pr_body"))
         self._body.setMinimumHeight(BODY_MIN_HEIGHT)
         self._form.addRow(i18n.t("github.field_body"), self._body)
 
         self._draft = QCheckBox(i18n.t("github.field_draft"), self)
+        self._draft.setToolTip(i18n.t("tip.field_draft"))
         self._draft.setChecked(start.draft)
         self._draft.setVisible(not editing)
         self._form.addRow("", self._draft)
@@ -460,6 +466,7 @@ class MergeDialog(_FormDialog):
         self._form.addRow(i18n.t("github.merge_method"), choices)
 
         self._title = QLineEdit(self)
+        self._title.setToolTip(i18n.t("tip.merge_title"))
         self._title.setPlaceholderText(i18n.t("github.merge_title_placeholder"))
         self._form.addRow(i18n.t("github.field_title"), self._title)
 
@@ -470,6 +477,7 @@ class MergeDialog(_FormDialog):
         self._delete_branch = QCheckBox(
             i18n.t("github.merge_delete_branch", branch=head_branch), self
         )
+        self._delete_branch.setToolTip(i18n.t("tip.merge_delete_branch"))
         self._delete_branch.setChecked(delete_branch)
         self._form.addRow("", self._delete_branch)
 
@@ -556,6 +564,7 @@ class ReviewDialog(_FormDialog):
         self._form.addRow(i18n.t("github.review_kind"), choices)
 
         self._body = QPlainTextEdit(self)
+        self._body.setToolTip(i18n.t("tip.review_body"))
         self._body.setMinimumHeight(BODY_MIN_HEIGHT)
         self._form.addRow(i18n.t("github.field_body"), self._body)
 
@@ -613,6 +622,7 @@ class CommentDialog(_FormDialog):
             parent,
         )
         self._body = QPlainTextEdit(text, self)
+        self._body.setToolTip(i18n.t("tip.comment_body"))
         self._body.setMinimumHeight(BODY_MIN_HEIGHT)
         self._form.addRow(i18n.t("github.field_body"), self._body)
 
@@ -694,12 +704,14 @@ class ReleaseEditorDialog(_FormDialog):
         start = draft or ReleaseDraft()
 
         self._tag = QComboBox(self)
+        self._tag.setToolTip(i18n.t("tip.field_tag"))
         self._tag.setEditable(True)
         self._tag.addItems(tags)
         self._tag.setCurrentText(start.tag_name)
         self._form.addRow(i18n.t("github.field_tag"), self._tag)
 
         self._target = QComboBox(self)
+        self._target.setToolTip(i18n.t("tip.field_target"))
         self._target.addItems(branches)
         if start.target:
             index = self._target.findText(start.target)
@@ -708,23 +720,28 @@ class ReleaseEditorDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_target"), self._target)
 
         self._name = QLineEdit(start.name, self)
+        self._name.setToolTip(i18n.t("tip.release_name"))
         self._name.setPlaceholderText(i18n.t("github.release_name_placeholder"))
         self._form.addRow(i18n.t("github.field_title"), self._name)
 
         self._body = QPlainTextEdit(start.body, self)
+        self._body.setToolTip(i18n.t("tip.release_body"))
         self._body.setMinimumHeight(NOTES_MIN_HEIGHT)
         self._form.addRow(i18n.t("github.field_notes"), self._body)
 
         self._generate = QCheckBox(i18n.t("github.release_generate_notes"), self)
+        self._generate.setToolTip(i18n.t("tip.release_generate"))
         self._generate.setChecked(start.generate_notes)
         self._generate.setVisible(not editing)
         self._form.addRow("", self._generate)
 
         self._draft = QCheckBox(i18n.t("github.release_draft"), self)
+        self._draft.setToolTip(i18n.t("tip.release_draft"))
         self._draft.setChecked(start.draft)
         self._form.addRow("", self._draft)
 
         self._prerelease = QCheckBox(i18n.t("github.release_prerelease"), self)
+        self._prerelease.setToolTip(i18n.t("tip.release_prerelease"))
         self._prerelease.setChecked(start.prerelease)
         self._form.addRow("", self._prerelease)
 
@@ -881,10 +898,12 @@ class RepositorySettingsDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_homepage"), self._homepage)
 
         self._topics = QLineEdit(", ".join(settings.topics), self)
+        self._topics.setToolTip(i18n.t("tip.field_topics"))
         self._topics.setPlaceholderText(i18n.t("github.topics_placeholder"))
         self._form.addRow(i18n.t("github.field_topics"), self._topics)
 
         self._default_branch = QComboBox(self)
+        self._default_branch.setToolTip(i18n.t("tip.field_default_branch"))
         self._default_branch.addItems(branches or [settings.default_branch])
         index = self._default_branch.findText(settings.default_branch)
         if index >= 0:
@@ -892,38 +911,48 @@ class RepositorySettingsDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_default_branch"), self._default_branch)
 
         self._visibility = QComboBox(self)
+        self._visibility.setToolTip(i18n.t("tip.field_visibility"))
         self._visibility.addItem(i18n.t("github.visibility_private"), "private")
         self._visibility.addItem(i18n.t("github.visibility_public"), "public")
         self._visibility.setCurrentIndex(0 if settings.visibility != "public" else 1)
         self._form.addRow(i18n.t("github.field_visibility"), self._visibility)
 
         self._has_issues = QCheckBox(i18n.t("github.feature_issues"), self)
+        self._has_issues.setToolTip(i18n.t("tip.feature_issues"))
         self._has_issues.setChecked(settings.has_issues)
         self._form.addRow("", self._has_issues)
 
         self._has_wiki = QCheckBox(i18n.t("github.feature_wiki"), self)
+        self._has_wiki.setToolTip(i18n.t("tip.feature_wiki"))
         self._has_wiki.setChecked(settings.has_wiki)
         self._form.addRow("", self._has_wiki)
 
         self._has_projects = QCheckBox(i18n.t("github.feature_projects"), self)
+        self._has_projects.setToolTip(i18n.t("tip.feature_projects"))
         self._has_projects.setChecked(settings.has_projects)
         self._form.addRow("", self._has_projects)
 
         self._has_discussions = QCheckBox(i18n.t("github.feature_discussions"), self)
+        self._has_discussions.setToolTip(i18n.t("tip.feature_discussions"))
         self._has_discussions.setChecked(settings.has_discussions)
         self._form.addRow("", self._has_discussions)
 
         self._archived = QCheckBox(i18n.t("github.feature_archived"), self)
+        self._archived.setToolTip(i18n.t("tip.feature_archived"))
         self._archived.setChecked(settings.archived)
         self._form.addRow("", self._archived)
 
         self._allow_merge = QCheckBox(i18n.t("github.allow_merge_commit"), self)
+        self._allow_merge.setToolTip(i18n.t("tip.allow_merge"))
         self._allow_merge.setChecked(settings.allow_merge_commit)
         self._allow_squash = QCheckBox(i18n.t("github.allow_squash"), self)
+        self._allow_squash.setToolTip(i18n.t("tip.allow_squash"))
         self._allow_squash.setChecked(settings.allow_squash_merge)
         self._allow_rebase = QCheckBox(i18n.t("github.allow_rebase"), self)
+        self._allow_rebase.setToolTip(i18n.t("tip.allow_rebase"))
         self._allow_rebase.setChecked(settings.allow_rebase_merge)
         self._delete_on_merge = QCheckBox(i18n.t("github.delete_branch_on_merge"), self)
+        self._delete_on_merge.setToolTip(i18n.t("tip.delete_on_merge"))
         self._delete_on_merge.setChecked(settings.delete_branch_on_merge)
         merge_block = QWidget(self)
         merge_column = QVBoxLayout(merge_block)
@@ -943,9 +972,11 @@ class RepositorySettingsDialog(_FormDialog):
         people_layout = QHBoxLayout(people_row)
         people_layout.setContentsMargins(0, 0, 0, 0)
         self._new_person = QLineEdit(people_row)
+        self._new_person.setToolTip(i18n.t("tip.collaborator_name"))
         self._new_person.setPlaceholderText(i18n.t("github.collaborator_placeholder"))
         people_layout.addWidget(self._new_person, 1)
         self._permission = QComboBox(people_row)
+        self._permission.setToolTip(i18n.t("tip.collaborator_permission"))
         for value, label_key in (
             ("pull", "github.permission_read"),
             ("triage", "github.permission_triage"),
@@ -1125,6 +1156,7 @@ class DeleteRepositoryDialog(QDialog):
         column.addWidget(prompt)
 
         self._confirmation = QLineEdit(self)
+        self._confirmation.setToolTip(i18n.t("tip.delete_confirmation"))
         self._confirmation.textChanged.connect(self._on_typed)
         column.addWidget(self._confirmation)
 
@@ -1207,9 +1239,11 @@ class CreateRepositoryDialog(_FormDialog):
         super().__init__(i18n.t("github.repo_new"), i18n.t("github.create"), parent)
 
         self._name = QLineEdit(self)
+        self._name.setToolTip(i18n.t("tip.repo_name"))
         self._form.addRow(i18n.t("github.field_name"), self._name)
 
         self._owner = QComboBox(self)
+        self._owner.setToolTip(i18n.t("tip.repo_owner"))
         self._owner.addItem(i18n.t("github.owner_personal"), "")
         for organization in organizations:
             self._owner.addItem(organization, organization)
@@ -1219,25 +1253,30 @@ class CreateRepositoryDialog(_FormDialog):
         self._form.addRow(i18n.t("github.field_description"), self._description)
 
         self._visibility = QComboBox(self)
+        self._visibility.setToolTip(i18n.t("tip.repo_visibility"))
         self._visibility.addItem(i18n.t("github.visibility_private"), True)
         self._visibility.addItem(i18n.t("github.visibility_public"), False)
         self._form.addRow(i18n.t("github.field_visibility"), self._visibility)
 
         self._gitignore = QComboBox(self)
+        self._gitignore.setToolTip(i18n.t("tip.repo_gitignore"))
         for template in GITIGNORE_TEMPLATES:
             self._gitignore.addItem(template or i18n.t("github.gitignore_none"), template)
         self._form.addRow(i18n.t("github.field_gitignore"), self._gitignore)
 
         self._license = QComboBox(self)
+        self._license.setToolTip(i18n.t("tip.repo_license"))
         for key, label_key in LICENSE_TEMPLATES:
             self._license.addItem(i18n.t(label_key), key)
         self._form.addRow(i18n.t("github.field_license"), self._license)
 
         self._auto_init = QCheckBox(i18n.t("github.repo_auto_init"), self)
+        self._auto_init.setToolTip(i18n.t("tip.repo_auto_init"))
         self._auto_init.setChecked(True)
         self._form.addRow("", self._auto_init)
 
         self._clone = QCheckBox(i18n.t("github.repo_clone_after"), self)
+        self._clone.setToolTip(i18n.t("tip.repo_clone_after"))
         self._clone.setChecked(True)
         self._form.addRow("", self._clone)
 
@@ -1441,9 +1480,11 @@ class LabelMilestoneDialog(QDialog):
 
         label_row = QHBoxLayout()
         self._new_label = QLineEdit(self)
+        self._new_label.setToolTip(i18n.t("tip.label_name"))
         self._new_label.setPlaceholderText(i18n.t("github.label_name_placeholder"))
         label_row.addWidget(self._new_label, 1)
         self._new_color = QLineEdit(self)
+        self._new_color.setToolTip(i18n.t("tip.label_color"))
         self._new_color.setPlaceholderText("ededed")
         self._new_color.setMaximumWidth(90)
         label_row.addWidget(self._new_color)
@@ -1469,6 +1510,7 @@ class LabelMilestoneDialog(QDialog):
 
         milestone_row = QHBoxLayout()
         self._new_milestone = QLineEdit(self)
+        self._new_milestone.setToolTip(i18n.t("tip.milestone_title"))
         self._new_milestone.setPlaceholderText(i18n.t("github.milestone_title_placeholder"))
         milestone_row.addWidget(self._new_milestone, 1)
         add_milestone = QPushButton(i18n.t("github.create"), self)
@@ -1701,6 +1743,7 @@ class RepositoryPickerDialog(QDialog):
         column = QVBoxLayout(self)
 
         self._search = QLineEdit(self)
+        self._search.setToolTip(i18n.t("tip.repo_search"))
         self._search.setPlaceholderText(i18n.t("clone.search_placeholder"))
         self._search.textChanged.connect(self._refilter)
         column.addWidget(self._search)

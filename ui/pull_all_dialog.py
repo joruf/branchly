@@ -120,6 +120,7 @@ class PullAllDialog(QDialog):
         row.setSpacing(8)
         row.addStretch(1)
         self._start = QPushButton(i18n.t("pull_all.start"), self)
+        self._start.setToolTip(i18n.t("tip.pull_all_start"))
         self._start.setObjectName("Primary")
         self._start.setDefault(True)
         self._start.clicked.connect(self._begin)

@@ -222,6 +222,26 @@ laufen auf einem Worker-Thread. Während des Installierens ist *Schließen* gesp
 ein Worker, der Dateien schreibt, darf nicht ins Leere laufen. Nichts wird ohne
 Rückfrage installiert, und der Neustart passiert erst, wenn das Fenster weg ist.
 
+## Tooltips
+
+Jedes Bedienelement, dessen Beschriftung die Frage „was macht das" offen lässt,
+trägt einen Tooltip. Die Texte liegen wie alles andere in `locales/` unter dem
+Präfix `tip.`, damit sie übersetzbar sind und an einer Stelle stehen.
+
+Zwei Regeln dafür:
+
+- **Ein Tooltip wiederholt nie die Beschriftung.** „Speichern" als Erklärung für
+  einen Knopf namens „Speichern" ist verschwendeter Platz. Gesagt wird, was
+  passiert, und wo es sich lohnt auch, was *nicht* passiert.
+- **Ein abgeschalteter Knopf begründet sich.** Der Commit-Knopf ohne Kurzfassung,
+  der Merge-Knopf bei einem Entwurf, eine Merge-Methode, die das Repository
+  abgeschaltet hat: der Tooltip nennt jeweils den Grund.
+
+Abgesichert ist das von `tests/test_tooltips.py`: ein Schlüssel, den es im
+Katalog nicht gibt, würde als roher Schlüsselname im Tooltip landen, ohne dass
+irgendetwas abstürzt, und ein später hinzugefügtes Bedienelement hätte einfach
+keinen. Der Test prüft beides.
+
 ## Farben
 
 Kein Widget enthält einen Hex-Wert. Alles kommt aus `config/theme.py`:

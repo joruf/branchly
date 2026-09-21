@@ -992,6 +992,7 @@ class DiffView(QWidget):
         row.setSpacing(8)
 
         self._target = QComboBox(holder)
+        self._target.setToolTip(i18n.t("tip.diff_target"))
         for target in VALID_TARGETS:
             self._target.addItem(i18n.t(TARGET_LABEL_KEYS[target]), target)
         # "Your edits vs. the last saved version" is what someone looking at a
@@ -1004,6 +1005,7 @@ class DiffView(QWidget):
         row.addWidget(self._target)
 
         self._mode_box = QComboBox(holder)
+        self._mode_box.setToolTip(i18n.t("tip.diff_mode"))
         self._mode_box.addItem(i18n.t("diff.mode_side_by_side"), DIFF_SIDE_BY_SIDE)
         self._mode_box.addItem(i18n.t("diff.mode_unified"), DIFF_UNIFIED)
         index = self._mode_box.findData(self._mode)
@@ -1013,11 +1015,13 @@ class DiffView(QWidget):
         row.addWidget(self._mode_box)
 
         self._whitespace = QCheckBox(i18n.t("diff.ignore_whitespace"), holder)
+        self._whitespace.setToolTip(i18n.t("tip.diff_whitespace"))
         self._whitespace.setChecked(ignore_whitespace)
         self._whitespace.toggled.connect(self._on_option_toggled)
         row.addWidget(self._whitespace)
 
         self._words = QCheckBox(i18n.t("diff.word_level"), holder)
+        self._words.setToolTip(i18n.t("tip.diff_words"))
         self._words.setChecked(word_level)
         self._words.toggled.connect(self._on_option_toggled)
         row.addWidget(self._words)
@@ -1025,15 +1029,18 @@ class DiffView(QWidget):
         row.addStretch(1)
 
         self._counts = QLabel("", holder)
+        self._counts.setToolTip(i18n.t("tip.diff_counts"))
         self._counts.setObjectName("Muted")
         row.addWidget(self._counts)
 
         self._open_button = QPushButton(i18n.t("diff.open_file"), holder)
+        self._open_button.setToolTip(i18n.t("tip.diff_open"))
         self._open_button.clicked.connect(lambda: self.open_file_requested.emit(self._path))
         self._open_button.setEnabled(False)
         row.addWidget(self._open_button)
 
         self._reveal_button = QPushButton(i18n.t("diff.open_folder"), holder)
+        self._reveal_button.setToolTip(i18n.t("tip.diff_reveal"))
         self._reveal_button.clicked.connect(lambda: self.reveal_file_requested.emit(self._path))
         self._reveal_button.setEnabled(False)
         row.addWidget(self._reveal_button)
