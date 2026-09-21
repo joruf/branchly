@@ -387,6 +387,28 @@ selbst, und ein `setItemWidget` pro Zeile hieße, sie nachzubauen. Das Delegate
 verkleinert zuerst das Textrechteck um die Breite des Zeichens, sonst liefe ein
 langer Pfad darunter hindurch statt vorher gekürzt zu werden.
 
+### Tooltips
+
+Die Texte stehen in `locales/` unter dem Präfix `tip.`, nicht im Code. Gesetzt
+werden sie direkt beim Bau des Widgets, damit man beim Hinzufügen eines
+Bedienelements darüber stolpert.
+
+Drei Fehler kann man dabei machen, und keiner davon stürzt ab:
+
+| Fehler | Was der Nutzer sieht | Was ihn findet |
+|---|---|---|
+| Schlüssel fehlt im Katalog | den rohen Schlüsselnamen, etwa `tip.pr_merge` | `test_tooltips.py`, Abgleich Code gegen Katalog |
+| Neues Bedienelement ohne Tooltip | gar nichts | `test_tooltips.py`, Abdeckung der dauerhaft sichtbaren Bereiche |
+| Schlüssel zweimal vergeben | den Text des *anderen* Elements | `test_i18n.py`, `_duplicate_keys()` |
+
+Der dritte ist der unangenehmste und ist beim Bauen tatsächlich passiert:
+`tip.repo_name` war zweimal definiert, einmal für die Projektbezeichnung in der
+Kopfzeile und einmal für das Namensfeld beim Anlegen. JSON behält stillschweigend
+den letzten, also erklärte die Kopfzeile plötzlich die erlaubten Zeichen eines
+Repository-Namens. Beide Schlüsselmengen waren dabei vollständig und identisch,
+der vorhandene Paritätstest konnte das nicht sehen. Deshalb liest der neue Test
+die Datei roh statt geparst.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`

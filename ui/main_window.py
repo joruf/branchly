@@ -222,31 +222,38 @@ class MainWindow(QMainWindow):
         row.setSpacing(8)
 
         self._repo_label = QLabel("", holder)
+        self._repo_label.setToolTip(i18n.t("tip.current_repo"))
         self._repo_label.setObjectName("Heading")
         row.addWidget(self._repo_label)
 
         self._branch_label = QLabel("", holder)
+        self._branch_label.setToolTip(i18n.t("tip.branch_current"))
         self._branch_label.setObjectName("Muted")
         row.addWidget(self._branch_label)
         row.addStretch(1)
 
         self._new_branch_button = QPushButton(i18n.t("branch.new"), holder)
+        self._new_branch_button.setToolTip(i18n.t("tip.branch_new"))
         self._new_branch_button.clicked.connect(self._prompt_new_branch)
         row.addWidget(self._new_branch_button)
 
         self._switch_branch_button = QPushButton(i18n.t("branch.switch"), holder)
+        self._switch_branch_button.setToolTip(i18n.t("tip.branch_switch"))
         self._switch_branch_button.clicked.connect(self._prompt_switch_branch)
         row.addWidget(self._switch_branch_button)
 
         self._fetch_button = QPushButton(i18n.t("sync.fetch"), holder)
+        self._fetch_button.setToolTip(i18n.t("tip.fetch"))
         self._fetch_button.clicked.connect(self._do_fetch)
         row.addWidget(self._fetch_button)
 
         self._pull_button = QPushButton(i18n.t("sync.pull_generic"), holder)
+        self._pull_button.setToolTip(i18n.t("tip.pull"))
         self._pull_button.clicked.connect(self._do_pull)
         row.addWidget(self._pull_button)
 
         self._push_button = QPushButton(i18n.t("sync.push_generic"), holder)
+        self._push_button.setToolTip(i18n.t("tip.push"))
         self._push_button.setObjectName("Primary")
         self._push_button.clicked.connect(self._do_push)
         row.addWidget(self._push_button)
@@ -2004,8 +2011,15 @@ class MainWindow(QMainWindow):
             i18n.t("update.available"), describe_update(info), "success"
         )
         self._update_banner.clear_actions()
-        self._update_banner.add_action(i18n.t("update.install"), ACTION_UPDATE_INSTALL, primary=True)
-        self._update_banner.add_action(i18n.t("update.later"), ACTION_UPDATE_LATER)
+        self._update_banner.add_action(
+            i18n.t("update.install"),
+            ACTION_UPDATE_INSTALL,
+            primary=True,
+            tip=i18n.t("tip.update_install"),
+        )
+        self._update_banner.add_action(
+            i18n.t("update.later"), ACTION_UPDATE_LATER, tip=i18n.t("tip.update_later")
+        )
         self._update_banner.setVisible(True)
 
     def _on_update_banner_action(self, action_id: str) -> None:

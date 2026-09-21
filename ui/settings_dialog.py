@@ -166,6 +166,7 @@ class SettingsDialog(QDialog):
         form.setSpacing(10)
 
         self._language = QComboBox(page)
+        self._language.setToolTip(i18n.t("tip.settings_language"))
         for code, label in i18n.available_languages():
             self._language.addItem(label, code)
         index = self._language.findData(self._original.language)
@@ -174,6 +175,7 @@ class SettingsDialog(QDialog):
         form.addRow(i18n.t("settings.language"), self._language)
 
         self._theme = QComboBox(page)
+        self._theme.setToolTip(i18n.t("tip.settings_theme"))
         for name in available_themes():
             self._theme.addItem(i18n.t(_THEME_LABEL_KEYS.get(name, name)), name)
         index = self._theme.findData(self._original.theme)
@@ -182,6 +184,7 @@ class SettingsDialog(QDialog):
         form.addRow(i18n.t("settings.theme"), self._theme)
 
         self._sort = QComboBox(page)
+        self._sort.setToolTip(i18n.t("tip.settings_sort"))
         for mode in VALID_SORT_MODES:
             self._sort.addItem(i18n.t(SORT_MODE_LABEL_KEYS[mode]), mode)
         index = self._sort.findData(self._original.sort_mode)
@@ -190,6 +193,7 @@ class SettingsDialog(QDialog):
         form.addRow(i18n.t("settings.sort_mode"), self._sort)
 
         self._confirm = QCheckBox(i18n.t("settings.confirm_destructive"), page)
+        self._confirm.setToolTip(i18n.t("tip.settings_confirm"))
         self._confirm.setChecked(self._original.confirm_destructive)
         form.addRow("", self._confirm)
 
@@ -199,6 +203,7 @@ class SettingsDialog(QDialog):
         form.addRow("", hint)
 
         repair = QPushButton(i18n.t("settings.repair_deps"), page)
+        repair.setToolTip(i18n.t("tip.settings_repair"))
         repair.clicked.connect(self._open_repair_installer)
         form.addRow("", repair)
 
@@ -240,6 +245,7 @@ class SettingsDialog(QDialog):
         form.setSpacing(10)
 
         self._interval = QComboBox(page)
+        self._interval.setToolTip(i18n.t("tip.settings_interval"))
         for minutes in AUTO_CHECK_PRESETS:
             label = (
                 i18n.t("settings.auto_check_off")
@@ -264,6 +270,7 @@ class SettingsDialog(QDialog):
         form.addRow("", hint)
 
         self._check_online = QCheckBox(i18n.t("settings.check_online"), page)
+        self._check_online.setToolTip(i18n.t("tip.settings_check_online"))
         self._check_online.setChecked(self._original.check_online_automatically)
         form.addRow("", self._check_online)
 
@@ -273,6 +280,7 @@ class SettingsDialog(QDialog):
         form.addRow("", online_hint)
 
         self._check_updates = QCheckBox(i18n.t("settings.check_updates"), page)
+        self._check_updates.setToolTip(i18n.t("tip.settings_check_updates"))
         self._check_updates.setChecked(self._original.check_updates)
         form.addRow("", self._check_updates)
 
@@ -295,6 +303,7 @@ class SettingsDialog(QDialog):
         form.setSpacing(10)
 
         self._diff_mode = QComboBox(page)
+        self._diff_mode.setToolTip(i18n.t("tip.diff_mode"))
         self._diff_mode.addItem(i18n.t("diff.mode_side_by_side"), DIFF_SIDE_BY_SIDE)
         self._diff_mode.addItem(i18n.t("diff.mode_unified"), DIFF_UNIFIED)
         index = self._diff_mode.findData(self._original.diff_mode)
@@ -303,10 +312,12 @@ class SettingsDialog(QDialog):
         form.addRow(i18n.t("settings.diff_default"), self._diff_mode)
 
         self._diff_whitespace = QCheckBox(i18n.t("diff.ignore_whitespace"), page)
+        self._diff_whitespace.setToolTip(i18n.t("tip.diff_whitespace"))
         self._diff_whitespace.setChecked(self._original.diff_ignore_whitespace)
         form.addRow("", self._diff_whitespace)
 
         self._diff_words = QCheckBox(i18n.t("diff.word_level"), page)
+        self._diff_words.setToolTip(i18n.t("tip.diff_words"))
         self._diff_words.setChecked(self._original.diff_word_level)
         form.addRow("", self._diff_words)
         return page
@@ -324,16 +335,19 @@ class SettingsDialog(QDialog):
         column.setSpacing(10)
 
         self._github_enabled = QCheckBox(i18n.t("settings.github_enabled"), page)
+        self._github_enabled.setToolTip(i18n.t("tip.settings_github_enabled"))
         self._github_enabled.setChecked(self._original.github_enabled)
         column.addWidget(self._github_enabled)
 
         self._show_avatars = QCheckBox(i18n.t("settings.show_avatars"), page)
+        self._show_avatars.setToolTip(i18n.t("tip.settings_avatars"))
         self._show_avatars.setChecked(self._original.show_avatars)
         column.addWidget(self._show_avatars)
 
         form = QFormLayout()
         form.setSpacing(8)
         self._token = QLineEdit(page)
+        self._token.setToolTip(i18n.t("tip.settings_token"))
         self._token.setEchoMode(QLineEdit.EchoMode.Password)
         self._token.setPlaceholderText(i18n.t("settings.github_token_placeholder"))
         form.addRow(i18n.t("settings.github_token"), self._token)
@@ -347,8 +361,10 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         row.setSpacing(8)
         self._save_token = QPushButton(i18n.t("settings.github_token_save"), page)
+        self._save_token.setToolTip(i18n.t("tip.settings_token_save"))
         self._save_token.clicked.connect(self._on_save_token)
         self._remove_token = QPushButton(i18n.t("settings.github_token_remove"), page)
+        self._remove_token.setToolTip(i18n.t("tip.settings_token_remove"))
         self._remove_token.clicked.connect(self._on_remove_token)
         row.addWidget(self._save_token)
         row.addWidget(self._remove_token)

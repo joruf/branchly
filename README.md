@@ -96,6 +96,12 @@ the state from before.
 
 ![GitHub panel](docs/screenshots/github-panel-dark.png)
 
+**It explains itself**
+- Hover anything and it says what it does, what it does not do, and what to watch
+  out for. A disabled button says why it is disabled
+- The explanations are translated like everything else, and a test catches both a
+  control that was given none and a key that was written twice
+
 **Two languages, two themes**
 - German and English; a new language is one JSON file in `locales/`
 - Dark and light; a new theme is one entry in `config/theme.py`

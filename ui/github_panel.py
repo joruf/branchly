@@ -99,9 +99,11 @@ class GitHubPanel(QWidget):
 
         header = SectionHeader(i18n.t("github.title"), self)
         self._settings_button = QPushButton(i18n.t("github.settings_button"), header)
+        self._settings_button.setToolTip(i18n.t("tip.repo_settings"))
         self._settings_button.clicked.connect(self._open_settings)
         header.add_widget(self._settings_button)
         self._refresh_button = QPushButton(i18n.t("action.refresh"), header)
+        self._refresh_button.setToolTip(i18n.t("tip.github_refresh"))
         self._refresh_button.clicked.connect(self.refresh_requested.emit)
         header.add_widget(self._refresh_button)
         layout.addWidget(header)
@@ -126,6 +128,10 @@ class GitHubPanel(QWidget):
         self._tabs.addTab(self._issues, i18n.t("github.issues"))
         self._tabs.addTab(self._releases, i18n.t("github.releases"))
         self._tabs.addTab(self._runs, i18n.t("github.runs"))
+        for index, key in enumerate(
+            ("tip.tab_pulls", "tip.tab_issues", "tip.tab_releases", "tip.tab_runs")
+        ):
+            self._tabs.setTabToolTip(index, i18n.t(key))
         self._tabs.currentChanged.connect(self._on_tab_changed)
         self._stack.addWidget(self._tabs)
 

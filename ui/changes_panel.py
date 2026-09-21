@@ -157,12 +157,15 @@ class ChangesPanel(QWidget):
 
         self._header = SectionHeader(i18n.t("changes.title"), self)
         self._selected_label = QLabel("", self._header)
+        self._selected_label.setToolTip(i18n.t("tip.selected_count"))
         self._selected_label.setObjectName("Muted")
         self._header.add_widget(self._selected_label)
         self._select_all = QPushButton(i18n.t("changes.select_all"), self._header)
+        self._select_all.setToolTip(i18n.t("tip.select_all"))
         self._select_all.clicked.connect(lambda: self._set_all_checked(True))
         self._header.add_widget(self._select_all)
         self._select_none = QPushButton(i18n.t("changes.select_none"), self._header)
+        self._select_none.setToolTip(i18n.t("tip.select_none"))
         self._select_none.clicked.connect(lambda: self._set_all_checked(False))
         self._header.add_widget(self._select_none)
         layout.addWidget(self._header)
@@ -170,7 +173,9 @@ class ChangesPanel(QWidget):
         self._conflict_notice = InlineMessage(
             i18n.t("conflict.intro_title"), i18n.t("conflict.intro_hint"), "warning", self
         )
-        self._conflict_notice.add_action(i18n.t("conflict.intro_start"), "resolve", primary=True)
+        self._conflict_notice.add_action(
+            i18n.t("conflict.intro_start"), "resolve", primary=True, tip=i18n.t("tip.resolve")
+        )
         self._conflict_notice.action_clicked.connect(lambda _id: self.resolve_requested.emit())
         self._conflict_notice.setVisible(False)
         notice_holder = QWidget(self)
@@ -223,12 +228,14 @@ class ChangesPanel(QWidget):
         column.addWidget(self._hint)
 
         self._summary = QLineEdit(holder)
+        self._summary.setToolTip(i18n.t("tip.commit_summary"))
         self._summary.setPlaceholderText(i18n.t("changes.summary_placeholder"))
         self._summary.textChanged.connect(lambda _text: self._update_commit_button())
         self._summary.returnPressed.connect(self._emit_commit)
         column.addWidget(self._summary)
 
         self._description = QPlainTextEdit(holder)
+        self._description.setToolTip(i18n.t("tip.commit_description"))
         self._description.setPlaceholderText(i18n.t("changes.description_placeholder"))
         self._description.setFixedHeight(64)
         column.addWidget(self._description)
@@ -237,6 +244,7 @@ class ChangesPanel(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         self._amend = QCheckBox(i18n.t("changes.amend"), holder)
+        self._amend.setToolTip(i18n.t("tip.amend"))
         row.addWidget(self._amend)
         row.addStretch(1)
         self._commit_button = QPushButton("", holder)
@@ -592,7 +600,7 @@ class ChangesPanel(QWidget):
             self._commit_button.setToolTip(i18n.t("changes.commit_needs_summary"))
             return
         self._commit_button.setEnabled(True)
-        self._commit_button.setToolTip("")
+        self._commit_button.setToolTip(i18n.t("tip.commit"))
 
     def _emit_commit(self) -> None:
         """

@@ -439,19 +439,25 @@ class RemoteTab(QWidget):
 
     # ------------------------------------------------------------------ helpers
 
-    def _button(self, label_key: str, handler: Callable[[], None]) -> QPushButton:
+    def _button(
+        self, label_key: str, handler: Callable[[], None], tip_key: str = ""
+    ) -> QPushButton:
         """
         Adds a button to the action row.
 
         Args:
             label_key: Translation key for the label.
             handler: What to call when it is pressed.
+            tip_key: Translation key for the tooltip. A button whose label
+                already says everything gets none.
 
         Returns:
             QPushButton: The button.
         """
 
         button = QPushButton(i18n.t(label_key), self)
+        if tip_key:
+            button.setToolTip(i18n.t(tip_key))
         button.clicked.connect(lambda: handler())
         self._actions.addWidget(button)
         return button
@@ -469,6 +475,7 @@ class RemoteTab(QWidget):
 
         button = QToolButton(self)
         button.setText(i18n.t("github.more_actions"))
+        button.setToolTip(i18n.t("tip.more_actions"))
         button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(button)
         for label_key, handler in entries:
@@ -609,6 +616,7 @@ class PullRequestsTab(RemoteTab):
         self._detail_for: int | None = None
 
         self._state = QComboBox(self)
+        self._state.setToolTip(i18n.t("tip.state_filter"))
         self._state.addItem(i18n.t("github.state_open"), pull_api.STATE_OPEN)
         self._state.addItem(i18n.t("github.state_closed"), pull_api.STATE_CLOSED)
         self._state.addItem(i18n.t("github.state_all"), pull_api.STATE_ALL)
@@ -617,13 +625,19 @@ class PullRequestsTab(RemoteTab):
         self._toolbar.addWidget(self._state)
         self._toolbar.addStretch(1)
 
-        self._new = self._button("github.pr_new", self._on_new)
-        self._edit = self._button("github.action_edit", self._on_edit)
-        self._comment = self._button("github.action_comment", self._on_comment)
-        self._review = self._button("github.review_title", self._on_review)
-        self._merge = self._button("github.merge_title", self._on_merge)
-        self._checkout = self._button("github.pr_checkout", self._on_checkout)
-        self._open = self._button("github.open_in_browser", self.open_selected)
+        self._new = self._button("github.pr_new", self._on_new, "tip.pr_new")
+        self._edit = self._button("github.action_edit", self._on_edit, "tip.pr_edit")
+        self._comment = self._button(
+            "github.action_comment", self._on_comment, "tip.pr_comment"
+        )
+        self._review = self._button("github.review_title", self._on_review, "tip.pr_review")
+        self._merge = self._button("github.merge_title", self._on_merge, "tip.pr_merge")
+        self._checkout = self._button(
+            "github.pr_checkout", self._on_checkout, "tip.pr_checkout"
+        )
+        self._open = self._button(
+            "github.open_in_browser", self.open_selected, "tip.open_in_browser"
+        )
         self._more = self._menu_button(
             [
                 ("github.action_close", self._on_close),
@@ -1306,6 +1320,7 @@ class IssuesTab(RemoteTab):
         self._detail_for: int | None = None
 
         self._state = QComboBox(self)
+        self._state.setToolTip(i18n.t("tip.state_filter"))
         self._state.addItem(i18n.t("github.state_open"), issue_api.STATE_OPEN)
         self._state.addItem(i18n.t("github.state_closed"), issue_api.STATE_CLOSED)
         self._state.addItem(i18n.t("github.state_all"), issue_api.STATE_ALL)
@@ -1314,11 +1329,15 @@ class IssuesTab(RemoteTab):
         self._toolbar.addWidget(self._state)
         self._toolbar.addStretch(1)
 
-        self._new = self._button("github.issue_new", self._on_new)
-        self._edit = self._button("github.action_edit", self._on_edit)
-        self._comment = self._button("github.action_comment", self._on_comment)
-        self._close = self._button("github.action_close", self._on_close)
-        self._open = self._button("github.open_in_browser", self.open_selected)
+        self._new = self._button("github.issue_new", self._on_new, "tip.issue_new")
+        self._edit = self._button("github.action_edit", self._on_edit, "tip.issue_edit")
+        self._comment = self._button(
+            "github.action_comment", self._on_comment, "tip.issue_comment"
+        )
+        self._close = self._button("github.action_close", self._on_close, "tip.issue_close")
+        self._open = self._button(
+            "github.open_in_browser", self.open_selected, "tip.open_in_browser"
+        )
         self._more = self._menu_button(
             [
                 ("github.issue_close_not_planned", self._on_close_not_planned),
@@ -1860,11 +1879,17 @@ class ReleasesTab(RemoteTab):
         self._toolbar.addWidget(QLabel(i18n.t("github.releases"), self))
         self._toolbar.addStretch(1)
 
-        self._new = self._button("github.release_new", self._on_new)
-        self._edit = self._button("github.action_edit", self._on_edit)
-        self._upload = self._button("github.asset_upload", self._on_upload)
-        self._delete = self._button("github.action_delete", self._on_delete)
-        self._open = self._button("github.open_in_browser", self.open_selected)
+        self._new = self._button("github.release_new", self._on_new, "tip.release_new")
+        self._edit = self._button("github.action_edit", self._on_edit, "tip.release_edit")
+        self._upload = self._button(
+            "github.asset_upload", self._on_upload, "tip.release_upload"
+        )
+        self._delete = self._button(
+            "github.action_delete", self._on_delete, "tip.release_delete"
+        )
+        self._open = self._button(
+            "github.open_in_browser", self.open_selected, "tip.open_in_browser"
+        )
         self._more = self._menu_button(
             [
                 ("github.asset_delete", self._on_delete_asset),
@@ -2268,6 +2293,7 @@ class ActionsTab(RemoteTab):
         super().__init__(client, runner, show_avatars, parent)
 
         self._scope = QComboBox(self)
+        self._scope.setToolTip(i18n.t("tip.runs_scope"))
         self._scope.addItem(i18n.t("github.runs_all_branches"), "")
         self._scope.addItem(i18n.t("github.runs_this_branch"), "branch")
         self._scope.currentIndexChanged.connect(lambda *_args: self.reload())
@@ -2275,10 +2301,16 @@ class ActionsTab(RemoteTab):
         self._toolbar.addWidget(self._scope)
         self._toolbar.addStretch(1)
 
-        self._rerun = self._button("github.run_rerun", lambda: self._on_rerun(False))
-        self._rerun_failed = self._button("github.run_rerun_failed", lambda: self._on_rerun(True))
-        self._cancel = self._button("github.run_cancel", self._on_cancel)
-        self._open = self._button("github.open_in_browser", self.open_selected)
+        self._rerun = self._button(
+            "github.run_rerun", lambda: self._on_rerun(False), "tip.run_rerun"
+        )
+        self._rerun_failed = self._button(
+            "github.run_rerun_failed", lambda: self._on_rerun(True), "tip.run_rerun_failed"
+        )
+        self._cancel = self._button("github.run_cancel", self._on_cancel, "tip.run_cancel")
+        self._open = self._button(
+            "github.open_in_browser", self.open_selected, "tip.open_in_browser"
+        )
         self._more = self._menu_button(
             [
                 ("github.workflow_dispatch", self._on_dispatch),

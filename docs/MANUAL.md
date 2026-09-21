@@ -3,6 +3,17 @@
 Dieses Handbuch beschreibt jede Funktion in der Reihenfolge, in der man ihr im
 Programm begegnet. Git-Vorwissen wird nicht vorausgesetzt.
 
+## Wenn du nicht weiterweißt
+
+Fahre mit der Maus über einen Knopf, ein Eingabefeld oder ein Auswahlfeld und
+warte einen Moment. Fast alles in Branchly erklärt sich dann selbst: was die
+Schaltfläche tut, was sie **nicht** tut, und worauf du achten solltest. Die
+Erklärungen sind absichtlich ganze Sätze und keine Wiederholung der Beschriftung.
+
+Ein ausgegrauter Knopf sagt im Tooltip, warum er gerade nicht geht, etwa weil
+noch keine Kurzfassung geschrieben ist oder weil ein Pull Request noch ein
+Entwurf ist.
+
 ## Die drei Bereiche
 
 Links die **Projektliste**, in der Mitte **Änderungen / Graph / Pull Requests**,
