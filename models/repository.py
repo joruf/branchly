@@ -168,6 +168,11 @@ class RepoEntry:
         remote_url: Fetch URL of ``origin``, or an empty string.
         last_opened: Unix timestamp of the last time it was selected.
         status: Last known scan result.
+        deselected_paths: Files the user unticked in the commit box. Stored
+            rather than the ticked ones, because everything is ticked by default
+            and only the exceptions are worth remembering: a file added to this
+            set stays out of the next commit across a restart, and a new file
+            appearing in the working tree is ticked without having to be listed.
     """
 
     path: Path
@@ -178,6 +183,7 @@ class RepoEntry:
     remote_url: str = ""
     last_opened: float | None = None
     status: RepoStatus = field(default_factory=RepoStatus)
+    deselected_paths: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         """
@@ -208,6 +214,22 @@ class RepoEntry:
         except OSError:
             return str(self.path)
 
+    def forget_selection(self, paths: list[str]) -> None:
+        """
+        Drops paths from the remembered deselection.
+
+        Called after a commit: whatever went in is settled, and a stale entry
+        would keep unticking a file that has nothing to do with the old change.
+
+        Args:
+            paths: Repository-relative paths to forget.
+
+        Returns:
+            None
+        """
+
+        self.deselected_paths.difference_update(paths)
+
     @property
     def exists(self) -> bool:
         """
@@ -236,6 +258,7 @@ class RepoEntry:
             "remote_url": self.remote_url,
             "last_opened": self.last_opened,
             "status": self.status.to_dict(),
+            "deselected_paths": sorted(self.deselected_paths),
         }
 
     @classmethod
@@ -262,6 +285,12 @@ class RepoEntry:
         order = data.get("order")
         remote_url = data.get("remote_url")
         last_opened = data.get("last_opened")
+        raw_deselected = data.get("deselected_paths")
+        deselected = (
+            {item for item in raw_deselected if isinstance(item, str) and item}
+            if isinstance(raw_deselected, list)
+            else set()
+        )
         return cls(
             path=Path(raw_path),
             name=name if isinstance(name, str) else "",
@@ -271,4 +300,5 @@ class RepoEntry:
             remote_url=remote_url if isinstance(remote_url, str) else "",
             last_opened=float(last_opened) if isinstance(last_opened, (int, float)) else None,
             status=RepoStatus.from_dict(data.get("status")),
+            deselected_paths=deselected,
         )

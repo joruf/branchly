@@ -28,9 +28,17 @@ from PySide6.QtWidgets import (
 
 import i18n
 from config.theme import get_theme_colors
+from gitops import ignore as ignore_mod
 from gitops.commit import CommitDraft
 from gitops.status import CHANGE_UNTRACKED, RepositoryState
 from ui.widgets import EmptyState, InlineMessage, SectionHeader
+
+# Which wording the ignore submenu uses for each kind of offer.
+_IGNORE_LABEL_KEYS = {
+    ignore_mod.KIND_FILE: "ignore.this_file",
+    ignore_mod.KIND_EXTENSION: "ignore.this_extension",
+    ignore_mod.KIND_FOLDER: "ignore.this_folder",
+}
 
 _ROLE_PATH = int(Qt.ItemDataRole.UserRole)
 _ROLE_UNTRACKED = int(Qt.ItemDataRole.UserRole) + 1
@@ -58,6 +66,7 @@ class ChangesPanel(QWidget):
     reveal_file_requested = Signal(str)
     resolve_requested = Signal()
     selection_changed = Signal()
+    ignore_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -106,6 +115,10 @@ class ChangesPanel(QWidget):
         self._list = QListWidget(self)
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._show_context_menu)
+        # Paths the user unticked. Kept here rather than read back off the list,
+        # so a file that vanishes from the working tree and comes back later is
+        # still unticked.
+        self._deselected: set[str] = set()
         self._list.currentItemChanged.connect(self._on_current_changed)
         self._list.itemChanged.connect(self._on_item_changed)
         self._stack.addWidget(self._list)
@@ -161,13 +174,22 @@ class ChangesPanel(QWidget):
 
     # ------------------------------------------------------------------ filling
 
-    def set_state(self, state: RepositoryState | None, branch: str = "") -> None:
+    def set_state(
+        self,
+        state: RepositoryState | None,
+        branch: str = "",
+        deselected: set[str] | None = None,
+    ) -> None:
         """
         Rebuilds the list from a repository state.
 
         Args:
             state: Freshly read state, or None to clear the panel.
             branch: Branch name for the commit button label.
+            deselected: Paths the user unticked earlier, remembered across
+                restarts. Passing None keeps whatever is ticked right now, which
+                is what a plain refresh wants; passing a set is what switching to
+                a repository does.
 
         Returns:
             None
@@ -176,7 +198,8 @@ class ChangesPanel(QWidget):
         self._state = state
         self._branch = branch or (state.display_branch if state else "")
 
-        previously_checked = self.checked_paths()
+        if deselected is not None:
+            self._deselected = set(deselected)
         previously_current = self.current_path()
 
         self._list.blockSignals(True)
@@ -214,10 +237,9 @@ class ChangesPanel(QWidget):
                     | Qt.ItemFlag.ItemIsSelectable
                     | Qt.ItemFlag.ItemIsUserCheckable
                 )
-                # Keep whatever the user had ticked across a refresh. On the first
-                # look at a repository nothing was ticked yet, and starting with
-                # everything selected matches what people expect from a commit box.
-                keep = change.path in previously_checked if previously_checked else True
+                # Everything is ticked unless the user said otherwise, and what
+                # they said survives a refresh and a restart alike.
+                keep = change.path not in self._deselected
                 item.setCheckState(Qt.CheckState.Checked if keep else Qt.CheckState.Unchecked)
         self._list.blockSignals(False)
 
@@ -352,9 +374,57 @@ class ChangesPanel(QWidget):
                 continue
             item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
         self._list.blockSignals(False)
+        self._remember_ticks()
         self._update_selected_label()
         self._update_commit_button()
         self.selection_changed.emit()
+
+    def deselected_paths(self) -> set[str]:
+        """
+        Returns the paths the user unticked.
+
+        Returns:
+            set[str]: Repository-relative paths, including ones not currently in
+                the working tree, so a deselection outlives a temporary absence.
+        """
+
+        return set(self._deselected)
+
+    def forget_selection(self, paths: list[str]) -> None:
+        """
+        Drops paths from the remembered deselection.
+
+        Args:
+            paths: Repository-relative paths to forget.
+
+        Returns:
+            None
+        """
+
+        self._deselected.difference_update(paths)
+
+    def _remember_ticks(self) -> None:
+        """
+        Copies the current tick marks into the remembered set.
+
+        Only the rows on screen are touched: a path that is not listed right now
+        keeps whatever was remembered about it.
+
+        Returns:
+            None
+        """
+
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            path = item.data(_ROLE_PATH)
+            if not isinstance(path, str) or not path:
+                continue
+            if not (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
+                continue
+            if item.checkState() == Qt.CheckState.Checked:
+                self._deselected.discard(path)
+            else:
+                self._deselected.add(path)
 
     def _on_item_changed(self, _item: QListWidgetItem) -> None:
         """
@@ -367,6 +437,7 @@ class ChangesPanel(QWidget):
             None
         """
 
+        self._remember_ticks()
         self._update_selected_label()
         self._update_commit_button()
         self.selection_changed.emit()
@@ -481,6 +552,22 @@ class ChangesPanel(QWidget):
         menu.addAction(i18n.t("diff.open_file"), lambda: self.open_file_requested.emit(path))
         menu.addAction(i18n.t("diff.open_folder"), lambda: self.reveal_file_requested.emit(path))
         menu.addAction(i18n.t("diff.copy_path"), lambda: self._copy_path(path))
+
+        offers = ignore_mod.suggestions(path)
+        if offers:
+            ignore_menu = menu.addMenu(i18n.t("ignore.menu"))
+            for offer in offers:
+                ignore_menu.addAction(
+                    i18n.t(_IGNORE_LABEL_KEYS[offer.kind], name=offer.subject),
+                    lambda _checked=False, pattern=offer.pattern: self.ignore_requested.emit(pattern),
+                )
+            if not untracked:
+                # A tracked file keeps being tracked whatever .gitignore says, so
+                # the entry is offered but the reason it may do nothing is said
+                # here rather than discovered later.
+                ignore_menu.setToolTip(i18n.t("ignore.tracked_hint"))
+                ignore_menu.setToolTipsVisible(True)
+
         if conflicted:
             menu.addSeparator()
             menu.addAction(i18n.t("conflict.intro_start"), self.resolve_requested.emit)

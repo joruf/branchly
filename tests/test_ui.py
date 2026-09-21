@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover - PySide6 missing is a valid environment
 
 import i18n
 from config.theme import THEME_DARK, THEME_LIGHT, get_theme_colors
-from gitops.diff import parse_unified
+from gitops.diff import FileDiff, parse_unified
 from tests.support import requires_git, temp_repo, temp_repo_pair
 
 requires_qt = unittest.skipUnless(QT_AVAILABLE, "PySide6 is not installed")
@@ -51,14 +51,47 @@ class DiffRenderingTests(unittest.TestCase):
         self.diff = parse_unified(SAMPLE_DIFF)
         self.colors = get_theme_colors(THEME_DARK)
 
-    def test_side_by_side_has_both_versions(self) -> None:
-        html = self.diff_view.render_side_by_side(self.diff, self.colors)
-        # The changed number is wrapped in highlight markup, so the line is not
-        # present as one literal string.
-        self.assertIn("8080", html)
-        self.assertIn("3000", html)
-        self.assertEqual(2, html.count("port = "))
-        self.assertIn("<table>", html)
+    def _panes(self, diff: FileDiff | None = None, word_level: bool = True) -> tuple[str, str]:
+        """
+        Renders both sides of a comparison.
+
+        Args:
+            diff: Diff to render, defaulting to the sample one.
+            word_level: Whether intra-line highlighting is on.
+
+        Returns:
+            tuple[str, str]: The old side and the new side.
+        """
+
+        target = self.diff if diff is None else diff
+        return (
+            self.diff_view.render_pane(target, self.diff_view.SIDE_OLD, self.colors, word_level),
+            self.diff_view.render_pane(target, self.diff_view.SIDE_NEW, self.colors, word_level),
+        )
+
+    def test_each_side_holds_only_its_own_version(self) -> None:
+        old_html, new_html = self._panes()
+        self.assertIn("8080", old_html)
+        self.assertNotIn("3000", old_html)
+        self.assertIn("3000", new_html)
+        self.assertNotIn("8080", new_html)
+        self.assertIn("<table>", old_html)
+
+    def test_both_sides_have_the_same_number_of_rows(self) -> None:
+        # The two documents scroll together, so a row on one side must have a
+        # row facing it on the other. Otherwise the halves drift apart.
+        payload = (
+            "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,3 +1,4 @@\n"
+            " keep\n-gone\n+new one\n+new two\n gone too\n"
+        )
+        old_html, new_html = self._panes(parse_unified(payload))
+        self.assertEqual(old_html.count("<tr"), new_html.count("<tr"))
+
+    def test_a_blank_side_still_takes_a_line(self) -> None:
+        payload = "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1,2 @@\n one\n+two\n"
+        old_html, _new_html = self._panes(parse_unified(payload))
+        # An empty cell would collapse and the sides would stop lining up.
+        self.assertIn("&nbsp;", old_html)
 
     def test_unified_has_markers(self) -> None:
         html = self.diff_view.render_unified(self.diff, self.colors)
@@ -67,19 +100,20 @@ class DiffRenderingTests(unittest.TestCase):
         self.assertIn(">+<", html)
 
     def test_word_level_highlight_is_present(self) -> None:
-        html = self.diff_view.render_side_by_side(self.diff, self.colors, word_level=True)
-        self.assertIn(self.colors.diff_word_added_bg, html)
+        _old_html, new_html = self._panes(word_level=True)
+        self.assertIn(self.colors.diff_word_added_bg, new_html)
 
     def test_word_level_can_be_switched_off(self) -> None:
-        html = self.diff_view.render_side_by_side(self.diff, self.colors, word_level=False)
-        self.assertNotIn(self.colors.diff_word_added_bg, html)
+        _old_html, new_html = self._panes(word_level=False)
+        self.assertNotIn(self.colors.diff_word_added_bg, new_html)
 
     def test_html_is_escaped(self) -> None:
         payload = (
             "diff --git a/x.html b/x.html\n--- a/x.html\n+++ b/x.html\n@@ -1 +1 @@\n"
             "-<script>alert('a')</script>\n+<b>safe</b>\n"
         )
-        html = self.diff_view.render_side_by_side(parse_unified(payload), self.colors)
+        old_html, new_html = self._panes(parse_unified(payload))
+        html = old_html + new_html
         # No raw tag from the file may survive into the document. The word-level
         # highlight splits the text, so the angle brackets are checked on their
         # own rather than as part of a whole tag.
@@ -98,7 +132,9 @@ class DiffRenderingTests(unittest.TestCase):
 
     def test_both_themes_render(self) -> None:
         for theme in (THEME_DARK, THEME_LIGHT):
-            html = self.diff_view.render_side_by_side(self.diff, get_theme_colors(theme))
+            html = self.diff_view.render_pane(
+                self.diff, self.diff_view.SIDE_NEW, get_theme_colors(theme)
+            )
             self.assertIn(get_theme_colors(theme).surface, html)
 
     def test_many_files_are_concatenated(self) -> None:
@@ -110,9 +146,14 @@ class DiffRenderingTests(unittest.TestCase):
 
         diffs = parse_multi(payload)
         self.assertEqual(2, len(diffs))
-        html = self.diff_view.render_many(diffs, "side_by_side", self.colors)
+        html = self.diff_view.render_many(diffs, "unified", self.colors)
         self.assertIn("config.py", html)
         self.assertIn("other.py", html)
+
+        for side in (self.diff_view.SIDE_OLD, self.diff_view.SIDE_NEW):
+            pane = self.diff_view.render_many_panes(diffs, side, self.colors)
+            self.assertIn("config.py", pane)
+            self.assertIn("other.py", pane)
 
     def test_empty_list_still_produces_a_document(self) -> None:
         html = self.diff_view.render_many([], "unified", self.colors)
