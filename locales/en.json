@@ -634,5 +634,16 @@
   "github.label_rename_hint": "Renames the selected label to the name typed above.",
   "github.label_rename_needs_name": "Type the new name in the field above first.",
   "github.milestone_close": "Close",
-  "github.milestone_close_hint": "Closes the milestone without deleting it, so the history keeps it."
+  "github.milestone_close_hint": "Closes the milestone without deleting it, so the history keeps it.",
+  "ignore.menu": "Ignore…",
+  "ignore.this_file": "Only this file ({name})",
+  "ignore.this_extension": "All {name} files",
+  "ignore.this_folder": "The whole folder {name}",
+  "ignore.tracked_hint": "This file is already tracked. An entry in .gitignore changes nothing until it is removed from version control.",
+  "ignore.added": "{pattern} added to .gitignore",
+  "ignore.added_new_file": "{pattern} added, .gitignore was created",
+  "ignore.already_there": "{pattern} is already in .gitignore",
+  "ignore.pattern_empty": "There is nothing to ignore here",
+  "ignore.unreadable": ".gitignore could not be read",
+  "ignore.write_failed": ".gitignore could not be written"
 }

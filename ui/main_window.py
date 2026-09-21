@@ -47,6 +47,7 @@ from github_api.client import GitHubClient
 from gitops import branch as branch_mod
 from gitops import conflict as conflict_mod
 from gitops import diff as diff_mod
+from gitops import ignore as ignore_mod
 from gitops import remote as remote_mod
 from gitops import stage as stage_mod
 from gitops.commit import CommitDraft
@@ -324,6 +325,8 @@ class MainWindow(QMainWindow):
         self._changes.open_file_requested.connect(self._open_repo_file)
         self._changes.reveal_file_requested.connect(self._reveal_repo_file)
         self._changes.resolve_requested.connect(self._open_conflict_assistant)
+        self._changes.ignore_requested.connect(self._add_to_gitignore)
+        self._changes.selection_changed.connect(self._remember_selection)
 
         self._diff.options_changed.connect(self._persist_diff_options)
         self._diff.reload_requested.connect(self._reload_diff)
@@ -440,7 +443,7 @@ class MainWindow(QMainWindow):
             self._graph.set_history(read_history(entry.path))
             return
 
-        self._reload_current()
+        self._reload_current(restore_selection=True)
         self._reload_github()
 
     def _show_empty_state(self) -> None:
@@ -462,9 +465,14 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ reloading
 
-    def _reload_current(self) -> None:
+    def _reload_current(self, restore_selection: bool = False) -> None:
         """
         Reads the current repository's state and refreshes the panels.
+
+        Args:
+            restore_selection: Whether to apply the deselection stored for this
+                repository. True when switching to it, False for a plain
+                refresh, where whatever is ticked right now must stay ticked.
 
         Returns:
             None
@@ -485,7 +493,11 @@ class MainWindow(QMainWindow):
             return
 
         self._branch_label.setText(state.display_branch)
-        self._changes.set_state(state, state.display_branch)
+        self._changes.set_state(
+            state,
+            state.display_branch,
+            deselected=set(entry.deselected_paths) if restore_selection else None,
+        )
         self._update_notice(state)
         self._update_sync_buttons(state)
         self._reload_graph()
@@ -788,7 +800,64 @@ class MainWindow(QMainWindow):
             self._report(result)
             return
         self._changes.clear_draft()
+        # Whatever went in is settled. Keeping it in the deselection would untick
+        # a future, unrelated change to the same file.
+        self._changes.forget_selection(selected)
+        entry.forget_selection(selected)
+        self._save_registry()
         self.statusBar().showMessage(draft.summary.strip(), 4000)
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _remember_selection(self) -> None:
+        """
+        Stores which files the user unticked, so a restart brings them back.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        chosen = self._changes.deselected_paths()
+        if chosen == entry.deselected_paths:
+            return
+        entry.deselected_paths = chosen
+        self._save_registry()
+
+    def _add_to_gitignore(self, pattern: str) -> None:
+        """
+        Writes one pattern into the repository's ``.gitignore``.
+
+        Args:
+            pattern: The line to add, as the context menu built it.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None or not pattern:
+            return
+
+        outcome = ignore_mod.add_pattern(entry.path, pattern)
+        if not outcome.ok:
+            box = QMessageBox(self)
+            box.setWindowTitle(i18n.t("error.title"))
+            box.setText(i18n.t(outcome.error_key or "error.title"))
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.exec()
+            return
+
+        if outcome.already_present:
+            self.statusBar().showMessage(
+                i18n.t("ignore.already_there", pattern=outcome.pattern), 5000
+            )
+            return
+
+        key = "ignore.added_new_file" if outcome.created else "ignore.added"
+        self.statusBar().showMessage(i18n.t(key, pattern=outcome.pattern), 5000)
         self._reload_current()
         self._start_scan(entry.key)
 

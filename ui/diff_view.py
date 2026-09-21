@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QScrollBar,
+    QSplitter,
     QStackedWidget,
     QTextBrowser,
     QVBoxLayout,
@@ -51,6 +53,19 @@ from gitops.diff import (
 from ui.widgets import EmptyState, InlineMessage, apply_monospace
 
 TAB_WIDTH = 4
+
+
+# Narrowest either side of a comparison may become, in pixels. Wide enough
+# for the line numbers plus a few words of code.
+PANE_MIN_WIDTH = 140
+
+# How much room the line numbers get. Wide enough for five digits, which is
+# more lines than anyone reads in one file.
+GUTTER_WIDTH = 52
+
+# Which half of a comparison a pane shows.
+SIDE_OLD = "old"
+SIDE_NEW = "new"
 
 
 def _escape(text: str) -> str:
@@ -153,7 +168,10 @@ def _document_head(colors: ThemeColors) -> str:
         f"body {{ background-color:{colors.surface}; color:{colors.text}; margin:0; }}"
         "table { border-collapse:collapse; width:100%; }"
         "td { padding:0 6px; vertical-align:top; white-space:pre; }"
-        f"td.gutter {{ text-align:right; width:1%; color:{colors.diff_gutter_text};"
+        # A fixed width rather than the "width:1%" shrink trick: Qt's rich text
+        # engine does not honour that, and in a two-column pane the gutter then
+        # takes half the width and pushes the code off the right edge.
+        f"td.gutter {{ text-align:right; width:{GUTTER_WIDTH}px; color:{colors.diff_gutter_text};"
         f" background-color:{colors.diff_gutter_bg}; -qt-user-state:0; }}"
         f"tr.hunk td {{ background-color:{colors.diff_header_bg}; color:{colors.diff_header_text};"
         " padding:3px 6px; }"
@@ -161,9 +179,26 @@ def _document_head(colors: ThemeColors) -> str:
     )
 
 
+def _hunk_label(hunk: DiffHunk) -> str:
+    """
+    Builds the text introducing a hunk.
+
+    Args:
+        hunk: Hunk being rendered.
+
+    Returns:
+        str: Escaped label.
+    """
+
+    heading = _escape(hunk.heading.strip())
+    label = f"@@ −{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@"
+    suffix = f"  {heading}" if heading else ""
+    return f"{_escape(label)}{suffix}"
+
+
 def _hunk_header_row(hunk: DiffHunk, columns: int) -> str:
     """
-    Builds the row that introduces a hunk.
+    Builds the row that introduces a hunk in the one-column layout.
 
     Args:
         hunk: Hunk being rendered.
@@ -173,10 +208,53 @@ def _hunk_header_row(hunk: DiffHunk, columns: int) -> str:
         str: HTML table row.
     """
 
-    heading = _escape(hunk.heading.strip())
-    label = f"@@ −{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@"
-    suffix = f"  {heading}" if heading else ""
-    return f'<tr class="hunk"><td colspan="{columns}">{_escape(label)}{suffix}</td></tr>'
+    return f'<tr class="hunk"><td colspan="{columns}">{_hunk_label(hunk)}</td></tr>'
+
+
+def _pane_header_row(text: str, style: str = "") -> str:
+    """
+    Builds a heading row for a pane, without spanning the columns.
+
+    A row with ``colspan`` is what makes Qt's text engine give up on the column
+    widths: the line-number column then takes a third of the pane and pushes the
+    code off the right edge. Two real cells keep the widths where they belong.
+
+    Args:
+        text: Already escaped heading text.
+        style: Extra inline style for the content cell.
+
+    Returns:
+        str: HTML table row.
+    """
+
+    attribute = f' style="{style}"' if style else ""
+    return f'<tr class="hunk"><td class="gutter"></td><td{attribute}>{text}</td></tr>'
+
+
+def _file_header_row(diff: FileDiff, columns: int, colors: ThemeColors) -> str:
+    """
+    Builds the row naming a file in a multi-file document.
+
+    Args:
+        diff: The file's diff.
+        columns: Number of table columns to span.
+        colors: Active theme tokens.
+
+    Returns:
+        str: HTML table row.
+    """
+
+    name = diff.path or diff.old_path or "?"
+    counts = f"+{diff.added} −{diff.removed}"
+    style = (
+        f"background-color:{colors.surface_alt};color:{colors.text};"
+        "padding:6px;font-weight:bold;"
+    )
+    muted = f"color:{colors.text_muted};font-weight:normal;"
+    return (
+        f'<tr><td colspan="{columns}" style="{style}">{_escape(name)}'
+        f'<span style="{muted}">  {_escape(counts)}</span></td></tr>'
+    )
 
 
 def _cell(line: DiffLine | None, colors: ThemeColors, word_level: bool) -> str:
@@ -193,7 +271,12 @@ def _cell(line: DiffLine | None, colors: ThemeColors, word_level: bool) -> str:
     """
 
     if line is None:
-        return f'<td class="gutter" style="background-color:{colors.diff_gutter_bg};"></td><td></td>'
+        # A non-breaking space, because an empty cell collapses and the two
+        # panes would stop lining up with each other while scrolling.
+        return (
+            f'<td class="gutter" style="background-color:{colors.diff_gutter_bg};"></td>'
+            f"<td>&nbsp;</td>"
+        )
 
     background, gutter, foreground = _line_styles(line.kind, colors)
     number = line.old_lineno if line.kind in {LINE_REMOVED} else line.new_lineno
@@ -210,12 +293,40 @@ def _cell(line: DiffLine | None, colors: ThemeColors, word_level: bool) -> str:
     )
 
 
-def render_side_by_side(diff: FileDiff, colors: ThemeColors, word_level: bool = True) -> str:
+def _pane_rows(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool) -> list[str]:
     """
-    Renders a diff as two columns.
+    Builds the rows of one side of a comparison.
+
+    Both sides get a row for every display pair, including the blank ones, so
+    the two documents have the same number of lines and stay level with each
+    other while scrolling.
 
     Args:
         diff: Parsed diff.
+        side: ``SIDE_OLD`` or ``SIDE_NEW``.
+        colors: Active theme tokens.
+        word_level: Whether to apply intra-line highlighting.
+
+    Returns:
+        list[str]: HTML table rows.
+    """
+
+    rows: list[str] = []
+    for hunk in diff.hunks:
+        rows.append(_pane_header_row(_hunk_label(hunk)))
+        for left, right in pair_lines(hunk):
+            line = left if side == SIDE_OLD else right
+            rows.append(f"<tr>{_cell(line, colors, word_level)}</tr>")
+    return rows
+
+
+def render_pane(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool = True) -> str:
+    """
+    Renders one side of a comparison as its own document.
+
+    Args:
+        diff: Parsed diff.
+        side: ``SIDE_OLD`` for the version before, ``SIDE_NEW`` for after.
         colors: Active theme tokens.
         word_level: Whether to apply intra-line highlighting.
 
@@ -223,12 +334,54 @@ def render_side_by_side(diff: FileDiff, colors: ThemeColors, word_level: bool = 
         str: Complete HTML document.
     """
 
-    rows: list[str] = []
-    for hunk in diff.hunks:
-        rows.append(_hunk_header_row(hunk, 4))
-        for left, right in pair_lines(hunk):
-            rows.append(f"<tr>{_cell(left, colors, word_level)}{_cell(right, colors, word_level)}</tr>")
+    rows = _pane_rows(diff, side, colors, word_level)
     return f"{_document_head(colors)}<table>{''.join(rows)}</table>"
+
+
+def render_many_panes(
+    diffs: list[FileDiff], side: str, colors: ThemeColors, word_level: bool = True
+) -> str:
+    """
+    Renders one side of several files as a single document.
+
+    Args:
+        diffs: Parsed diffs, in the order they should appear.
+        side: ``SIDE_OLD`` or ``SIDE_NEW``.
+        colors: Active theme tokens.
+        word_level: Whether to apply intra-line highlighting.
+
+    Returns:
+        str: Complete HTML document.
+    """
+
+    if not diffs:
+        return _document_head(colors)
+
+    blocks: list[str] = []
+    for diff in diffs:
+        name = diff.path or diff.old_path or "?"
+        counts = f"+{diff.added} \u2212{diff.removed}"
+        heading = (
+            f"{_escape(name)}"
+            f'<span style="color:{colors.text_muted};font-weight:normal;">'
+            f"  {_escape(counts)}</span>"
+        )
+        rows = [
+            _pane_header_row(
+                heading,
+                f"background-color:{colors.surface_alt};color:{colors.text};font-weight:bold;",
+            )
+        ]
+        if diff.binary:
+            rows.append(
+                f'<tr><td class="gutter"></td>'
+                f'<td style="color:{colors.text_muted};">'
+                f"{_escape(i18n.t('diff.binary'))}</td></tr>"
+            )
+        else:
+            rows.extend(_pane_rows(diff, side, colors, word_level))
+        blocks.append(f"<table>{''.join(rows)}</table>")
+    return f"{_document_head(colors)}{''.join(blocks)}"
 
 
 def render_unified(diff: FileDiff, colors: ThemeColors, word_level: bool = True) -> str:
@@ -272,9 +425,14 @@ def render_many(diffs: list[FileDiff], mode: str, colors: ThemeColors, word_leve
     """
     Renders several files as one scrollable document.
 
+    Only the one-column layout goes through here. The two-column layout is two
+    separate documents, one per side, built by ``render_many_panes``, because
+    each side needs its own scrollbar.
+
     Args:
         diffs: Parsed diffs, in the order they should appear.
-        mode: ``side_by_side`` or ``unified``.
+        mode: Kept for the caller's convenience; anything but ``unified`` still
+            renders unified here, since the two-column layout has its own path.
         colors: Active theme tokens.
         word_level: Whether to apply intra-line highlighting.
 
@@ -282,51 +440,179 @@ def render_many(diffs: list[FileDiff], mode: str, colors: ThemeColors, word_leve
         str: Complete HTML document.
     """
 
+    del mode
     if not diffs:
         return _document_head(colors)
 
-    columns = 4
+    columns = 3
     blocks: list[str] = []
     for diff in diffs:
-        name = diff.path or diff.old_path or "?"
-        counts = f"+{diff.added} −{diff.removed}"
-        blocks.append(
-            f'<table><tr><td colspan="{columns}" '
-            f'style="background-color:{colors.surface_alt};color:{colors.text};'
-            f'padding:6px;font-weight:bold;">{_escape(name)}'
-            f'<span style="color:{colors.text_muted};font-weight:normal;">'
-            f'  {_escape(counts)}</span></td></tr>'
-        )
+        rows = [_file_header_row(diff, columns, colors)]
         if diff.binary:
-            blocks.append(
+            rows.append(
                 f'<tr><td colspan="{columns}" style="color:{colors.text_muted};padding:6px;">'
-                f"{_escape(i18n.t('diff.binary'))}</td></tr></table>"
+                f"{_escape(i18n.t('diff.binary'))}</td></tr>"
             )
+            blocks.append(f"<table>{''.join(rows)}</table>")
             continue
-        body = render_diff(diff, mode, colors, word_level)
+        body = render_unified(diff, colors, word_level)
         # Reuse the per-file renderer but drop its own head and outer table tags.
         inner = body.split("<table>", 1)[-1].rsplit("</table>", 1)[0]
-        blocks.append(f"{inner}</table>")
+        blocks.append(f"<table>{''.join(rows)}{inner}</table>")
     return f"{_document_head(colors)}{''.join(blocks)}"
 
 
-def render_diff(diff: FileDiff, mode: str, colors: ThemeColors, word_level: bool = True) -> str:
+class ComparisonPanes(QWidget):
     """
-    Renders a diff in the requested layout.
+    The two-column comparison: the old version beside the new one.
 
-    Args:
-        diff: Parsed diff.
-        mode: ``side_by_side`` or ``unified``.
-        colors: Active theme tokens.
-        word_level: Whether to apply intra-line highlighting.
+    One HTML table across both sides would have been less code, and that is what
+    this replaces. It had one flaw that matters: with a single widget there is a
+    single horizontal scrollbar, so a narrow panel either hides one side or
+    forces the reader to scroll the whole table to see a long line on the right.
 
-    Returns:
-        str: Complete HTML document.
+    Two views solve that and bring their own problem, which is what this class
+    is mostly about:
+
+    * **They must stay level.** Both sides render a row for every display pair,
+      blanks included, so the documents have the same number of lines. The
+      vertical scrollbars are then kept at the same value, and only the right
+      one is shown, because two identical bars next to each other invite the
+      question which is which.
+    * **Horizontal scrolling is shared.** Scrolling either side moves both, which
+      is what comparing two versions of one line needs. Each side keeps its own
+      bar, so it is obvious that both can be grabbed.
+    * **A signal that sets the other side's value comes straight back.** Every
+      handler therefore runs behind one guard flag rather than disconnecting and
+      reconnecting.
     """
 
-    if normalize_diff_mode(mode) == DIFF_UNIFIED:
-        return render_unified(diff, colors, word_level)
-    return render_side_by_side(diff, colors, word_level)
+    def __init__(self, parent: QWidget | None = None) -> None:
+        """
+        Args:
+            parent: Parent widget.
+        """
+
+        super().__init__(parent)
+        self._syncing = False
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self._split = QSplitter(Qt.Orientation.Horizontal, self)
+        self._split.setChildrenCollapsible(False)
+        self._old = self._build_pane()
+        self._new = self._build_pane()
+        # The left side's vertical bar is hidden rather than removed: the view
+        # still scrolls vertically, it just does not draw a second bar.
+        self._old.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._split.addWidget(self._old)
+        self._split.addWidget(self._new)
+        self._split.setSizes([500, 500])
+        layout.addWidget(self._split)
+
+        self._link(self._old, self._new)
+        self._link(self._new, self._old)
+
+    def _build_pane(self) -> QTextBrowser:
+        """
+        Builds one side.
+
+        Returns:
+            QTextBrowser: A non-wrapping, monospaced view with its own
+                horizontal scrollbar.
+        """
+
+        pane = QTextBrowser(self)
+        pane.setOpenExternalLinks(False)
+        pane.setOpenLinks(False)
+        pane.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
+        pane.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # A floor under the divider. Without it the splitter can be dragged until
+        # one side is a sliver, which is the state this whole class exists to
+        # avoid: both versions have to stay readable.
+        pane.setMinimumWidth(PANE_MIN_WIDTH)
+        apply_monospace(pane, -1)
+        return pane
+
+    def _link(self, source: QTextBrowser, target: QTextBrowser) -> None:
+        """
+        Makes one pane drive the other.
+
+        Args:
+            source: The pane being scrolled.
+            target: The pane that should follow.
+
+        Returns:
+            None
+        """
+
+        source.horizontalScrollBar().valueChanged.connect(
+            lambda value: self._mirror(target.horizontalScrollBar(), value)
+        )
+        source.verticalScrollBar().valueChanged.connect(
+            lambda value: self._mirror(target.verticalScrollBar(), value)
+        )
+
+    def _mirror(self, bar: QScrollBar, value: int) -> None:
+        """
+        Copies a scroll position onto the other pane.
+
+        Args:
+            bar: Scrollbar to move.
+            value: Position to move it to.
+
+        Returns:
+            None
+        """
+
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            bar.setValue(value)
+        finally:
+            self._syncing = False
+
+    def set_documents(self, old_html: str, new_html: str) -> None:
+        """
+        Replaces what both sides show.
+
+        Args:
+            old_html: Document for the version before.
+            new_html: Document for the version after.
+
+        Returns:
+            None
+        """
+
+        self._old.setHtml(old_html)
+        self._new.setHtml(new_html)
+        self.scroll_to_top()
+
+    def scroll_to_top(self) -> None:
+        """
+        Puts both sides back at the beginning.
+
+        Returns:
+            None
+        """
+
+        for pane in (self._old, self._new):
+            pane.verticalScrollBar().setValue(0)
+            pane.horizontalScrollBar().setValue(0)
+
+    @property
+    def panes(self) -> tuple[QTextBrowser, QTextBrowser]:
+        """
+        Returns both views.
+
+        Returns:
+            tuple[QTextBrowser, QTextBrowser]: The old side and the new side.
+        """
+
+        return self._old, self._new
 
 
 class DiffView(QWidget):
@@ -386,6 +672,9 @@ class DiffView(QWidget):
         self._browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
         apply_monospace(self._browser, -1)
         self._stack.addWidget(self._browser)
+
+        self._panes = ComparisonPanes(self)
+        self._stack.addWidget(self._panes)
 
         self._notice_holder = QWidget(self)
         notice_layout = QVBoxLayout(self._notice_holder)
@@ -772,10 +1061,7 @@ class DiffView(QWidget):
             f"{prefix}{i18n.t('diff.lines_added', count=added)}  "
             f"{i18n.t('diff.lines_removed', count=removed)}"
         )
-        colors = get_theme_colors()
-        self._browser.setHtml(render_many(diffs, self._mode, colors, self.word_level))
-        self._browser.verticalScrollBar().setValue(0)
-        self._stack.setCurrentWidget(self._browser)
+        self._render()
 
     def _show_notice(self, title: str, detail: str, token: str) -> None:
         """
@@ -797,24 +1083,58 @@ class DiffView(QWidget):
         """
         Redraws the current diff with the current options.
 
+        The two layouts live in different widgets: one column is one document in
+        one view, two columns are two documents in two views that scroll
+        together. Which one the stack shows is decided here.
+
+        Returns:
+            None
+        """
+
+        self._render()
+        if self._diff is not None and self._diff.truncated:
+            self._counts.setText(
+                f"{self._counts.text()}  ·  {i18n.t('diff.too_large', count=self._diff.line_count)}"
+            )
+
+    def _render(self) -> None:
+        """
+        Puts the current content into whichever widget the layout calls for.
+
         Returns:
             None
         """
 
         colors = get_theme_colors()
+        two_columns = self._mode != DIFF_UNIFIED
+
         if self._many:
+            if two_columns:
+                self._panes.set_documents(
+                    render_many_panes(self._many, SIDE_OLD, colors, self.word_level),
+                    render_many_panes(self._many, SIDE_NEW, colors, self.word_level),
+                )
+                self._stack.setCurrentWidget(self._panes)
+                return
             self._browser.setHtml(render_many(self._many, self._mode, colors, self.word_level))
+            self._browser.verticalScrollBar().setValue(0)
             self._stack.setCurrentWidget(self._browser)
             return
+
         if self._diff is None or self._diff.binary or self._diff.error_key:
             return
-        self._browser.setHtml(render_diff(self._diff, self._mode, colors, self.word_level))
+
+        if two_columns:
+            self._panes.set_documents(
+                render_pane(self._diff, SIDE_OLD, colors, self.word_level),
+                render_pane(self._diff, SIDE_NEW, colors, self.word_level),
+            )
+            self._stack.setCurrentWidget(self._panes)
+            return
+
+        self._browser.setHtml(render_unified(self._diff, colors, self.word_level))
         self._browser.verticalScrollBar().setValue(0)
         self._stack.setCurrentWidget(self._browser)
-        if self._diff.truncated:
-            self._counts.setText(
-                f"{self._counts.text()}  ·  {i18n.t('diff.too_large', count=self._diff.line_count)}"
-            )
 
     def refresh(self, _theme: str | None = None) -> None:
         """

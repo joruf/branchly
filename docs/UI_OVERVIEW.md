@@ -124,8 +124,22 @@ vollständige Name zum Eintippen, und der Knopf bleibt bis dahin gesperrt.
 Kopfzeile: Vergleichsziel, Darstellung, Abstände ignorieren, Wörter hervorheben,
 `+n −n`, „Datei öffnen", „Im Ordner zeigen".
 
-Vier Zustände: Platzhalter („Wähle eine Datei"), Diff, Hinweis (Binärdatei,
-Fehler), Bildvergleich Vorher/Nachher.
+Fünf Zustände: Platzhalter („Wähle eine Datei"), eine Spalte, zwei Spalten,
+Hinweis (Binärdatei, Fehler), Bildvergleich Vorher/Nachher.
+
+Die beiden Darstellungen sind zwei verschiedene Widgets, nicht zwei Varianten
+derselben HTML-Tabelle:
+
+- **Eine Spalte** ist ein `QTextBrowser` mit einem Dokument.
+- **Nebeneinander** ist `ComparisonPanes`: ein `QSplitter` mit zwei
+  `QTextBrowser`, links der alte Stand, rechts der neue. Jede Seite hat ihren
+  eigenen waagerechten Scrollbalken, beide sind in beide Richtungen gekoppelt.
+  Senkrecht ebenso, damit die Zeilen auf gleicher Höhe bleiben; dort wird nur der
+  rechte Balken gezeichnet, weil zwei identische nebeneinander nur die Frage
+  aufwerfen, welcher davon welcher ist.
+
+Beide Seiten rendern eine Zeile pro Gegenüberstellungspaar, Leerzeilen
+eingeschlossen, sonst laufen die Hälften auseinander.
 
 ## Konflikt-Assistent (`ui/conflict_dialog.py`)
 

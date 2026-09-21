@@ -634,5 +634,16 @@
   "github.label_rename_hint": "Benennt das ausgewählte Label auf den oben eingetippten Namen um.",
   "github.label_rename_needs_name": "Zuerst den neuen Namen in das Feld darüber eintippen.",
   "github.milestone_close": "Schließen",
-  "github.milestone_close_hint": "Schließt den Meilenstein, ohne ihn zu löschen, damit die Historie ihn behält."
+  "github.milestone_close_hint": "Schließt den Meilenstein, ohne ihn zu löschen, damit die Historie ihn behält.",
+  "ignore.menu": "Ignorieren…",
+  "ignore.this_file": "Nur diese Datei ({name})",
+  "ignore.this_extension": "Alle Dateien {name}",
+  "ignore.this_folder": "Den ganzen Ordner {name}",
+  "ignore.tracked_hint": "Diese Datei wird bereits versioniert. Ein Eintrag in .gitignore ändert daran nichts, solange sie unter Versionskontrolle steht.",
+  "ignore.added": "{pattern} in .gitignore eingetragen",
+  "ignore.added_new_file": "{pattern} eingetragen, .gitignore wurde angelegt",
+  "ignore.already_there": "{pattern} steht schon in .gitignore",
+  "ignore.pattern_empty": "Hier gibt es nichts zu ignorieren",
+  "ignore.unreadable": ".gitignore konnte nicht gelesen werden",
+  "ignore.write_failed": ".gitignore konnte nicht geschrieben werden"
 }

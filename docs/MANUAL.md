@@ -119,9 +119,53 @@ schlechtere Variante.
 „Stattdessen zum letzten Commit hinzufügen" hängt die Auswahl an den vorherigen
 Commit, statt einen neuen anzulegen.
 
-Rechtsklick auf eine Datei: **Datei öffnen** (Standardprogramm), **Im Ordner
-zeigen**, **Pfad kopieren**, **Änderungen verwerfen**. Verwerfen fragt vorher
-nach und lässt sich nicht rückgängig machen.
+### Die Auswahl bleibt erhalten
+
+Neue Änderungen sind immer angehakt. Nimmst du einen Haken weg, merkt Branchly
+sich das: nach dem Schließen und Öffnen ist die Datei wieder abgewählt. Gemerkt
+wird nur, was du abgewählt hast, nicht was angehakt ist, denn alles andere ist
+ohnehin dabei und eine frisch geänderte Datei soll nicht erst gesucht werden
+müssen.
+
+Die Merkung überlebt auch, dass die Datei zwischendurch aus der Liste
+verschwindet, etwa weil du die Änderung verworfen hast und später erneut
+dieselbe Datei anfasst.
+
+Sobald eine Datei in einem Commit gelandet ist, ist die Sache erledigt und
+Branchly vergisst sie. Eine spätere, ganz andere Änderung an derselben Datei ist
+also wieder angehakt.
+
+### Rechtsklick auf eine Datei
+
+**Datei öffnen** (Standardprogramm), **Im Ordner zeigen**, **Pfad kopieren**,
+**Ignorieren…**, **Änderungen verwerfen**. Verwerfen fragt vorher nach und lässt
+sich nicht rückgängig machen.
+
+### Ignorieren
+
+Unter **Ignorieren…** stehen bis zu drei Einträge, je nachdem, worauf du geklickt
+hast:
+
+| Eintrag | Schreibt nach `.gitignore` |
+| --- | --- |
+| Nur diese Datei | `/pfad/zur/datei.txt` |
+| Alle `*.log`-Dateien | `*.log` |
+| Den ganzen Ordner `build/` | `/build/` |
+
+Der Eintrag für eine einzelne Datei bekommt einen führenden Schrägstrich. Ohne
+ihn würde `notizen.txt` auch `doku/notizen.txt` treffen, und gemeint war die eine
+Zeile, auf die du geklickt hast. Sonderzeichen im Dateinamen (`*`, `?`, `[`, ein
+führendes `#`) werden maskiert, damit der Eintrag genau diese Datei trifft und
+keine andere.
+
+`.gitignore` wird angelegt, falls es sie noch nicht gibt, sonst wird unten
+angehängt. Steht der Eintrag schon drin, sagt Branchly das und schreibt nichts
+doppelt.
+
+Eine Datei, die bereits unter Versionskontrolle steht, verschwindet dadurch
+**nicht**. `.gitignore` gilt nur für Dateien, die git noch nicht kennt. Der
+Eintrag wird trotzdem geschrieben, damit er greift, sobald die Datei aus der
+Versionskontrolle genommen wird.
 
 ## Gegenüberstellung
 
@@ -129,6 +173,17 @@ Zwei Einstellungen, unabhängig voneinander:
 
 **Darstellung** — Nebeneinander oder Eine Spalte, „Abstände ignorieren",
 „Geänderte Wörter hervorheben".
+
+Bei **Nebeneinander** stehen zwei getrennte Ansichten: links der alte Stand,
+rechts der neue. Beide bleiben sichtbar, auch wenn der Platz knapp wird; keine
+der beiden Seiten verschwindet oder wird zusammengeschoben. Jede Seite hat einen
+eigenen waagerechten Scrollbalken für lange Zeilen, und beide sind gekoppelt:
+egal welchen du benutzt, es scrollen immer beide Seiten mit, sonst würdest du
+zwei Stellen vergleichen, die nichts miteinander zu tun haben. Senkrecht
+scrollen beide ebenfalls gemeinsam, damit die Zeilen auf gleicher Höhe bleiben.
+
+Die Trennlinie zwischen den beiden Seiten lässt sich ziehen, wenn eine Seite mehr
+Platz braucht als die andere.
 
 **Vergleichen** — was gegen was gehalten wird:
 

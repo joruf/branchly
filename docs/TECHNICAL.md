@@ -292,6 +292,62 @@ vollständige Name muss eingetippt werden, genau wie in GitHubs eigener Oberflä
 und der Knopf bleibt bis dahin gesperrt. Lokal wird nichts angefasst, Branchly
 fragt danach nur, ob der Eintrag aus der Projektliste verschwinden soll.
 
+### Die Gegenüberstellung als zwei Ansichten
+
+Vorher war „Nebeneinander" **eine** HTML-Tabelle mit vier Spalten in einem
+`QTextBrowser`. Das war weniger Code und hatte einen Fehler, der erst bei wenig
+Platz auffällt: ein Widget hat einen waagerechten Scrollbalken. Wurde das Panel
+schmal, war entweder eine Seite abgeschnitten oder man musste die ganze Tabelle
+schieben, um eine lange Zeile rechts zu lesen.
+
+Jetzt sind es zwei Dokumente in zwei `QTextBrowser` in einem `QSplitter`
+(`ComparisonPanes`). Damit das funktioniert, müssen drei Dinge stimmen:
+
+| Punkt | Lösung |
+|---|---|
+| Die Seiten müssen auf gleicher Höhe bleiben | Beide rendern eine Zeile pro Paar aus `pair_lines()`, Leerzeilen eingeschlossen. Eine leere Zelle bekommt `&nbsp;`, sonst fällt die Zeile in sich zusammen und die Hälften laufen auseinander |
+| Waagerecht soll gemeinsam gescrollt werden | Jede Seite treibt die andere an, in beide Richtungen |
+| Ein gesetzter Wert löst dasselbe Signal wieder aus | Ein Wächter-Flag statt Verbinden und Trennen |
+
+**Die Falle dabei war eine Tabellenzeile mit `colspan`.** Qts Textengine gibt bei
+einer Zeile, die beide Spalten überspannt, die Spaltenbreiten auf und schenkt der
+Zeilennummernspalte ein Drittel der Fläche, wodurch der Code rechts aus dem Bild
+läuft. Weder `width:1%` noch `width:52px` noch das `width`-Attribut helfen
+dagegen. Die Kopfzeilen der Panes bestehen deshalb aus zwei echten Zellen, eine
+leere Gutter-Zelle und der Text. Ein Test misst, wo die zweite Spalte beginnt,
+damit das nicht unbemerkt zurückkommt.
+
+### Die gemerkte Dateiauswahl
+
+Gespeichert wird in `repos.json` pro Projekt, und zwar **was abgewählt wurde**,
+nicht was angehakt ist. Der Unterschied ist nicht kosmetisch: alles ist per
+Vorgabe angehakt, also braucht eine neu aufgetauchte Datei keinen Eintrag, um
+dabei zu sein. Die umgekehrte Speicherung müsste jede neue Datei erst eintragen
+und wäre bei jedem Scan zu pflegen.
+
+Die Menge lebt im Panel und nicht in der Liste, damit eine Abwahl überlebt, dass
+die Datei zwischendurch gar nicht in der Liste steht. Aufgeräumt wird nur an
+einer Stelle: nach einem Commit vergisst `forget_selection()` genau die Pfade,
+die drin waren.
+
+### `.gitignore` schreiben
+
+`gitops/ignore.py` schreibt die Datei selbst, denn git hat dafür kein Kommando.
+Zwei Details, die man einmal falsch macht:
+
+- **Ein Dateiname ist kein Muster.** `*`, `?`, `[`, ein führendes `#` und ein
+  führendes `!` sind Syntax. Eine Datei namens `report[2].txt` braucht Maskierung,
+  sonst trifft der Eintrag etwas anderes oder nichts. Ein Test schreibt den
+  erzeugten Eintrag und lässt `git check-ignore` bestätigen, dass die echte Datei
+  danach ignoriert wird.
+- **Zeilenenden.** Die Datei wird mit `newline=""` gelesen, weil Python sonst CRLF
+  beim Lesen zu LF macht. Ohne das hängt an eine CRLF-Datei ein LF an, und der
+  nächste Diff zeigt die ganze Datei als geändert.
+
+Ob etwas *schon* ignoriert ist, kann nur git beantworten, denn dafür zählen alle
+`.gitignore` nach oben, `.git/info/exclude` und die globale Ausschlussdatei. Das
+geht über `git check-ignore`.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`

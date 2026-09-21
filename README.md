@@ -28,6 +28,9 @@ something new" — locally *and* on the server.
 
 **Seeing what changed**
 - Side-by-side or single-column, with word-level highlighting inside changed lines
+- Side-by-side is two views, not one wide table: both stay visible however narrow
+  the panel gets, each has its own horizontal scrollbar, and either one scrolls
+  both, because comparing two unrelated places is not comparing
 - Whitespace-only changes can be hidden
 - Comparison targets: your edits vs. staged, staged vs. last commit, your edits
   vs. last commit, one commit vs. another, one branch vs. another
@@ -35,7 +38,12 @@ something new" — locally *and* on the server.
 - Any file opens in your default program, or in its folder
 
 **Everyday Git without the vocabulary**
-- Tick the files that belong together, write a summary, save
+- Tick the files that belong together, write a summary, save. New changes are
+  ticked; whatever you untick stays unticked after a restart, and is forgotten
+  once it has been committed
+- Right-click a file to ignore it, everything with its extension, or its whole
+  folder. The entry is anchored and escaped, so it matches that file and not a
+  file that happens to share its name
 - Branch: create, switch, rename, delete
 - Fetch, pull and push with the counts on the buttons
 - One action brings *every* project up to the server's version. Fast-forward only:
