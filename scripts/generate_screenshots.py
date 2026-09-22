@@ -395,6 +395,84 @@ def capture_binary(theme: str, base: Path) -> Path:
     return target
 
 
+def capture_discover(theme: str, base: Path) -> Path:
+    """
+    Photographs the repository search against a small folder tree.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo tree in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    import time
+
+    from PySide6.QtWidgets import QApplication
+
+    from ui.discover_dialog import DiscoverDialog
+
+    i18n.set_language("de")
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    home = base / f"discover-{theme}"
+    home.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(home),
+            "GIT_CONFIG_GLOBAL": str(home / ".gitconfig"),
+            "GIT_CONFIG_SYSTEM": str(home / ".gitconfig-system"),
+            "GIT_AUTHOR_NAME": "Jo Ruf",
+            "GIT_AUTHOR_EMAIL": "jo@example.invalid",
+            "GIT_COMMITTER_NAME": "Jo Ruf",
+            "GIT_COMMITTER_EMAIL": "jo@example.invalid",
+            "LC_ALL": "C",
+        }
+    )
+
+    known: set[str] = set()
+    for index, (name, branch) in enumerate(
+        (
+            ("branchly", "main"),
+            ("consentry", "main"),
+            ("pmtool", "feature/topdesk"),
+            ("snappix", "main"),
+            ("byteback", "main"),
+        )
+    ):
+        root = home / "Applications" / name
+        root.mkdir(parents=True, exist_ok=True)
+        _git(["init", "-b", branch], root, env)
+        _git(["remote", "add", "origin", f"https://github.com/joruf/{name}.git"], root, env)
+        if index < 2:
+            known.add(str(root.resolve()))
+    # Something the walk must not report, so the picture shows the rule working.
+    vendored = home / "Applications" / "branchly" / "node_modules" / "left-pad"
+    vendored.mkdir(parents=True, exist_ok=True)
+    (vendored / ".git").mkdir(exist_ok=True)
+
+    dialog = DiscoverDialog(known, [], [home])
+    dialog.resize(760, 560)
+    dialog.show()
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        app.processEvents()
+        if dialog._thread is None and dialog._list.count():
+            break
+        time.sleep(0.02)
+    app.processEvents()
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    target = OUTPUT_DIR / f"discover-{theme}.png"
+    dialog.grab().save(str(target))
+    dialog.close()
+    return target
+
+
 def capture_conflict(theme: str, base: Path) -> Path:
     """
     Builds a repository with a real conflict and photographs the assistant.
@@ -483,6 +561,7 @@ def main() -> int:
             print(f"wrote {capture(theme, repositories, config_dir)}")
             print(f"wrote {capture_github(theme, config_dir)}")
             print(f"wrote {capture_binary(theme, base)}")
+            print(f"wrote {capture_discover(theme, base)}")
             print(f"wrote {capture_conflict(theme, base)}")
     return 0
 

@@ -42,6 +42,38 @@ erhalten, die Projektdateien kommen daneben. Hätte eine Datei aus dem Projekt
 denselben Namen wie eine vorhandene, bricht Git ab und ändert nichts — du
 verlierst also nichts, auch wenn du dich verklickst.
 
+### Alle Projekte auf einmal finden
+
+*Projekt → Nach neuen Repositories suchen…* durchsucht einen Ordner nach
+Git-Projekten und listet auf, was es findet. Alles, was noch nicht in Branchly
+steht, ist **angehakt**; nimm den Haken weg, was du nicht willst, und klick auf
+*Übernehmen*.
+
+Beim allerersten Start mit leerer Projektliste öffnet sich diese Suche von
+selbst, denn dann gibt es ohnehin nichts anderes zu sehen. Danach kommt sie nur
+noch über das Menü, auch wenn du sie einmal abbrichst.
+
+Was Branchly schon kennt, wird trotzdem mit aufgelistet, mit dem Vermerk *bereits
+in Branchly* und ohne Haken. Eine Liste, in der die fehlen, sieht aus, als hätte
+die Suche Projekte übersehen, die man in der Seitenleiste sehen kann.
+
+Drei Regeln bestimmen, was gefunden wird:
+
+- **In ein gefundenes Projekt wird nicht hineingesucht.** Sonst tauchten
+  Submodule und mitgelieferte Fremdprojekte als eigene Einträge auf.
+- **Ordner wie `node_modules`, `.venv` oder `.cache` werden übersprungen.** Dort
+  liegt nie ein eigenes Projekt, und sie kosten den Großteil der Zeit.
+- **Es wird einige Ebenen tief gesucht, nicht beliebig.** Ein Repository zwanzig
+  Ebenen unterhalb ist eine Kopie, kein Projekt.
+
+Die Suche liest nur. Auf der Festplatte wird nichts angelegt, verschoben oder
+verändert, und ein Ordner ohne Leseberechtigung wird stillschweigend übergangen.
+
+Über *Einsortieren unter* landen alle übernommenen Projekte gleich in einer
+Kategorie.
+
+![Repositories suchen](screenshots/discover-dark.png)
+
 ### Kategorien
 
 Rechtsklick in die Liste oder auf eine Kategorie:

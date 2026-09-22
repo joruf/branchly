@@ -181,6 +181,9 @@ class AppSettings:
         confirm_destructive: Whether destructive actions require confirmation.
             Defaults to True and is deliberately exposed, not hardcoded, but
             the confirmation text always spells out what gets lost.
+        discovery_offered: Whether Branchly has already offered to search the
+            disk for repositories. It offers once, on the first start with an
+            empty project list, and never brings it up on its own again.
         last_repo: Path of the repository selected when the app last closed.
         window_geometry: Hex-encoded Qt geometry blob.
         window_state: Hex-encoded Qt window state blob.
@@ -202,6 +205,7 @@ class AppSettings:
     github_enabled: bool = True
     show_avatars: bool = True
     confirm_destructive: bool = True
+    discovery_offered: bool = False
     last_repo: str = ""
     window_geometry: str = ""
     window_state: str = ""
@@ -231,6 +235,7 @@ class AppSettings:
             github_enabled=bool(self.github_enabled),
             show_avatars=bool(self.show_avatars),
             confirm_destructive=bool(self.confirm_destructive),
+            discovery_offered=bool(self.discovery_offered),
             last_repo=self.last_repo if isinstance(self.last_repo, str) else "",
             window_geometry=self.window_geometry if isinstance(self.window_geometry, str) else "",
             window_state=self.window_state if isinstance(self.window_state, str) else "",

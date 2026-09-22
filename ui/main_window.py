@@ -66,6 +66,7 @@ from ui.changes_panel import ChangesPanel
 from ui.clone_dialog import CloneDialog
 from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
+from ui.discover_dialog import DiscoverDialog
 from ui.github_dialogs import CreateRepositoryDialog
 from ui.github_lists import GitHubContext
 from ui.github_panel import GitHubPanel
@@ -85,6 +86,10 @@ TAB_GITHUB = 2
 # the first repository are already on screen: news about Branchly itself is never
 # more urgent than the window being usable.
 UPDATE_CHECK_DELAY_MS = 4000
+
+# Long enough for the window to be painted first, so the search dialog opens
+# on top of something rather than into a grey rectangle.
+DISCOVERY_OFFER_DELAY_MS = 700
 
 ACTION_UPDATE_INSTALL = "update.install"
 ACTION_UPDATE_LATER = "update.later"
@@ -114,6 +119,7 @@ class MainWindow(QMainWindow):
         self._viewer_login = ""
         self._update_thread = None
         self._update_worker = None
+        self._discovery_offered_this_run = False
         self._update_info: updater.UpdateInfo | None = None
         self._restart_after_update = False
 
@@ -284,6 +290,7 @@ class MainWindow(QMainWindow):
         repo_menu.addAction(i18n.t("sidebar.add_repo"), self._prompt_add_repo)
         repo_menu.addAction(i18n.t("sidebar.clone_repo"), lambda: self._open_clone_dialog())
         repo_menu.addAction(i18n.t("github.repo_new"), self._create_github_repository)
+        repo_menu.addAction(i18n.t("discover.menu"), self._discover_repositories)
         repo_menu.addSeparator()
         refresh_action = QAction(i18n.t("action.refresh"), self)
         refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
@@ -1330,6 +1337,66 @@ class MainWindow(QMainWindow):
         self._activate(entry)
         self._start_scan(entry.key)
 
+    def _discover_repositories(self, roots: list[Path] | None = None) -> None:
+        """
+        Searches the disk for repositories and registers the ones picked.
+
+        Args:
+            roots: Folders to search, defaulting to the home directory.
+
+        Returns:
+            None
+        """
+
+        known = {entry.key for entry in self._registry.entries}
+        dialog = DiscoverDialog(known, self._registry.categories, roots, self)
+        if dialog.exec() != DiscoverDialog.DialogCode.Accepted:
+            return
+
+        added: list[RepoEntry] = []
+        skipped = 0
+        for path in dialog.chosen:
+            outcome, entry = self._registry.add(path, dialog.category)
+            if entry is None or outcome != ADD_OK:
+                # A path that stopped being a repository between the scan and the
+                # click, or one that was already there. Neither is worth a dialog.
+                skipped += 1
+                continue
+            added.append(entry)
+
+        if not added:
+            self.statusBar().showMessage(i18n.t("discover.nothing_added"), 5000)
+            return
+
+        self._save_registry()
+        self._sidebar.refresh()
+        self.statusBar().showMessage(
+            i18n.t("discover.added", count=len(added)), 6000
+        )
+        del skipped
+
+        first = added[0]
+        self._sidebar.select_key(first.key)
+        self._activate(first)
+        # One scan for all of them rather than one per project, so the sidebar
+        # fills in as the results come back.
+        for entry in added:
+            self._start_scan(entry.key)
+
+    def _maybe_offer_discovery(self) -> None:
+        """
+        Offers the search once, on the first start with an empty project list.
+
+        Returns:
+            None
+        """
+
+        if self._settings.discovery_offered or self._registry.entries:
+            return
+        self._settings.discovery_offered = True
+        save_settings(self._settings)
+        self._discover_repositories()
+
     def _open_clone_dialog(self, initial_url: str = "") -> None:
         """
         Opens the clone dialog and registers whatever it produced.
@@ -2188,6 +2255,28 @@ class MainWindow(QMainWindow):
         self._settings.window_geometry = bytes(self.saveGeometry().toHex()).decode("ascii")
         self._settings.window_state = bytes(self.saveState().toHex()).decode("ascii")
         return self._settings
+
+    def showEvent(self, event) -> None:  # noqa: ANN001, N802 - Qt override
+        """
+        Offers the repository search the first time the window appears.
+
+        The constructor is the wrong place for it: a window that was built but
+        never shown has nobody in front of it to answer, which is exactly the
+        situation in the tests and in the screenshot script.
+
+        Args:
+            event: Show event.
+
+        Returns:
+            None
+        """
+
+        super().showEvent(event)
+        if self._discovery_offered_this_run:
+            return
+        self._discovery_offered_this_run = True
+        # A moment later, so the window is painted before the dialog covers it.
+        QTimer.singleShot(DISCOVERY_OFFER_DELAY_MS, self._maybe_offer_discovery)
 
     def closeEvent(self, event) -> None:  # noqa: ANN001, N802 - Qt override
         """

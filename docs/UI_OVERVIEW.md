@@ -222,6 +222,21 @@ laufen auf einem Worker-Thread. Während des Installierens ist *Schließen* gesp
 ein Worker, der Dateien schreibt, darf nicht ins Leere laufen. Nichts wird ohne
 Rückfrage installiert, und der Neustart passiert erst, wenn das Fenster weg ist.
 
+## Repositories suchen (`ui/discover_dialog.py`)
+
+Ordnerfeld mit *Durchsuchen…* und *Erneut suchen*, darunter ein unbestimmter
+Fortschrittsbalken und eine Zeile mit der Zahl der angesehenen Ordner, dann die
+Liste, dann *Alle auswählen* / *Auswahl aufheben* und die Kategorieauswahl.
+
+Die Liste ist vorangehakt. Wer Branchly gerade installiert hat, will seine
+Projekte darin haben, und zwei abzuwählen ist weniger Arbeit als zwanzig
+anzuhaken. Einträge, die Branchly schon kennt, stehen mit dabei, tragen den
+Vermerk *bereits in Branchly* und lassen sich nicht anhaken.
+
+Der Balken ist absichtlich unbestimmt: wie viele Ordner noch kommen, weiß man
+erst, wenn man sie durchlaufen hat, und eine erfundene Prozentzahl ist schlechter
+als keine.
+
 ## Tooltips
 
 Jedes Bedienelement, dessen Beschriftung die Frage „was macht das" offen lässt,
@@ -263,6 +278,7 @@ Kein Widget enthält einen Hex-Wert. Alles kommt aus `config/theme.py`:
 - `screenshots/conflict-assistant-dark.png`, `conflict-assistant-light.png`
 - `screenshots/github-panel-dark.png`, `github-panel-light.png`
 - `screenshots/binary-comparison-dark.png`, `binary-comparison-light.png`
+- `screenshots/discover-dark.png`, `discover-light.png`
 
 Neu erzeugen:
 

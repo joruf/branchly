@@ -12,6 +12,9 @@ something new" — locally *and* on the server.
 ## What it does
 
 **Projects, organised**
+- One search fills the list: point it at a folder and it finds every git project
+  below, everything new pre-ticked, ready to add in one click. It offers this by
+  itself on the first start, and never brings it up again
 - Free-form categories you can collapse and expand; the state is remembered
 - A star per project pins it to the top of its category
 - Sorting: A–Z, Z–A, newest change first, recently opened first, projects with
