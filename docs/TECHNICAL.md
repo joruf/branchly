@@ -409,6 +409,45 @@ Repository-Namens. Beide Schlüsselmengen waren dabei vollständig und identisch
 der vorhandene Paritätstest konnte das nicht sehen. Deshalb liest der neue Test
 die Datei roh statt geparst.
 
+### Repositories auf der Festplatte finden
+
+`services/discovery.py` durchläuft einen Ordner und meldet jedes Arbeitsverzeichnis
+darunter. Drei Entscheidungen bestimmen das Modul:
+
+- **Der Durchlauf startet nie git.** Git zu jedem Verzeichnis zu befragen hieße
+  ein Prozess pro Kandidat, und ein Home-Verzeichnis hat Zehntausende. Erkannt
+  wird ein Arbeitsverzeichnis am `.git`-Eintrag, Branch und Remote werden direkt
+  aus `.git/HEAD` und `.git/config` gelesen. Gemessen auf dieser Maschine: 42
+  Repositories aus 4740 Ordnern in 1,6 Sekunden.
+- **In ein gefundenes Repository wird nicht hineingegangen.** Sonst wären
+  Submodule und Vendor-Verzeichnisse eigene Projekte.
+- **Was sich nicht lesen lässt, wird übersprungen, nicht gemeldet.** Ein
+  Home-Verzeichnis hat immer ein paar Ordner ohne Leserecht, und keiner davon ist
+  ein Problem des Nutzers.
+
+Der Durchlauf benutzt `os.scandir` mit einem expliziten Stapel statt Rekursion,
+folgt keinen Symlinks (`follow_symlinks=False`) und merkt sich aufgelöste Pfade,
+damit ein Symlink zurück nach oben nicht denselben Baum zweimal durchläuft.
+
+**`.git` ist nicht immer ein Verzeichnis.** Bei einem Submodul und bei einer
+verknüpften Worktree ist es eine Datei mit `gitdir: <pfad>`, und Branch und Remote
+liegen dort. `resolve_git_dir()` löst das auf, auch für relative Pfade.
+
+**Der Branchname verliert nur `refs/heads/`.** Am letzten Schrägstrich zu trennen
+wäre bequemer und macht aus `feature/login` den Branch `login`, was ein anderer
+Branch ist. Das ist beim Bauen tatsächlich passiert und im Screenshot aufgefallen.
+
+### Wann sich die Suche von selbst meldet
+
+Beim ersten Start mit leerer Projektliste, genau einmal, gesteuert über
+`discovery_offered` in den Einstellungen.
+
+Ausgelöst wird das aus `showEvent`, nicht aus dem Konstruktor. Ein Fenster, das
+gebaut, aber nie gezeigt wurde, hat niemanden davor, den man fragen könnte, und
+genau das ist die Lage in den Tests und im Screenshot-Skript. Im Konstruktor
+öffnete der Timer dort einen modalen Dialog, auf dessen Klick niemand wartete,
+und die Testsuite blieb stehen.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`
