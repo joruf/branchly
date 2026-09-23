@@ -111,6 +111,31 @@ Unter der Liste steht die Zusammenfassung über alle Projekte, z. B.
 
 ## Prüfen, was neu ist
 
+Von selbst aktualisiert Branchly in diesen Fällen:
+
+| Wann | Was |
+| --- | --- |
+| Du gibst dem Fenster den Fokus | Das ausgewählte Projekt wird neu gelesen, samt Dateiliste, Gegenüberstellung und Badges |
+| Du wählst links ein anderes Projekt | Dieses Projekt wird gelesen und geprüft |
+| Nach dem eingestellten Intervall | Alle Projekte |
+| Kurz nach dem Start | Alle Projekte |
+
+Der Fokus-Fall ist der wichtigste im Alltag: du änderst Dateien in deinem Editor,
+klickst zurück auf Branchly, und was du siehst, ist das, was auf der Festplatte
+steht. Ohne das müsstest du jedes Mal von Hand aktualisieren.
+
+Damit daraus kein Dauerfeuer wird, greift das höchstens alle zwei Sekunden.
+Zwischen Editor und Branchly hin und her zu springen löst also nicht bei jedem
+Sprung eine Runde aus. Wanderst du mit den Pfeiltasten durch die Projektliste,
+wird ebenfalls nur das Projekt geprüft, auf dem du stehen bleibst, nicht jedes
+auf dem Weg dorthin.
+
+Die GitHub-Daten werden beim Fokuswechsel **nicht** neu geholt. Das wären
+Netzanfragen gegen ein Limit, für Daten, die sich in Minuten statt in Sekunden
+ändern. Dafür gibt es den Knopf *Aktualisieren* im GitHub-Reiter.
+
+Von Hand geht es weiterhin so:
+
 - **Alle Projekte prüfen** unten in der Liste
 - **Dieses Projekt jetzt prüfen** im Rechtsklickmenü
 - **Automatisch** in Einstellungen → Automatische Prüfung: aus, 5, 15, 30, 60

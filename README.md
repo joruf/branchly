@@ -24,6 +24,10 @@ something new" — locally *and* on the server.
   conflicts waiting for a decision
 
 **Knowing what is new**
+- It refreshes when you come back to it. Edit files in your editor, click back
+  onto Branchly, and what you see is what is on disk. Switching project refreshes
+  that one too. Both are rate limited, so alt-tabbing does not mean a round of
+  `git status` per keystroke
 - A background check on a configurable interval (off, 5, 15, 30, 60, 120 minutes)
 - Manual check for one project or for all of them, with progress
 - The online check uses `git ls-remote`, which asks the server a question and

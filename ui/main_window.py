@@ -19,7 +19,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -61,7 +61,7 @@ from gitops.status import RepositoryState, read_state
 from models.repository import RepoEntry
 from services import open_with, puller, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
-from services.scheduler import AutoCheckScheduler, ScanCoordinator
+from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui.changes_panel import ChangesPanel
 from ui.clone_dialog import CloneDialog
 from ui.conflict_dialog import ConflictDialog
@@ -90,6 +90,15 @@ UPDATE_CHECK_DELAY_MS = 4000
 # Long enough for the window to be painted first, so the search dialog opens
 # on top of something rather than into a grey rectangle.
 DISCOVERY_OFFER_DELAY_MS = 700
+
+# How long the window stays quiet after a focus-driven refresh. Alt-tabbing
+# between an editor and Branchly a dozen times must not mean a dozen rounds of
+# reading the working tree.
+FOCUS_REFRESH_COOLDOWN_SECONDS = 2.0
+
+# Settle time after the selected repository changed. Arrowing down the project
+# list would otherwise start a scan for every repository passed on the way.
+SWITCH_SCAN_DEBOUNCE_MS = 300
 
 ACTION_UPDATE_INSTALL = "update.install"
 ACTION_UPDATE_LATER = "update.later"
@@ -120,6 +129,15 @@ class MainWindow(QMainWindow):
         self._update_thread = None
         self._update_worker = None
         self._discovery_offered_this_run = False
+        self._focus_throttle = RefreshThrottle(FOCUS_REFRESH_COOLDOWN_SECONDS)
+        # Set the moment the window starts closing. Refreshing now happens on
+        # focus and on every project switch, so without this a scan could still
+        # be started after closeEvent already waited for the running ones, and
+        # Qt aborts the process when a thread outlives its pool.
+        self._closing = False
+        # Set when a scan was asked for while another batch was running, so it
+        # can be made good once that batch is done rather than silently lost.
+        self._pending_scan_key: str | None = None
         self._update_info: updater.UpdateInfo | None = None
         self._restart_after_update = False
 
@@ -209,6 +227,11 @@ class MainWindow(QMainWindow):
 
         self._scans = ScanCoordinator(self)
         self._scheduler = AutoCheckScheduler(self)
+
+        self._switch_scan_timer = QTimer(self)
+        self._switch_scan_timer.setSingleShot(True)
+        self._switch_scan_timer.setInterval(SWITCH_SCAN_DEBOUNCE_MS)
+        self._switch_scan_timer.timeout.connect(self._scan_current)
 
     def _build_repo_bar(self, parent: QWidget) -> QWidget:
         """
@@ -460,6 +483,9 @@ class MainWindow(QMainWindow):
 
         self._reload_current(restore_selection=True)
         self._reload_github()
+        # The panels above read the working tree; this brings the badges and the
+        # server's answer up to date as well.
+        self._schedule_current_scan()
 
     def _show_empty_state(self) -> None:
         """
@@ -1500,7 +1526,7 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------------------- scans
 
-    def _start_scan(self, key: str) -> None:
+    def _start_scan(self, key: str) -> bool:
         """
         Scans one repository, or all of them.
 
@@ -1508,15 +1534,72 @@ class MainWindow(QMainWindow):
             key: Registry key, or an empty string for every repository.
 
         Returns:
-            None
+            bool: True when the batch started. A batch is refused while another
+                one runs, and a caller that cares can try again later.
         """
 
         entries = self._registry.entries
         if key:
             entries = [item for item in entries if item.key == key]
         if not entries:
+            return False
+        return self._scans.start(
+            scanner.build_requests(entries, self._settings.check_online_automatically)
+        )
+
+    def _schedule_current_scan(self) -> None:
+        """
+        Asks for the current repository to be scanned shortly.
+
+        Debounced rather than immediate: moving through the project list with
+        the arrow keys would otherwise start a scan for every repository passed
+        on the way to the one actually wanted.
+
+        Returns:
+            None
+        """
+
+        if self._closing or self._entry is None:
             return
-        self._scans.start(scanner.build_requests(entries, self._settings.check_online_automatically))
+        self._switch_scan_timer.start()
+
+    def _scan_current(self) -> None:
+        """
+        Scans the repository that is selected right now.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if self._closing or entry is None:
+            return
+        if not self._start_scan(entry.key):
+            # Another batch is running and a second one is refused. Remember the
+            # request so it is made good when that batch finishes.
+            self._pending_scan_key = entry.key
+
+    def _refresh_on_focus(self) -> None:
+        """
+        Brings the window up to date after it was given focus.
+
+        This is the case the whole feature exists for: the user edits files in
+        another program and comes back, and what Branchly shows has to be what is
+        on disk rather than what was there when they left.
+
+        GitHub is deliberately left out of it. Those are network requests against
+        a rate limit, the data behind them changes in minutes rather than
+        seconds, and the panel has its own refresh button.
+
+        Returns:
+            None
+        """
+
+        if self._closing or self._entry is None or not self._focus_throttle.allow():
+            return
+        self._reload_current()
+        self._reload_diff()
+        self._schedule_current_scan()
 
     def _on_scan_result(self, result: scanner.ScanResult) -> None:
         """
@@ -1535,6 +1618,21 @@ class MainWindow(QMainWindow):
         scanner.apply_result(entry, result)
         self._sidebar.update_entry(entry)
 
+    def _run_pending_scan(self) -> None:
+        """
+        Starts a scan that was refused while another batch was running.
+
+        Returns:
+            None
+        """
+
+        key = self._pending_scan_key
+        self._pending_scan_key = None
+        if self._closing:
+            return
+        if key and self._find(key) is not None:
+            self._start_scan(key)
+
     def _on_scan_batch_finished(self) -> None:
         """
         Saves the registry and refreshes the summary after a batch.
@@ -1545,6 +1643,7 @@ class MainWindow(QMainWindow):
 
         self._save_registry()
         self._sidebar.refresh_summary()
+        self._run_pending_scan()
 
     # ------------------------------------------------------------------- github
 
@@ -2256,6 +2355,21 @@ class MainWindow(QMainWindow):
         self._settings.window_state = bytes(self.saveState().toHex()).decode("ascii")
         return self._settings
 
+    def changeEvent(self, event) -> None:  # noqa: ANN001, N802 - Qt override
+        """
+        Refreshes when the window is given focus.
+
+        Args:
+            event: Change event.
+
+        Returns:
+            None
+        """
+
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
+            self._refresh_on_focus()
+
     def showEvent(self, event) -> None:  # noqa: ANN001, N802 - Qt override
         """
         Offers the repository search the first time the window appears.
@@ -2289,6 +2403,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        self._closing = True
+        self._switch_scan_timer.stop()
+        self._pending_scan_key = None
         self._scheduler.stop()
         self._pull_requests.stop()
         self._github_runner.stop()

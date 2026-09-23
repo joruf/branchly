@@ -448,6 +448,49 @@ genau das ist die Lage in den Tests und im Screenshot-Skript. Im Konstruktor
 öffnete der Timer dort einen modalen Dialog, auf dessen Klick niemand wartete,
 und die Testsuite blieb stehen.
 
+### Wann von selbst aktualisiert wird
+
+Neben dem Intervall und dem Start lösen zwei weitere Dinge eine Aktualisierung
+aus, und beide tut der Nutzer nebenbei statt absichtlich. Genau deshalb brauchen
+sie eine Bremse.
+
+**Fenster bekommt den Fokus** (`changeEvent`, `QEvent.Type.ActivationChange` plus
+`isActiveWindow()`). Liest das ausgewählte Projekt neu, erzeugt die
+Gegenüberstellung neu und stößt einen Scan an. Gedrosselt über `RefreshThrottle`
+auf höchstens alle zwei Sekunden: zwischen Editor und Branchly hin und her zu
+springen darf nicht bei jedem Sprung `git status` bedeuten.
+
+Die Drossel merkt sich **nur den Zeitpunkt, an dem sie ausgelöst hat**, nicht die
+abgelehnten Versuche. Andernfalls könnte ständiges Alt-Tabben die Aktualisierung
+beliebig lange hinausschieben. Sie rechnet außerdem mit `time.monotonic`, denn
+eine Wanduhr, die zurückspringt (Laptop aus dem Ruhezustand, Zeitabgleich),
+würde jede Aktualisierung blockieren, bis sie wieder aufgeholt hat.
+
+**Projektwechsel** (`_activate`). Die Panels wurden schon vorher neu gelesen; neu
+ist der Scan, der Badges und Serverstand nachzieht. Der ist um 300 ms verzögert,
+denn mit den Pfeiltasten durch die Liste zu wandern würde sonst für jedes Projekt
+auf dem Weg einen Scan starten. Ein Timer, der bei jedem Wechsel neu anläuft,
+lässt am Ende nur das Projekt übrig, auf dem man stehen bleibt.
+
+**Ein abgelehnter Scan wird nachgeholt.** `ScanCoordinator.start()` weist einen
+Stapel ab, solange ein anderer läuft, und gab das vorher an niemanden zurück.
+`_start_scan()` meldet das jetzt, `_scan_current()` merkt sich den Schlüssel, und
+`_on_scan_batch_finished()` holt ihn nach. Ohne das verlöre genau der Wechsel
+während eines laufenden Durchlaufs seine Aktualisierung, also der Fall, in dem
+man am ehesten wartet.
+
+**GitHub bleibt außen vor.** Netzanfragen gegen ein Limit, für Daten, die sich in
+Minuten statt Sekunden ändern, und das Panel hat einen eigenen Knopf.
+
+**Beim Schließen wird nichts Neues mehr angefangen.** `closeEvent` setzt
+`_closing`, hält den Verzögerungs-Timer an und verwirft einen vorgemerkten Scan.
+Ohne das konnte nach dem `_scans.wait()` noch ein Stapel starten, etwa weil der
+Timer gerade ablief oder weil `_on_scan_batch_finished` einen vorgemerkten Scan
+nachholte. Qt bricht den Prozess ab, wenn ein Thread seinen Pool überlebt
+(`QThread: Destroyed while thread is still running`), und genau das passierte
+sporadisch beim Beenden, seit auf Fokus und auf jeden Projektwechsel gescannt
+wird.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`
