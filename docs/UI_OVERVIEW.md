@@ -222,6 +222,13 @@ laufen auf einem Worker-Thread. Während des Installierens ist *Schließen* gesp
 ein Worker, der Dateien schreibt, darf nicht ins Leere laufen. Nichts wird ohne
 Rückfrage installiert, und der Neustart passiert erst, wenn das Fenster weg ist.
 
+## Wann sich das Fenster aktualisiert
+
+Beim Fokuswechsel (`changeEvent`) und beim Projektwechsel (`_activate`), zusätzlich
+zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel auf
+zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
+Wechsel neu anläuft.
+
 ## Repositories suchen (`ui/discover_dialog.py`)
 
 Ordnerfeld mit *Durchsuchen…* und *Erneut suchen*, darunter ein unbestimmter

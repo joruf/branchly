@@ -13,6 +13,8 @@ at a time, and how results get back to the UI thread.
 
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Slot
 
 from services.puller import PullJob, PullResult, pull_one
@@ -446,3 +448,87 @@ class AutoCheckScheduler(QObject):
         """
 
         QTimer.singleShot(max(0, delay_ms), self.due.emit)
+
+
+class RefreshThrottle:
+    """
+    Keeps a repeated trigger from turning into a storm of git calls.
+
+    Some refreshes are asked for by the user pressing a button, and those always
+    run. Others are asked for by something the user does incidentally, above all
+    giving the window focus: alt-tabbing between an editor and Branchly a dozen
+    times must not mean a dozen rounds of ``git status``. This says how long a
+    trigger stays quiet after it fired.
+
+    The clock is ``time.monotonic``. A wall clock that jumps backwards, which
+    happens on a laptop waking up or on a time sync, would otherwise block every
+    refresh until it caught up again.
+    """
+
+    def __init__(self, cooldown_seconds: float) -> None:
+        """
+        Args:
+            cooldown_seconds: How long a trigger stays quiet after firing. Zero
+                or less means every trigger fires.
+        """
+
+        self._cooldown = max(0.0, float(cooldown_seconds))
+        self._last: dict[str, float] = {}
+
+    @property
+    def cooldown(self) -> float:
+        """
+        Returns the configured quiet period.
+
+        Returns:
+            float: Seconds.
+        """
+
+        return self._cooldown
+
+    def allow(self, key: str = "", now: float | None = None) -> bool:
+        """
+        Reports whether a trigger may fire, and records it when it may.
+
+        Args:
+            key: What is being throttled, so two unrelated triggers do not block
+                each other. One key is enough for most callers.
+            now: Current monotonic time, for tests.
+
+        Returns:
+            bool: True when the trigger fires. The time is recorded in that case
+                and only then, so a refused trigger does not extend the wait.
+        """
+
+        moment = time.monotonic() if now is None else now
+        if self._cooldown <= 0:
+            self._last[key] = moment
+            return True
+        previous = self._last.get(key)
+        if previous is not None and moment - previous < self._cooldown:
+            return False
+        self._last[key] = moment
+        return True
+
+    def forget(self, key: str = "") -> None:
+        """
+        Drops what is remembered about one trigger, so it may fire again at once.
+
+        Args:
+            key: The trigger.
+
+        Returns:
+            None
+        """
+
+        self._last.pop(key, None)
+
+    def reset(self) -> None:
+        """
+        Forgets every trigger.
+
+        Returns:
+            None
+        """
+
+        self._last.clear()
