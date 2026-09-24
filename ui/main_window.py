@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, Qt, QTimer
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -40,7 +40,13 @@ from PySide6.QtWidgets import (
 import i18n
 import paths
 from config.app_settings import AppSettings, save_settings
-from config.theme import build_application_stylesheet, set_current_theme
+from config.theme import (
+    THEME_DARK,
+    THEME_LIGHT,
+    available_themes,
+    build_application_stylesheet,
+    set_current_theme,
+)
 from constants import APP_NAME, APP_VERSION
 from github_api import token as token_store
 from github_api.client import GitHubClient
@@ -90,6 +96,16 @@ UPDATE_CHECK_DELAY_MS = 4000
 # Long enough for the window to be painted first, so the search dialog opens
 # on top of something rather than into a grey rectangle.
 DISCOVERY_OFFER_DELAY_MS = 700
+
+# What each theme is called in the Appearance menu, and what the entry explains.
+THEME_LABEL_KEYS: dict[str, str] = {
+    THEME_DARK: "theme.dark",
+    THEME_LIGHT: "theme.light",
+}
+THEME_TIP_KEYS: dict[str, str] = {
+    THEME_DARK: "tip.theme_dark",
+    THEME_LIGHT: "tip.theme_light",
+}
 
 # How long the window stays quiet after a focus-driven refresh. Alt-tabbing
 # between an editor and Branchly a dozen times must not mean a dozen rounds of
@@ -308,6 +324,28 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        view_menu = bar.addMenu(i18n.t("menu.view"))
+        # Qt hides action tooltips in a menu unless asked, and the entry itself
+        # is drawn from the submenu's own action rather than from the submenu.
+        view_menu.setToolTipsVisible(True)
+        appearance = view_menu.addMenu(i18n.t("menu.appearance"))
+        appearance.setToolTipsVisible(True)
+        appearance.menuAction().setToolTip(i18n.t("tip.menu_appearance"))
+        # Checkable and grouped, so the menu says which one is on rather than
+        # only offering the switch.
+        self._theme_group = QActionGroup(self)
+        self._theme_group.setExclusive(True)
+        self._theme_actions: dict[str, QAction] = {}
+        for name in available_themes():
+            action = QAction(i18n.t(THEME_LABEL_KEYS.get(name, name)), self)
+            action.setCheckable(True)
+            action.setChecked(name == self._settings.theme)
+            action.setToolTip(i18n.t(THEME_TIP_KEYS.get(name, "tip.menu_appearance")))
+            action.triggered.connect(lambda _checked=False, theme=name: self._choose_theme(theme))
+            self._theme_group.addAction(action)
+            appearance.addAction(action)
+            self._theme_actions[name] = action
 
         repo_menu = bar.addMenu(i18n.t("menu.repository"))
         repo_menu.addAction(i18n.t("sidebar.add_repo"), self._prompt_add_repo)
@@ -1985,6 +2023,46 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ settings
 
+    def _choose_theme(self, name: str) -> None:
+        """
+        Switches the appearance from the menu.
+
+        Args:
+            name: Theme to switch to.
+
+        Returns:
+            None
+        """
+
+        if name == self._settings.theme:
+            return
+        self._settings.theme = name
+        save_settings(self._settings)
+        self._apply_theme(name)
+
+    def _apply_theme(self, name: str) -> None:
+        """
+        Repaints the whole window in a theme.
+
+        Args:
+            name: Theme to paint in.
+
+        Returns:
+            None
+        """
+
+        set_current_theme(name)
+        instance = QApplication.instance()
+        if instance is not None:
+            instance.setStyleSheet(build_application_stylesheet(name))
+        refresh_theme_aware(self)
+        self._sidebar.refresh()
+        self._reload_graph()
+        self._reload_diff()
+        action = self._theme_actions.get(name)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
+
     def _open_settings(self) -> None:
         """
         Opens the settings dialog and applies the result.
@@ -1997,20 +2075,10 @@ class MainWindow(QMainWindow):
         if dialog.exec() != SettingsDialog.DialogCode.Accepted:
             return
         previous_language = self._settings.language
-        previous_theme = self._settings.theme
         updated = dialog.result_settings()
         updated.last_repo = self._settings.last_repo
         self._settings = updated
         save_settings(self._settings)
-
-        if self._settings.theme != previous_theme:
-            set_current_theme(self._settings.theme)
-            instance = QApplication.instance()
-            if instance is not None:
-                instance.setStyleSheet(build_application_stylesheet(self._settings.theme))
-            refresh_theme_aware(self)
-            self._sidebar.refresh()
-            self._reload_graph()
 
         self._sidebar.set_sort_mode(self._settings.sort_mode)
         self._pull_requests.set_show_avatars(self._settings.show_avatars)

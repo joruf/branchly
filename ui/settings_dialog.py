@@ -37,7 +37,6 @@ from config.app_settings import (
     DIFF_UNIFIED,
     AppSettings,
 )
-from config.theme import THEME_DARK, THEME_LIGHT, available_themes
 from github_api import token as token_store
 from github_api.client import (
     SCOPE_DELETE_REPO,
@@ -47,11 +46,6 @@ from github_api.client import (
 )
 from models.sort import SORT_MODE_LABEL_KEYS, VALID_SORT_MODES
 from ui.widgets import InlineMessage
-
-_THEME_LABEL_KEYS: dict[str, str] = {
-    THEME_DARK: "settings.theme_dark",
-    THEME_LIGHT: "settings.theme_light",
-}
 
 
 class _TokenCheckWorker(QObject):
@@ -155,7 +149,7 @@ class SettingsDialog(QDialog):
 
     def _build_general_tab(self) -> QWidget:
         """
-        Builds the language, theme and sorting tab.
+        Builds the language and sorting tab.
 
         Returns:
             QWidget: The tab.
@@ -173,15 +167,6 @@ class SettingsDialog(QDialog):
         if index >= 0:
             self._language.setCurrentIndex(index)
         form.addRow(i18n.t("settings.language"), self._language)
-
-        self._theme = QComboBox(page)
-        self._theme.setToolTip(i18n.t("tip.settings_theme"))
-        for name in available_themes():
-            self._theme.addItem(i18n.t(_THEME_LABEL_KEYS.get(name, name)), name)
-        index = self._theme.findData(self._original.theme)
-        if index >= 0:
-            self._theme.setCurrentIndex(index)
-        form.addRow(i18n.t("settings.theme"), self._theme)
 
         self._sort = QComboBox(page)
         self._sort.setToolTip(i18n.t("tip.settings_sort"))
@@ -522,7 +507,10 @@ class SettingsDialog(QDialog):
         """
 
         edited = AppSettings(
-            theme=str(self._theme.currentData() or self._original.theme),
+            # Light and dark live in the menu bar under Appearance, where the
+            # effect is visible the moment it is picked. Carried through here so
+            # a trip into this dialog does not undo that choice.
+            theme=self._original.theme,
             language=str(self._language.currentData() or self._original.language),
             sort_mode=str(self._sort.currentData() or self._original.sort_mode),
             auto_check_minutes=int(self._interval.currentData() or 0),
@@ -557,8 +545,38 @@ class SettingsDialog(QDialog):
             None
         """
 
-        if self._thread is not None:
-            self._thread.quit()
-            self._thread.wait(2000)
-            self._thread = None
+        self._stop_token_check()
         super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        """
+        Stops a pending token check before the dialog goes away.
+
+        ``closeEvent`` covers the window's own close button and nothing else.
+        OK, Cancel and Escape all arrive here instead, so a token check started
+        moments earlier would still be running when the dialog is destroyed, and
+        Qt aborts the process over a thread that outlives its owner.
+
+        Args:
+            result: The dialog's result code.
+
+        Returns:
+            None
+        """
+
+        self._stop_token_check()
+        super().done(result)
+
+    def _stop_token_check(self) -> None:
+        """
+        Waits for the token check thread to finish, if one is running.
+
+        Returns:
+            None
+        """
+
+        if self._thread is None:
+            return
+        self._thread.quit()
+        self._thread.wait(2000)
+        self._thread = None
