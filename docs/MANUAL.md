@@ -20,6 +20,18 @@ Links die **Projektliste**, in der Mitte **Änderungen / Graph / Pull Requests**
 rechts die **Gegenüberstellung**. Die Trennlinien lassen sich verschieben; die
 Fenstergröße und -position werden beim Beenden gespeichert.
 
+### Fenstergröße
+
+Das Fenster lässt sich auf etwa 930 Pixel Breite ziehen und behält dabei alle
+Bedienelemente: die Knopfreihen brechen auf eine zweite Zeile um, statt über den
+Rand hinauszulaufen. Das ist nicht nur Bequemlichkeit. Ein Fenster, dessen
+Mindestbreite über die Bildschirmbreite hinausgeht, gilt dem Fenstermanager als
+nicht veränderbar, und er nimmt ihm dafür den Maximieren-Knopf weg.
+
+Wo Verkleinern, Maximieren und Schließen in der Titelleiste sitzen, links oder
+rechts, bestimmt die Desktop-Umgebung, nicht Branchly. Unter Cinnamon steht das
+in *Systemeinstellungen → Fenster → Titelleiste*.
+
 ### Ausgegraut heißt: geht gerade nicht
 
 Ein Knopf, der im Moment nichts tun kann, ist blass und grau statt farbig. Das
@@ -390,6 +402,17 @@ Branchly `fix-login-bug`.
 
 Zum Wechseln muss der Arbeitsstand sauber sein — sonst wärest du dir selbst im
 Weg. Speichere oder verwirf vorher.
+
+### Einen neuen Branch das erste Mal senden
+
+Ein frisch angelegter Branch steht nur auf deiner Festplatte. Beim ersten
+**Änderungen zum Server senden** legt Branchly ihn dort an und merkt sich die
+Zuordnung, sodass jedes weitere Senden ohne Nachfrage an dieselbe Stelle geht.
+Du musst dafür nichts einstellen.
+
+Stehst du auf keinem Branch, sondern siehst dir einen einzelnen gespeicherten
+Stand an, sagt Branchly das und sendet nichts. Dort gibt es keinen Branch, den
+der Server führen könnte. Wechsle erst auf einen Branch.
 
 Lehnt der Server einen Push ab, heißt das fast immer: jemand anderes war
 schneller. Erst holen, dann senden.

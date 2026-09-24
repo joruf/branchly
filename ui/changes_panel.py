@@ -13,7 +13,6 @@ from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter
 from PySide6.QtWidgets import (
     QCheckBox,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -33,7 +32,7 @@ from config.theme import get_theme_colors
 from gitops import ignore as ignore_mod
 from gitops.commit import CommitDraft
 from gitops.status import CHANGE_UNTRACKED, RepositoryState
-from ui.widgets import EmptyState, InlineMessage, SectionHeader, token_color
+from ui.widgets import EmptyState, FlowLayout, InlineMessage, SectionHeader, token_color
 
 # Which wording the ignore submenu uses for each kind of offer.
 # How much room the marker gets at the right edge, and how far it sits from
@@ -240,18 +239,19 @@ class ChangesPanel(QWidget):
         self._description.setFixedHeight(64)
         column.addWidget(self._description)
 
-        row = QHBoxLayout()
+        # The tick box carries a full sentence and the button carries a count, so
+        # side by side they pin the panel open. They wrap onto two lines instead.
+        actions = QWidget(holder)
+        row = FlowLayout(actions, spacing=8)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
-        self._amend = QCheckBox(i18n.t("changes.amend"), holder)
+        self._amend = QCheckBox(i18n.t("changes.amend"), actions)
         self._amend.setToolTip(i18n.t("tip.amend"))
         row.addWidget(self._amend)
-        row.addStretch(1)
-        self._commit_button = QPushButton("", holder)
+        self._commit_button = QPushButton("", actions)
         self._commit_button.setObjectName("Primary")
         self._commit_button.clicked.connect(self._emit_commit)
         row.addWidget(self._commit_button)
-        column.addLayout(row)
+        column.addWidget(actions)
 
         self._commit_box = holder
         return holder

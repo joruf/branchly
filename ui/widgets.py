@@ -417,6 +417,15 @@ class SectionHeader(QFrame):
         self._layout.addWidget(self._title)
         self._layout.addStretch(1)
 
+        # The controls wrap instead of pinning the panel open. A plain row of
+        # them made the whole window refuse to become narrower than the sum of
+        # their widths, which on a German build ran to well over a thousand
+        # pixels and cost the window its maximise button.
+        self._controls = QWidget(self)
+        self._controls_layout = FlowLayout(self._controls, spacing=8)
+        self._controls_layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.addWidget(self._controls)
+
     def set_title(self, title: str) -> None:
         """
         Replaces the header text.
@@ -441,7 +450,8 @@ class SectionHeader(QFrame):
             None
         """
 
-        self._layout.addWidget(widget)
+        widget.setParent(self._controls)
+        self._controls_layout.addWidget(widget)
 
 
 def format_relative_check_time(checked_at: float | None, now: float) -> str:
@@ -650,13 +660,29 @@ class FlowLayout(QLayout):
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
         """
-        Returns the size the layout would like.
+        Returns the size the layout would like: everything on one row.
+
+        This has to be wider than ``minimumSize``, or the layout is useless in a
+        row that also holds something else. Qt hands a widget its size hint and
+        only squeezes down towards the minimum when space runs short, so a hint
+        equal to the minimum would stack the buttons vertically even in a window
+        with room to spare.
 
         Returns:
-            QSize: The minimum size, since the layout never asks for more.
+            QSize: Width of all items in a single row, height of the tallest.
         """
 
-        return self.minimumSize()
+        width = 0
+        height = 0
+        for index, item in enumerate(self._items):
+            hint = item.sizeHint()
+            width += hint.width() + (self._spacing if index else 0)
+            height = max(height, hint.height())
+        margins = self.contentsMargins()
+        return QSize(
+            width + margins.left() + margins.right(),
+            height + margins.top() + margins.bottom(),
+        )
 
     def minimumSize(self) -> QSize:  # noqa: N802 - Qt override
         """
@@ -687,7 +713,11 @@ class FlowLayout(QLayout):
         margins = self.contentsMargins()
         left = rect.x() + margins.left()
         top = rect.y() + margins.top()
-        right = rect.right() - margins.right()
+        # One past the last usable pixel. ``QRect.right()`` is the last pixel
+        # itself, and using it here made the row one pixel too narrow for its own
+        # size hint, so the final item wrapped onto a second line even in a
+        # window with room to spare.
+        right = rect.x() + rect.width() - margins.right()
 
         x = left
         y = top

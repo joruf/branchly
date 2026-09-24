@@ -59,6 +59,8 @@ ERROR_GENERIC = "error.git_failed"
 ERROR_AUTH = "sync.auth_failed"
 ERROR_OFFLINE = "sync.offline"
 ERROR_PUSH_REJECTED = "sync.push_rejected"
+ERROR_NO_UPSTREAM = "sync.no_upstream"
+ERROR_DETACHED = "sync.detached"
 
 
 class UnsafeGitArgument(ValueError):  # noqa: N818 - the name is part of this module's API
@@ -165,6 +167,10 @@ class GitResult:
             return ERROR_OFFLINE
         if "non-fast-forward" in text or ("rejected" in text and "fetch first" in text):
             return ERROR_PUSH_REJECTED
+        if "no branch checked out" in text:
+            return ERROR_DETACHED
+        if "has no upstream branch" in text:
+            return ERROR_NO_UPSTREAM
         return ERROR_GENERIC
 
 

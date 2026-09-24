@@ -82,7 +82,7 @@ from ui.pull_all_dialog import PullAllDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
 from ui.update_dialog import UpdateDialog, build_update_thread, describe_update
-from ui.widgets import InlineMessage, refresh_theme_aware
+from ui.widgets import FlowLayout, InlineMessage, refresh_theme_aware
 
 TAB_CHANGES = 0
 TAB_GRAPH = 1
@@ -277,31 +277,40 @@ class MainWindow(QMainWindow):
         row.addWidget(self._branch_label)
         row.addStretch(1)
 
-        self._new_branch_button = QPushButton(i18n.t("branch.new"), holder)
+        # Five buttons in a plain row set a floor under the window's width that
+        # no amount of dragging could get past, and a window that cannot be
+        # resized loses its maximise button. They wrap onto a second line
+        # instead.
+        actions = QWidget(holder)
+        buttons = FlowLayout(actions, spacing=8)
+        buttons.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(actions)
+
+        self._new_branch_button = QPushButton(i18n.t("branch.new"), actions)
         self._new_branch_button.setToolTip(i18n.t("tip.branch_new"))
         self._new_branch_button.clicked.connect(self._prompt_new_branch)
-        row.addWidget(self._new_branch_button)
+        buttons.addWidget(self._new_branch_button)
 
-        self._switch_branch_button = QPushButton(i18n.t("branch.switch"), holder)
+        self._switch_branch_button = QPushButton(i18n.t("branch.switch"), actions)
         self._switch_branch_button.setToolTip(i18n.t("tip.branch_switch"))
         self._switch_branch_button.clicked.connect(self._prompt_switch_branch)
-        row.addWidget(self._switch_branch_button)
+        buttons.addWidget(self._switch_branch_button)
 
-        self._fetch_button = QPushButton(i18n.t("sync.fetch"), holder)
+        self._fetch_button = QPushButton(i18n.t("sync.fetch"), actions)
         self._fetch_button.setToolTip(i18n.t("tip.fetch"))
         self._fetch_button.clicked.connect(self._do_fetch)
-        row.addWidget(self._fetch_button)
+        buttons.addWidget(self._fetch_button)
 
-        self._pull_button = QPushButton(i18n.t("sync.pull_generic"), holder)
+        self._pull_button = QPushButton(i18n.t("sync.pull_generic"), actions)
         self._pull_button.setToolTip(i18n.t("tip.pull"))
         self._pull_button.clicked.connect(self._do_pull)
-        row.addWidget(self._pull_button)
+        buttons.addWidget(self._pull_button)
 
-        self._push_button = QPushButton(i18n.t("sync.push_generic"), holder)
+        self._push_button = QPushButton(i18n.t("sync.push_generic"), actions)
         self._push_button.setToolTip(i18n.t("tip.push"))
         self._push_button.setObjectName("Primary")
         self._push_button.clicked.connect(self._do_push)
-        row.addWidget(self._push_button)
+        buttons.addWidget(self._push_button)
         return holder
 
     def _build_menu(self) -> None:
@@ -1332,13 +1341,31 @@ class MainWindow(QMainWindow):
         if entry is None:
             return
         state = self._state
+        if state is not None and state.detached:
+            # Nothing to send anywhere: a detached HEAD is not on a branch, so
+            # there is no branch to push and none to record an upstream for.
+            self._show_notice("sync.detached", "sync.detached_hint", "warning")
+            return
+
+        # An upstream is recorded on the first push of a branch, and git then
+        # needs the branch by name: without it, it refuses with a fatal. The name
+        # is passed only in that case. With an upstream already in place, git
+        # follows the tracking configuration, which may well point at a remote
+        # branch that is not called the same thing.
         set_upstream = bool(state and not state.upstream)
+        branch = state.branch if set_upstream and state is not None else ""
         self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.push(entry.path, set_upstream=set_upstream)
+        result = remote_mod.push(entry.path, branch=branch, set_upstream=set_upstream)
         self.statusBar().clearMessage()
         if result.failed:
-            if result.error_key() == "sync.push_rejected":
-                self._show_notice("sync.push_rejected", "sync.push_rejected_hint", "warning")
+            hints = {
+                "sync.push_rejected": "sync.push_rejected_hint",
+                "sync.no_upstream": "sync.no_upstream_hint",
+                "sync.detached": "sync.detached_hint",
+            }
+            key = result.error_key()
+            if key in hints:
+                self._show_notice(key, hints[key], "warning")
             else:
                 self._report(result)
             self._reload_current()

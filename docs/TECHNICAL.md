@@ -491,6 +491,55 @@ nachholte. Qt bricht den Prozess ab, wenn ein Thread seinen Pool überlebt
 sporadisch beim Beenden, seit auf Fokus und auf jeden Projektwechsel gescannt
 wird.
 
+### Der erste Push eines Branches
+
+`git push --set-upstream origin` liest sich wie „sende diesen Branch und merk dir
+wohin", und das ist es nicht. Mit dem voreingestellten `push.default = simple`
+verweigert Git die Arbeit, denn ein Branch ohne Upstream liefert keine Refspec:
+
+```
+fatal: The current branch main has no upstream branch.
+```
+
+Der Branchname muss also auf die Kommandozeile, sobald ein Upstream gesetzt wird.
+`gitops.remote.push()` holt ihn sich selbst über `current_branch()`, wenn der
+Aufrufer keinen mitgibt, und verweigert bei losgelöstem HEAD mit einem eigenen
+Marker statt mit Gits Ratgeberblock.
+
+Umgekehrt wird der Name **nicht** mitgegeben, wenn bereits ein Upstream
+eingetragen ist. Dann folgt Git der Tracking-Konfiguration, und die darf durchaus
+auf einen Remote-Branch mit anderem Namen zeigen.
+
+### Wieso das Fenster eine Mindestbreite hatte
+
+Eine Reihe Knöpfe in einem `QHBoxLayout` meldet als Minimum die Summe ihrer
+Breiten. Fünf Knöpfe in der Projektzeile, sechs Bedienelemente über der
+Gegenüberstellung, dazu ein `QComboBox`, der so breit sein will wie sein längster
+Eintrag: zusammen ergab das eine Mindestbreite von 1993 Pixeln, auf einem
+1920er-Bildschirm also mehr als der ganze Schirm.
+
+Das ist kein Schönheitsfehler. Der Fenstermanager liest `WM_NORMAL_HINTS`, sieht
+ein Fenster, das nicht schmaler werden kann, und streicht
+`_NET_WM_ACTION_MAXIMIZE_HORZ` und `_NET_WM_ACTION_MAXIMIZE_VERT` aus
+`_NET_WM_ALLOWED_ACTIONS`. Der Maximieren-Knopf verschwindet aus der
+Titelleiste, und zwar ohne dass irgendwo ein Fehler auftaucht.
+
+Behoben über `FlowLayout` in den Kopfzeilen, Wortumbruch in den langen Labels und
+`setMinimumContentsLength()` auf den Auswahlfeldern. `FlowLayout` brauchte dafür
+zwei Korrekturen:
+
+- **`sizeHint()` liefert jetzt die Breite einer einzigen Zeile**, nicht mehr das
+  Minimum. Qt gibt einem Widget seinen Size-Hint und drückt erst bei Platzmangel
+  Richtung Minimum. Ein Hint gleich dem Minimum stapelte die Knöpfe also auch
+  dann übereinander, wenn reichlich Platz war.
+- **`QRect.right()` ist das letzte Pixel, nicht das erste dahinter.** Die Zeile
+  war dadurch ein Pixel zu schmal für ihren eigenen Hint, und das letzte Element
+  brach um.
+
+`tests/test_window_size_and_push.py` misst die Mindestbreite des echten Fensters
+gegen 1024 Pixel, auf Deutsch und auf Englisch. Deutsch ist der schlimmere Fall,
+jedes Label ist länger.
+
 ### Wenn ein Knopf nichts tun kann
 
 Ein Qt-Stylesheet gewichtet wie CSS, und ein ID-Selektor wiegt schwerer als eine
