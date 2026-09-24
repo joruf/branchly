@@ -117,6 +117,9 @@ the state from before.
   has a muted disabled state, accent-coloured buttons included
 - The window goes down to about 930 pixels wide with every control still
   reachable, so it keeps its maximise button on any screen
+- Sending and fetching work on a machine where Git has no stored login: for a
+  GitHub HTTPS remote, Branchly offers the token from its keychain, through
+  `GIT_ASKPASS` so it never reaches a file or a command line
 
 **Keeping itself up to date**
 - Once a day on startup Branchly asks GitHub whether a newer version exists and

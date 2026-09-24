@@ -403,6 +403,30 @@ Branchly `fix-login-bug`.
 Zum Wechseln muss der Arbeitsstand sauber sein — sonst wärest du dir selbst im
 Weg. Speichere oder verwirf vorher.
 
+### Anmeldung am Server
+
+Git verwaltet seine Zugangsdaten selbst, über seinen Credential Helper. Ist dort
+nichts hinterlegt, kann Git in einem Fenster ohne Terminal niemanden fragen und
+bricht mit „Der Server hat die Anmeldung nicht akzeptiert" ab, obwohl überhaupt
+keine Anmeldung geschickt wurde.
+
+Für Projekte auf **GitHub über https** springt Branchly deshalb ein: liegt ein
+Token im Schlüsselspeicher (Einstellungen → GitHub), benutzt Branchly es auch
+zum Senden, Holen und Prüfen. Du musst dafür nichts einrichten.
+
+Eng gefasst, und zwar mit Absicht:
+
+| Fall | Was passiert |
+|---|---|
+| `https://github.com/...` und Token vorhanden | Branchly meldet sich mit dem Token an |
+| `https://github.com/...` ohne Token | Meldung mit dem Hinweis, wo das Token hingehört |
+| `git@github.com:...` (SSH) | Unverändert, dort zählt dein SSH-Schlüssel |
+| GitLab, eigener Server, jede andere Adresse | Unverändert, Git regelt das mit seinem Helper |
+
+Das Token wandert dabei nie in eine Datei, nie in die Repository-Konfiguration
+und nie auf die Kommandozeile. Es lebt in der Umgebung genau des einen
+Git-Prozesses, und die kann nur der eigene Benutzer lesen.
+
 ### Einen neuen Branch das erste Mal senden
 
 Ein frisch angelegter Branch steht nur auf deiner Festplatte. Beim ersten

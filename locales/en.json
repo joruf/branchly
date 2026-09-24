@@ -216,6 +216,7 @@
   "sync.detached_hint": "You are looking at a single saved version, not at a branch. Switch to a branch first, then you can send.",
   "sync.auth_failed": "The server did not accept your login",
   "sync.auth_failed_hint": "Branchly does not store Git logins, Git handles them itself. Check your saved credentials or your SSH key.",
+  "sync.auth_needs_token": "This project is on GitHub and Git has no login stored for it. Put a token into Settings, GitHub, and Branchly will use it for sending and fetching too.",
   "sync.offline": "No connection to the server",
   "clone.title": "Clone a project",
   "clone.url_label": "Address of the project",

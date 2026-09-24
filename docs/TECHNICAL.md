@@ -25,7 +25,7 @@ run.py                     Bootstrap: Argumente, Sprache, Theme, QApplication
 │   ├── http.py            Transport: Cache, Paginierung, Rate-Limit, Fehler
 │   ├── repos/issues/…     je eine Gruppe von Endpunkten, als Mixin
 │   └── client.py          setzt die Gruppen zu einer Klasse zusammen
-├── services/              Registry, Scanner, Scheduler, Puller, Updater, Desktop
+├── services/              Registry, Scanner, Scheduler, Puller, Updater, Login
 └── ui/                    Qt-Widgets; kennt gitops, aber nie subprocess
 ```
 
@@ -490,6 +490,48 @@ nachholte. Qt bricht den Prozess ab, wenn ein Thread seinen Pool überlebt
 (`QThread: Destroyed while thread is still running`), und genau das passierte
 sporadisch beim Beenden, seit auf Fokus und auf jeden Projektwechsel gescannt
 wird.
+
+### Anmeldung: `GIT_ASKPASS` statt eines gespeicherten Passworts
+
+`GIT_TERMINAL_PROMPT=0` ist richtig, eine GUI hat kein Terminal. Der Preis ist,
+dass ein Repository, für dessen Host der Credential Helper nichts kennt, sofort
+scheitert:
+
+```
+fatal: could not read Username for 'https://github.com': ...
+```
+
+`error_key()` ordnet das `sync.auth_failed` zu, und der Nutzer las „Der Server
+hat die Anmeldung nicht akzeptiert", obwohl nie eine geschickt wurde.
+
+Branchly hat aber bereits ein GitHub-Token im Schlüsselspeicher, für das Panel.
+`services/git_credentials.py` entscheidet, ob es hier zählt, `gitops/askpass.py`
+baut die Umgebung, und `resources/branchly-askpass.py` ist das Programm, das Git
+mit der Frage als Argument aufruft und dessen erste Ausgabezeile es als Antwort
+nimmt.
+
+**Warum die Umgebung und nicht die Kommandozeile.** Argumente eines Prozesses
+kann jeder Benutzer der Maschine über `ps` lesen, die Umgebung nur der
+Eigentümer. Ein `http.extraHeader` mit dem Token wäre der kürzere Weg und der
+falsche.
+
+**Warum so eng gefasst.** Nur `https`, nur `github.com` (exakter Hostvergleich,
+sonst nähme `github.com.evil.invalid` das Token entgegen), nur wenn eines
+gespeichert ist. Eine SSH-Adresse authentifiziert mit einem Schlüssel, jede
+andere Adresse gehört jemand anderem.
+
+**Nicht an `github_enabled` gekoppelt.** Der Schalter regelt Issues, Pull
+Requests und Avatare. Wer ihn ausschaltet und das Token liegen lässt, erwartet
+trotzdem, dass Senden funktioniert.
+
+`SSH_ASKPASS` wird mitgesetzt, damit auch eine Passphrasen-Abfrage den Prozess
+nicht hängen lässt: das Programm antwortet dann mit nichts und Git gibt sofort
+auf.
+
+Bewiesen wird das nicht am Code, sondern an einem echten HTTP-Server in
+`tests/test_git_credentials.py`, der 401 schickt, die Anmeldung mitschreibt und
+sie mit dem Erwarteten vergleicht. Dazu ein Test, dass das Token in keinem
+Argument auftaucht.
 
 ### Der erste Push eines Branches
 
