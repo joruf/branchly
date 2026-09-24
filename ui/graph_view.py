@@ -179,6 +179,11 @@ class GraphView(QWidget):
         header = SectionHeader(i18n.t("graph.title"), self)
         self._legend = QLabel(i18n.t("graph.legend"), header)
         self._legend.setObjectName("Muted")
+        # A sentence this long refuses to be laid out narrower than itself unless
+        # it is allowed to break, and that alone set a floor under the window's
+        # width.
+        self._legend.setWordWrap(True)
+        self._legend.setMinimumWidth(1)
         header.add_widget(self._legend)
         reload_button = QPushButton(i18n.t("action.refresh"), header)
         reload_button.clicked.connect(self.reload_requested.emit)

@@ -53,7 +53,7 @@ from gitops.diff import (
     FileDiff,
     pair_lines,
 )
-from ui.widgets import EmptyState, InlineMessage, apply_monospace
+from ui.widgets import EmptyState, FlowLayout, InlineMessage, apply_monospace
 
 TAB_WIDTH = 4
 
@@ -468,6 +468,28 @@ def render_many(diffs: list[FileDiff], mode: str, colors: ThemeColors, word_leve
         inner = body.split("<table>", 1)[-1].rsplit("</table>", 1)[0]
         blocks.append(f"<table>{''.join(rows)}{inner}</table>")
     return f"{_document_head(colors)}{''.join(blocks)}"
+
+
+def _allow_narrow(combo: QComboBox, characters: int = 14) -> None:
+    """
+    Stops a drop-down from insisting on the width of its longest entry.
+
+    A ``QComboBox`` reports a minimum wide enough for every item it holds, and
+    "Your edits vs. the last saved version" is a wide item. Several of those in
+    one panel set a floor under the whole window's width, which costs the window
+    its maximise button. The full text is still there, it is elided when the
+    panel is narrow and readable in the open list either way.
+
+    Args:
+        combo: The drop-down to cap.
+        characters: How many characters it has to show without eliding.
+
+    Returns:
+        None
+    """
+
+    combo.setMinimumContentsLength(characters)
+    combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
 
 
 class ComparisonPanes(QWidget):
@@ -1054,12 +1076,27 @@ class DiffView(QWidget):
 
         holder = QWidget(self)
         holder.setObjectName("PanelHeader")
-        row = QHBoxLayout(holder)
-        row.setContentsMargins(10, 6, 10, 6)
-        row.setSpacing(8)
+        outer = QHBoxLayout(holder)
+        outer.setContentsMargins(10, 6, 10, 6)
+        outer.setSpacing(8)
 
-        self._target = QComboBox(holder)
+        # Two wrapping groups rather than one long row. Six controls side by side
+        # gave this panel a minimum width of over a thousand pixels, and a
+        # minimum that large is not a cosmetic problem: the window manager drops
+        # the maximise button for a window that cannot be resized.
+        left_holder = QWidget(holder)
+        row = FlowLayout(left_holder, spacing=8)
+        row.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(left_holder)
+        outer.addStretch(1)
+        right_holder = QWidget(holder)
+        right = FlowLayout(right_holder, spacing=8)
+        right.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(right_holder)
+
+        self._target = QComboBox(left_holder)
         self._target.setToolTip(i18n.t("tip.diff_target"))
+        _allow_narrow(self._target)
         for target in VALID_TARGETS:
             self._target.addItem(i18n.t(TARGET_LABEL_KEYS[target]), target)
         # "Your edits vs. the last saved version" is what someone looking at a
@@ -1068,11 +1105,12 @@ class DiffView(QWidget):
         if default_index >= 0:
             self._target.setCurrentIndex(default_index)
         self._target.currentIndexChanged.connect(self._on_target_changed)
-        row.addWidget(QLabel(i18n.t("diff.target_label"), holder))
+        row.addWidget(QLabel(i18n.t("diff.target_label"), left_holder))
         row.addWidget(self._target)
 
-        self._mode_box = QComboBox(holder)
+        self._mode_box = QComboBox(left_holder)
         self._mode_box.setToolTip(i18n.t("tip.diff_mode"))
+        _allow_narrow(self._mode_box)
         self._mode_box.addItem(i18n.t("diff.mode_side_by_side"), DIFF_SIDE_BY_SIDE)
         self._mode_box.addItem(i18n.t("diff.mode_unified"), DIFF_UNIFIED)
         index = self._mode_box.findData(self._mode)
@@ -1081,36 +1119,34 @@ class DiffView(QWidget):
         self._mode_box.currentIndexChanged.connect(self._on_mode_changed)
         row.addWidget(self._mode_box)
 
-        self._whitespace = QCheckBox(i18n.t("diff.ignore_whitespace"), holder)
+        self._whitespace = QCheckBox(i18n.t("diff.ignore_whitespace"), left_holder)
         self._whitespace.setToolTip(i18n.t("tip.diff_whitespace"))
         self._whitespace.setChecked(ignore_whitespace)
         self._whitespace.toggled.connect(self._on_option_toggled)
         row.addWidget(self._whitespace)
 
-        self._words = QCheckBox(i18n.t("diff.word_level"), holder)
+        self._words = QCheckBox(i18n.t("diff.word_level"), left_holder)
         self._words.setToolTip(i18n.t("tip.diff_words"))
         self._words.setChecked(word_level)
         self._words.toggled.connect(self._on_option_toggled)
         row.addWidget(self._words)
 
-        row.addStretch(1)
-
-        self._counts = QLabel("", holder)
+        self._counts = QLabel("", right_holder)
         self._counts.setToolTip(i18n.t("tip.diff_counts"))
         self._counts.setObjectName("Muted")
-        row.addWidget(self._counts)
+        right.addWidget(self._counts)
 
-        self._open_button = QPushButton(i18n.t("diff.open_file"), holder)
+        self._open_button = QPushButton(i18n.t("diff.open_file"), right_holder)
         self._open_button.setToolTip(i18n.t("tip.diff_open"))
         self._open_button.clicked.connect(lambda: self.open_file_requested.emit(self._path))
         self._open_button.setEnabled(False)
-        row.addWidget(self._open_button)
+        right.addWidget(self._open_button)
 
-        self._reveal_button = QPushButton(i18n.t("diff.open_folder"), holder)
+        self._reveal_button = QPushButton(i18n.t("diff.open_folder"), right_holder)
         self._reveal_button.setToolTip(i18n.t("tip.diff_reveal"))
         self._reveal_button.clicked.connect(lambda: self.reveal_file_requested.emit(self._path))
         self._reveal_button.setEnabled(False)
-        row.addWidget(self._reveal_button)
+        right.addWidget(self._reveal_button)
         return holder
 
     # ----------------------------------------------------------------- options

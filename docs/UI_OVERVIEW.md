@@ -245,6 +245,16 @@ zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel a
 zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
 Wechsel neu anläuft.
 
+## Kopfzeilen brechen um (`ui/widgets.py`, `FlowLayout`)
+
+`SectionHeader`, die Projektzeile, die Leiste über der Gegenüberstellung und die
+Commit-Zeile legen ihre Bedienelemente in ein `FlowLayout` statt in ein
+`QHBoxLayout`. Bei Platz stehen sie in einer Zeile, sonst brechen sie um. Der
+Grund ist kein Layout-Geschmack: Die Summe der Knopfbreiten war die Mindestbreite
+des ganzen Fensters, 1993 Pixel auf Deutsch, und ein Fenster, das breiter sein
+muss als der Bildschirm, verliert beim Fenstermanager seinen Maximieren-Knopf.
+Jetzt sind es 934.
+
 ## Ausgegrauter Zustand (`config/theme.py`)
 
 Jede Steuerung hat eine `:disabled`-Regel, auch die mit einer eigenen ID. Das ist

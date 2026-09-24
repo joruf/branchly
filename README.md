@@ -115,6 +115,8 @@ the state from before.
   applied the moment it is picked. A new theme is one entry in `config/theme.py`
 - A control that cannot do anything right now looks like it: every widget kind
   has a muted disabled state, accent-coloured buttons included
+- The window goes down to about 930 pixels wide with every control still
+  reachable, so it keeps its maximise button on any screen
 
 **Keeping itself up to date**
 - Once a day on startup Branchly asks GitHub whether a newer version exists and

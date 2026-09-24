@@ -20,6 +20,11 @@ from constants import GIT_TIMEOUT_NETWORK
 from gitops.refname import is_valid_branch_name, is_valid_revision
 from gitops.remote_url import is_valid as is_valid_remote_url
 from gitops.runner import GitResult, run, run_lines
+from gitops.status import current_branch
+
+# Marker put into a refused result's stderr, so the failure can be told apart
+# from git's own output and turned into a sentence the user can act on.
+NO_BRANCH_CHECKED_OUT = "no branch checked out"
 
 
 def _refused(command: str, reason: str = "unsafe argument") -> GitResult:
@@ -339,6 +344,13 @@ def push(
     makes the push fail if someone else pushed in the meantime, instead of
     deleting their work silently.
 
+    The branch is named explicitly whenever an upstream is being recorded.
+    ``git push --set-upstream origin`` on its own does not mean "push this branch
+    and remember it": with the default ``push.default = simple`` git refuses
+    outright, because a branch without an upstream leaves it no refspec to work
+    from. That is every branch's first push, so leaving the name out broke
+    exactly the case the flag exists for.
+
     Args:
         repo: Working tree path.
         remote: Remote name.
@@ -355,6 +367,13 @@ def push(
         return _refused("push", "invalid remote name")
     if branch and not is_valid_branch_name(branch):
         return _refused("push", "invalid branch name")
+    if set_upstream and not branch:
+        branch = current_branch(repo)
+        if not branch:
+            # A detached HEAD has no branch an upstream could be recorded for.
+            return _refused("push", NO_BRANCH_CHECKED_OUT)
+        if not is_valid_branch_name(branch):
+            return _refused("push", "invalid branch name")
     args = ["push"]
     if force_with_lease:
         args.append("--force-with-lease")
