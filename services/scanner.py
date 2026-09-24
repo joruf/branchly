@@ -21,6 +21,7 @@ from gitops import remote as remote_mod
 from gitops.remote_url import github_slug
 from gitops.status import last_commit_timestamp, read_state
 from models.repository import RepoEntry, RepoStatus
+from services import git_credentials
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +104,9 @@ def scan(request: ScanRequest) -> ScanResult:
     slug = github_slug(remote_url_value) if remote_url_value else None
 
     if request.check_online and remote_url_value:
-        online = remote_mod.check_remote_state(path, state.branch)
+        online = remote_mod.check_remote_state(
+            path, state.branch, credentials=git_credentials.for_url(remote_url_value)
+        )
         if online.reachable:
             status.incoming = max(status.behind, online.incoming)
             status.online_checked_at = time.time()

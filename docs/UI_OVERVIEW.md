@@ -245,6 +245,17 @@ zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel a
 zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
 Wechsel neu anläuft.
 
+## Anmeldung am Server (`services/git_credentials.py`)
+
+`_do_push`, `_do_pull` und `_do_fetch` holen sich über `_credentials()` eine
+Umgebung, die Git das gespeicherte GitHub-Token als Login reicht, und geben sie
+an `gitops.remote` weiter. Der Scanner tut dasselbe für die Online-Prüfung.
+
+Schlägt eine Anmeldung fehl, entscheidet `_report_sync()` über die Formulierung:
+„Prüfe deine gespeicherten Zugangsdaten" ist der falsche Rat für jemanden mit
+einem GitHub-Projekt und ohne Token, dort gibt es nichts zu prüfen, sondern
+etwas nachzutragen.
+
 ## Kopfzeilen brechen um (`ui/widgets.py`, `FlowLayout`)
 
 `SectionHeader`, die Projektzeile, die Leiste über der Gegenüberstellung und die

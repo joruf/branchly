@@ -143,7 +143,9 @@ def upstream_of(repo: Path | str, branch: str = "") -> str:
     return result.stdout.strip()
 
 
-def ls_remote_heads(repo: Path | str, remote: str = "origin") -> dict[str, str]:
+def ls_remote_heads(
+    repo: Path | str, remote: str = "origin", credentials: dict[str, str] | None = None
+) -> dict[str, str]:
     """
     Asks the server which branches it has and where they point.
 
@@ -152,6 +154,9 @@ def ls_remote_heads(repo: Path | str, remote: str = "origin") -> dict[str, str]:
     Args:
         repo: Working tree path.
         remote: Remote name.
+        credentials: Login for the server, as built by
+            ``services.git_credentials``. Empty when git's own credential helper
+            should be left to it.
 
     Returns:
         dict[str, str]: Short branch name mapped to commit id, empty when the
@@ -165,6 +170,7 @@ def ls_remote_heads(repo: Path | str, remote: str = "origin") -> dict[str, str]:
         cwd=repo,
         timeout=GIT_TIMEOUT_NETWORK,
         read_only=True,
+        env_extra=credentials or None,
     )
     if result.failed:
         return {}
@@ -199,7 +205,12 @@ def local_ref_oid(repo: Path | str, ref: str) -> str:
     return result.stdout.strip()
 
 
-def check_remote_state(repo: Path | str, branch: str = "", remote: str = "origin") -> RemoteState:
+def check_remote_state(
+    repo: Path | str,
+    branch: str = "",
+    remote: str = "origin",
+    credentials: dict[str, str] | None = None,
+) -> RemoteState:
     """
     Compares the server's branch tip against the local tracking ref.
 
@@ -209,6 +220,9 @@ def check_remote_state(repo: Path | str, branch: str = "", remote: str = "origin
         repo: Working tree path.
         branch: Branch to check. Defaults to the current branch.
         remote: Remote name.
+        credentials: Login for the server, as built by
+            ``services.git_credentials``. Empty when git's own credential helper
+            should be left to it.
 
     Returns:
         RemoteState: Comparison result. A repository without a remote comes back
@@ -225,7 +239,7 @@ def check_remote_state(repo: Path | str, branch: str = "", remote: str = "origin
     if not target_branch or not is_valid_branch_name(target_branch):
         return RemoteState(reachable=False)
 
-    heads = ls_remote_heads(repo, remote)
+    heads = ls_remote_heads(repo, remote, credentials)
     if not heads:
         return RemoteState(reachable=False, error_key="sync.offline")
 
@@ -268,7 +282,12 @@ def count_between(repo: Path | str, base: str, head: str) -> int:
         return 0
 
 
-def fetch(repo: Path | str, remote: str = "origin", prune: bool = True) -> GitResult:
+def fetch(
+    repo: Path | str,
+    remote: str = "origin",
+    prune: bool = True,
+    credentials: dict[str, str] | None = None,
+) -> GitResult:
     """
     Downloads new commits without changing the working tree.
 
@@ -276,6 +295,9 @@ def fetch(repo: Path | str, remote: str = "origin", prune: bool = True) -> GitRe
         repo: Working tree path.
         remote: Remote name.
         prune: Whether to drop tracking refs for branches deleted on the server.
+        credentials: Login for the server, as built by
+            ``services.git_credentials``. Empty when git's own credential helper
+            should be left to it.
 
     Returns:
         GitResult: Outcome.
@@ -287,7 +309,7 @@ def fetch(repo: Path | str, remote: str = "origin", prune: bool = True) -> GitRe
     if prune:
         args.append("--prune")
     args.append(remote)
-    return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK)
+    return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK, env_extra=credentials or None)
 
 
 def pull(
@@ -296,6 +318,7 @@ def pull(
     branch: str = "",
     rebase: bool = False,
     ff_only: bool = False,
+    credentials: dict[str, str] | None = None,
 ) -> GitResult:
     """
     Downloads and integrates the server's commits.
@@ -310,6 +333,9 @@ def pull(
             leaves HEAD exactly where it was. This is what an unattended pull over
             many repositories needs: it cannot invent history or stop halfway
             through a conflict.
+        credentials: Login for the server, as built by
+            ``services.git_credentials``. Empty when git's own credential helper
+            should be left to it.
 
     Returns:
         GitResult: Outcome. Conflicts make this fail; the caller then opens the
@@ -327,7 +353,7 @@ def pull(
     args.append(remote)
     if branch:
         args.append(branch)
-    return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK)
+    return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK, env_extra=credentials or None)
 
 
 def push(
@@ -336,6 +362,7 @@ def push(
     branch: str = "",
     set_upstream: bool = False,
     force_with_lease: bool = False,
+    credentials: dict[str, str] | None = None,
 ) -> GitResult:
     """
     Sends local commits to the server.
@@ -358,6 +385,9 @@ def push(
         set_upstream: Whether to record the tracking relationship.
         force_with_lease: Whether to overwrite the remote branch, but only if it
             still points where we last saw it.
+        credentials: Login for the server, as built by
+            ``services.git_credentials``. Empty when git's own credential helper
+            should be left to it.
 
     Returns:
         GitResult: Outcome.
@@ -382,7 +412,7 @@ def push(
     args.append(remote)
     if branch:
         args.append(branch)
-    return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK)
+    return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK, env_extra=credentials or None)
 
 
 def set_remote_url(repo: Path | str, url: str, remote: str = "origin") -> GitResult:

@@ -65,7 +65,7 @@ from gitops.remote_url import github_slug
 from gitops.runner import GitResult
 from gitops.status import RepositoryState, read_state
 from models.repository import RepoEntry
-from services import open_with, puller, scanner, updater
+from services import git_credentials, open_with, puller, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui.changes_panel import ChangesPanel
@@ -1266,10 +1266,10 @@ class MainWindow(QMainWindow):
         if entry is None:
             return
         self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.fetch(entry.path)
+        result = remote_mod.fetch(entry.path, credentials=self._credentials(entry))
         self.statusBar().clearMessage()
         if result.failed:
-            self._report(result)
+            self._report_sync(result, entry)
             return
         self._reload_current()
         self._start_scan(entry.key)
@@ -1286,7 +1286,7 @@ class MainWindow(QMainWindow):
         if entry is None:
             return
         self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.pull(entry.path)
+        result = remote_mod.pull(entry.path, credentials=self._credentials(entry))
         self.statusBar().clearMessage()
         self._reload_current()
         if result.failed:
@@ -1294,7 +1294,7 @@ class MainWindow(QMainWindow):
             if state.has_conflicts:
                 self._open_conflict_assistant()
                 return
-            self._report(result)
+            self._report_sync(result, entry)
             return
         self._start_scan(entry.key)
 
@@ -1355,7 +1355,12 @@ class MainWindow(QMainWindow):
         set_upstream = bool(state and not state.upstream)
         branch = state.branch if set_upstream and state is not None else ""
         self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.push(entry.path, branch=branch, set_upstream=set_upstream)
+        result = remote_mod.push(
+            entry.path,
+            branch=branch,
+            set_upstream=set_upstream,
+            credentials=self._credentials(entry),
+        )
         self.statusBar().clearMessage()
         if result.failed:
             hints = {
@@ -1367,7 +1372,7 @@ class MainWindow(QMainWindow):
             if key in hints:
                 self._show_notice(key, hints[key], "warning")
             else:
-                self._report(result)
+                self._report_sync(result, entry)
             self._reload_current()
             return
         self._reload_current()
@@ -2378,6 +2383,48 @@ class MainWindow(QMainWindow):
         box.addButton(i18n.t("action.cancel"), QMessageBox.ButtonRole.RejectRole)
         box.exec()
         return box.clickedButton() is accept
+
+    def _credentials(self, entry: RepoEntry) -> dict[str, str]:
+        """
+        Builds the login git should use for one project.
+
+        Not gated on the GitHub panel being switched on. That switch is about
+        issues, pull requests and avatars, and somebody who turned it off but
+        left a token in the keychain still expects Send to work. The token is
+        only ever offered for a GitHub address the user asked Branchly to talk
+        to.
+
+        Args:
+            entry: Project the operation is for.
+
+        Returns:
+            dict[str, str]: Environment for the git call, empty when Branchly has
+                nothing that applies and git's own helper should be left to it.
+        """
+
+        return git_credentials.for_repository(entry.path)
+
+    def _report_sync(self, result: GitResult, entry: RepoEntry) -> None:
+        """
+        Reports a failed server operation, with advice that fits the project.
+
+        "Check your saved credentials" is the wrong thing to tell someone whose
+        project is on GitHub and who has no token stored: there is nothing to
+        check, there is something to add. So that case gets its own wording and
+        a pointer to where the token goes.
+
+        Args:
+            result: The failed result.
+            entry: Project the operation was for.
+
+        Returns:
+            None
+        """
+
+        if result.error_key() == "sync.auth_failed" and git_credentials.wants_token(entry.path):
+            self._show_notice("sync.auth_failed", "sync.auth_needs_token", "danger")
+            return
+        self._report(result)
 
     def _report(self, result: GitResult, fallback_title: str = "error.title") -> None:
         """

@@ -216,6 +216,7 @@
   "sync.detached_hint": "Du siehst gerade einen einzelnen gespeicherten Stand an, keinen Branch. Wechsle erst auf einen Branch, dann kannst du senden.",
   "sync.auth_failed": "Der Server hat deine Anmeldung nicht akzeptiert",
   "sync.auth_failed_hint": "Branchly speichert keine Git-Zugangsdaten, das macht Git selbst. Prüfe deine gespeicherten Zugangsdaten oder deinen SSH-Schlüssel.",
+  "sync.auth_needs_token": "Dieses Projekt liegt auf GitHub, und Git hat dafür keine Anmeldung gespeichert. Hinterlege ein Token unter Einstellungen, GitHub, dann benutzt Branchly es auch zum Senden und Holen.",
   "sync.offline": "Keine Verbindung zum Server",
   "clone.title": "Projekt klonen",
   "clone.url_label": "Adresse des Projekts",
