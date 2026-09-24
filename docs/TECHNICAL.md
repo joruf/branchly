@@ -491,11 +491,44 @@ nachholte. Qt bricht den Prozess ab, wenn ein Thread seinen Pool überlebt
 sporadisch beim Beenden, seit auf Fokus und auf jeden Projektwechsel gescannt
 wird.
 
+### Wenn ein Knopf nichts tun kann
+
+Ein Qt-Stylesheet gewichtet wie CSS, und ein ID-Selektor wiegt schwerer als eine
+Pseudoklasse. `QPushButton#Primary` schlug also `QPushButton:disabled`, und der
+Commit-Knopf blieb in voller Akzentfarbe stehen, während `isEnabled()` längst
+`False` war. Das sieht nicht nach „wartet auf eine Eingabe" aus, sondern nach
+kaputt.
+
+Jede Steuerung hat deshalb eine eigene `:disabled`-Regel, die ID-Varianten
+ausdrücklich mit: `QPushButton#Primary`, `#Danger`, `#Link`, dazu `QToolButton`,
+die Eingabefelder, `QCheckBox`, `QRadioButton`, `QLabel`, `QTabBar::tab` und die
+Menüeinträge. Die Farben kommen aus drei eigenen Token, `disabled_bg`,
+`disabled_text` und `disabled_border`. `disabled_text` ist dunkler als
+`text_muted`, denn gedämpfter Text soll noch gelesen werden, ausgegrauter soll
+übersprungen werden.
+
+Geprüft wird das gerendert, nicht gelesen: `tests/test_theme.py` zeichnet jede
+Steuerung ein- und ausgeschaltet und zählt die abweichenden Pixel. Eine Regel,
+die von einer anderen überstimmt wird, steht sonst im Stylesheet und wirkt
+trotzdem nicht.
+
+### Erscheinungsbild im Menü statt im Dialog
+
+Hell und Dunkel liegen als abhakbare `QAction` in einer exklusiven
+`QActionGroup` unter *Ansicht → Erscheinungsbild*. `_choose_theme()` schreibt die
+Einstellung sofort weg und ruft `_apply_theme()`, das Stylesheet,
+`refresh_theme_aware()`, Sidebar, Graph und Gegenüberstellung nachzieht.
+
+Der Einstellungsdialog kennt das Feld nicht mehr und gibt `theme` unverändert aus
+`self._original` zurück. Ohne das würde ein Besuch im Dialog die Wahl aus dem
+Menü mit dem Stand überschreiben, den der Dialog beim Öffnen gesehen hat.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`
 eintragen. Kein Widget kennt Hex-Werte; `tests/test_theme.py` prüft, dass jedes
-Theme jeden Token definiert und dass jeder Wert eine Farbe ist.
+Theme jeden Token definiert, dass jeder Wert eine Farbe ist und dass jede
+Steuerung im ausgeschalteten Zustand anders aussieht als im eingeschalteten.
 
 **Sprache:** Eine JSON-Datei in `locales/` ablegen. Englisch ist der Fallback für
 fehlende Schlüssel, `_label` liefert den Namen in der Auswahl.

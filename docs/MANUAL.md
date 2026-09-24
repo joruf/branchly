@@ -20,6 +20,14 @@ Links die **Projektliste**, in der Mitte **Änderungen / Graph / Pull Requests**
 rechts die **Gegenüberstellung**. Die Trennlinien lassen sich verschieben; die
 Fenstergröße und -position werden beim Beenden gespeichert.
 
+### Ausgegraut heißt: geht gerade nicht
+
+Ein Knopf, der im Moment nichts tun kann, ist blass und grau statt farbig. Das
+gilt überall, auch für die auffälligen blauen Knöpfe: „Speichern in main" ohne
+Kurzfassung sieht aus wie ein Knopf, der wartet, nicht wie einer, der kaputt ist.
+Ohne Server hinterlegt gilt dasselbe für Holen und Senden. Der Tooltip sagt in
+diesen Fällen, was fehlt.
+
 ## Projekte
 
 ### Hinzufügen und Klonen
@@ -108,6 +116,20 @@ zuerst, Projekte mit Änderungen zuerst, eigene Reihenfolge.
 
 Unter der Liste steht die Zusammenfassung über alle Projekte, z. B.
 „2 Projekte mit Änderungen · 1 Projekt mit Neuigkeiten vom Server".
+
+### Was der Tooltip verrät
+
+Mit der Maus auf einer Zeile stehen bleiben, und es erscheint ein kleiner
+Kasten mit den beiden Angaben, die in die Zeile nicht hineinpassen:
+
+| Zeile | Inhalt |
+|---|---|
+| Im Netz | Die Adresse des Repositories auf dem Server, oder „Kein Server hinterlegt" |
+| Lokale Kopie | Der vollständige Pfad des Ordners auf dieser Festplatte |
+
+Darunter steht, wann das Projekt zuletzt geprüft wurde, bei einem verschwundenen
+Ordner stattdessen der Hinweis darauf. Das Ganze gilt für die ganze Zeile, nicht
+nur für den Namen.
 
 ## Prüfen, was neu ist
 
@@ -259,7 +281,10 @@ Zwei Einstellungen, unabhängig voneinander:
 „Geänderte Wörter hervorheben".
 
 Bei **Nebeneinander** stehen zwei getrennte Ansichten: links der alte Stand,
-rechts der neue. Beide bleiben sichtbar, auch wenn der Platz knapp wird; keine
+rechts der neue. Über jeder der beiden steht, welche sie ist, nämlich „Alte
+Version" und „Neue Version". Ohne diese Beschriftung lässt sich links und rechts
+verwechseln, und dann liest man jede Hinzufügung als Löschung. Die Beschriftung
+bleibt beim Scrollen stehen. Beide bleiben sichtbar, auch wenn der Platz knapp wird; keine
 der beiden Seiten verschwindet oder wird zusammengeschoben. Jede Seite hat einen
 eigenen waagerechten Scrollbalken für lange Zeilen, und beide sind gekoppelt:
 egal welchen du benutzt, es scrollen immer beide Seiten mit, sonst würdest du
@@ -547,13 +572,20 @@ abschalten. Wie oft sie höchstens läuft, steht als `update_check_hours` in
 
 | Reiter | Inhalt |
 |---|---|
-| Allgemein | Sprache, Erscheinungsbild, Standard-Sortierung, Nachfragen vor Verlust |
+| Allgemein | Sprache, Standard-Sortierung, Nachfragen vor Verlust |
 | Automatische Prüfung | Intervall, ob dabei die Server gefragt werden, Update-Suche beim Start |
 | Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung |
 | GitHub | Token, GitHub-Funktionen ein/aus, Autorenbilder |
 
-Ein Sprachwechsel greift beim nächsten Start. Das Erscheinungsbild wechselt
-sofort.
+Ein Sprachwechsel greift beim nächsten Start.
+
+### Hell oder dunkel
+
+Das steht nicht in den Einstellungen, sondern in der Menüleiste unter
+*Ansicht → Erscheinungsbild*. Dort stehen **Dunkel** und **Hell**, das aktive mit
+einem Haken. Ein Klick genügt: das Fenster ist sofort umgefärbt, und die Wahl
+wird gespeichert. Ein Schalter, dessen ganze Wirkung man sofort sieht, gehört
+nicht hinter einen Dialog mit OK-Knopf.
 
 ## Wo liegen die Daten
 

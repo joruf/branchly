@@ -243,6 +243,42 @@ class ComparisonPaneTests(unittest.TestCase):
         self.app.processEvents()
         return widget
 
+    def test_each_side_says_which_version_it_is(self) -> None:
+        # Left and right on their own say nothing. Reading the old file as the
+        # new one turns every addition into a deletion.
+        import i18n
+
+        widget = self._panes()
+        old_caption, new_caption = widget.captions
+        self.assertEqual(i18n.t("diff.pane_old"), old_caption)
+        self.assertEqual(i18n.t("diff.pane_new"), new_caption)
+        self.assertNotEqual(old_caption, new_caption)
+
+    def test_the_captions_are_words_not_symbols(self) -> None:
+        widget = self._panes()
+        for caption in widget.captions:
+            self.assertTrue(caption.strip())
+            self.assertTrue(any(char.isalpha() for char in caption), caption)
+
+    def test_the_captions_stay_put_while_the_content_scrolls(self) -> None:
+        # Put inside the documents they would scroll off the top, which is
+        # exactly when the reader needs them.
+        widget = self._panes()
+        before = widget.captions
+        for pane in widget.panes:
+            pane.verticalScrollBar().setValue(pane.verticalScrollBar().maximum())
+        self.app.processEvents()
+        self.assertEqual(before, widget.captions)
+
+    def test_the_captions_follow_the_theme(self) -> None:
+        from config.theme import THEME_DARK, THEME_LIGHT
+
+        widget = self._panes()
+        widget.refresh(THEME_DARK)
+        dark = widget._old_caption.styleSheet()
+        widget.refresh(THEME_LIGHT)
+        self.assertNotEqual(dark, widget._old_caption.styleSheet())
+
     def test_both_sides_are_shown(self) -> None:
         widget = self._panes()
         old_pane, new_pane = widget.panes

@@ -34,9 +34,21 @@
 | Sortierung | Sechs Ordnungen; Favoriten stehen immer oben |
 | Kategorie-Kopf | Name und Anzahl, auf- und zuklappbar, Zustand wird gespeichert |
 | Projektzeile | Sternchen, Name, Badges. Fehlender Ordner wird rot mit `!` markiert |
+| Tooltip der Zeile | `repo_tooltip()`: Name, Serveradresse, lokaler Pfad, Prüfzeitpunkt |
 | Zusammenfassung | Ein Satz über alle Projekte |
 | Alle Projekte prüfen | Während des Laufs Fortschrittsbalken statt Zusammenfassung |
 | Alle Projekte aktualisieren | Öffnet den Massen-Pull. Während einer Prüfung gesperrt — beide würden um dieselben Index-Sperren streiten |
+
+Der Tooltip ist Rich Text. Qt entscheidet selbst, ob ein String Markup ist, also
+genügt eine kleine Tabelle und es braucht kein eigenes Popup-Widget. Die Tabelle
+ist der Punkt: Beschriftung links, Wert rechts, untereinander statt in einer
+Zeile aneinandergereiht. Name, Pfad und URL gehen durch `html.escape()`, denn ein
+spitzes Klammerzeichen im Namen würde sonst den Rest verschlucken. Der Tooltip
+hängt an der ganzen Zeile, nicht nur am Namen.
+
+`Registry.add()` liest die Adresse von `origin` direkt aus der Konfigurationsdatei
+statt auf den ersten Scan zu warten, sonst behauptete ein eben hinzugefügtes
+Projekt kurzzeitig, es habe keinen Server.
 
 ## Kopfzeile
 
@@ -145,7 +157,10 @@ derselben HTML-Tabelle:
 
 - **Eine Spalte** ist ein `QTextBrowser` mit einem Dokument.
 - **Nebeneinander** ist `ComparisonPanes`: ein `QSplitter` mit zwei
-  `QTextBrowser`, links der alte Stand, rechts der neue. Jede Seite hat ihren
+  `QTextBrowser`, links der alte Stand, rechts der neue. Über jedem steht ein
+  `QLabel` mit „Alte Version" bzw. „Neue Version". Die Beschriftung sitzt über
+  der Ansicht statt im Dokument, sonst scrollte sie genau dann weg, wenn man sie
+  braucht. Jede Seite hat ihren
   eigenen waagerechten Scrollbalken, beide sind in beide Richtungen gekoppelt.
   Senkrecht ebenso, damit die Zeilen auf gleicher Höhe bleiben; dort wird nur der
   rechte Balken gezeichnet, weil zwei identische nebeneinander nur die Frage
@@ -174,7 +189,8 @@ Abschluss. Die Ergebnis-Spalte bekommt einen farbigen Rahmen, sobald gewählt is
 
 ## Einstellungen (`ui/settings_dialog.py`)
 
-Vier Reiter: Allgemein, Automatische Prüfung, Gegenüberstellung, GitHub.
+Vier Reiter: Allgemein, Automatische Prüfung, Gegenüberstellung, GitHub. Das
+Erscheinungsbild steht nicht mehr darunter, es liegt in der Menüleiste.
 Bearbeitet wird eine Kopie — Abbrechen lässt wirklich alles, wie es war. Nur der
 GitHub-Reiter hat sofortige Wirkung: ein gespeichertes Token wird augenblicklich
 gegen die API geprüft.
@@ -228,6 +244,25 @@ Beim Fokuswechsel (`changeEvent`) und beim Projektwechsel (`_activate`), zusätz
 zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel auf
 zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
 Wechsel neu anläuft.
+
+## Ausgegrauter Zustand (`config/theme.py`)
+
+Jede Steuerung hat eine `:disabled`-Regel, auch die mit einer eigenen ID. Das ist
+kein Schönheitsdetail: In einem Qt-Stylesheet schlägt ein ID-Selektor eine
+Pseudoklasse, also gewann `QPushButton#Primary` gegen `QPushButton:disabled` und
+der Commit-Knopf blieb kräftig blau, während er jeden Klick abwies. Drei Token
+tragen das, `disabled_bg`, `disabled_text` und `disabled_border`, und
+`tests/test_theme.py` rendert jede Steuerung in beiden Zuständen und vergleicht
+die Pixel.
+
+## Erscheinungsbild im Menü (`ui/main_window.py`)
+
+Hell und Dunkel stehen als abhakbare Aktionen in einer `QActionGroup` unter
+*Ansicht → Erscheinungsbild*. `_choose_theme()` speichert und ruft
+`_apply_theme()`, das Stylesheet, `refresh_theme_aware()`, Sidebar, Graph und
+Gegenüberstellung nachzieht. Der Einstellungsdialog kennt das Thema nicht mehr
+und reicht den Wert unverändert durch, sonst würde ein Besuch dort die Wahl aus
+dem Menü überschreiben.
 
 ## Repositories suchen (`ui/discover_dialog.py`)
 

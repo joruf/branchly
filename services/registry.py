@@ -23,6 +23,7 @@ from gitops.runner import repository_root
 from models.category import Category, normalize_category_name
 from models.repository import UNCATEGORIZED, RepoEntry, RepoStatus
 from models.sort import sort_entries
+from services.discovery import read_origin_url, resolve_git_dir
 
 ADD_OK = "ok"
 ADD_NOT_A_REPOSITORY = "not_a_repository"
@@ -208,6 +209,13 @@ class Registry:
         if name and not self._find_category(name):
             self.add_category(name)
         entry = RepoEntry(path=root, category=name, order=len(self._entries))
+        # Read straight from the config rather than waiting for the first scan.
+        # The sidebar tooltip names the server a project belongs to, and a
+        # freshly added project would otherwise claim to have none until a scan
+        # got round to it.
+        git_dir = resolve_git_dir(root)
+        if git_dir is not None:
+            entry.remote_url = read_origin_url(git_dir)
         self._entries.append(entry)
         return ADD_OK, entry
 

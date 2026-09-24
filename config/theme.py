@@ -37,6 +37,11 @@ class ThemeColors:
         button_bg: Default button background.
         button_hover: Default button hover background.
         button_pressed: Default button pressed background.
+        disabled_bg: Background of a control that cannot be used right now.
+        disabled_text: Text of a control that cannot be used right now. Dimmer
+            than ``text_muted`` on purpose: muted text is still something to
+            read, this is something to skip over.
+        disabled_border: Border of a control that cannot be used right now.
         input_bg: Text fields, spin boxes and search inputs.
         dropdown_bg: Combo box popup background.
         link: Link-style text color.
@@ -101,6 +106,9 @@ class ThemeColors:
     button_bg: str
     button_hover: str
     button_pressed: str
+    disabled_bg: str
+    disabled_text: str
+    disabled_border: str
     input_bg: str
     dropdown_bg: str
     link: str
@@ -165,6 +173,9 @@ _DARK_COLORS = ThemeColors(
     button_bg="#2f3543",
     button_hover="#3a4357",
     button_pressed="#272d3a",
+    disabled_bg="#272c38",
+    disabled_text="#6d7f97",
+    disabled_border="#333b4b",
     input_bg="#2f3543",
     dropdown_bg="#2a3040",
     link="#78b8ff",
@@ -238,6 +249,9 @@ _LIGHT_COLORS = ThemeColors(
     button_bg="#e2e8f0",
     button_hover="#cbd5e1",
     button_pressed="#b6c2d2",
+    disabled_bg="#eef1f5",
+    disabled_text="#94a3b8",
+    disabled_border="#dde3ea",
     input_bg="#ffffff",
     dropdown_bg="#ffffff",
     link="#2563eb",
@@ -472,9 +486,9 @@ QPushButton:pressed {{
     background-color: {c.button_pressed};
 }}
 QPushButton:disabled {{
-    color: {c.text_muted};
-    background-color: {c.surface_alt};
-    border-color: {c.border};
+    color: {c.disabled_text};
+    background-color: {c.disabled_bg};
+    border-color: {c.disabled_border};
 }}
 QPushButton#Primary {{
     background-color: {c.accent};
@@ -486,11 +500,21 @@ QPushButton#Primary:hover {{
     background-color: {c.accent_hover};
     border-color: {c.accent_hover};
 }}
+QPushButton#Primary:disabled {{
+    background-color: {c.disabled_bg};
+    color: {c.disabled_text};
+    border: 1px solid {c.disabled_border};
+}}
 QPushButton#Danger {{
     background-color: {c.danger};
     color: {c.text_inverted};
     border: 1px solid {c.danger};
     font-weight: 600;
+}}
+QPushButton#Danger:disabled {{
+    background-color: {c.disabled_bg};
+    color: {c.disabled_text};
+    border: 1px solid {c.disabled_border};
 }}
 QPushButton#Link {{
     background: transparent;
@@ -502,6 +526,10 @@ QPushButton#Link {{
 QPushButton#Link:hover {{
     color: {c.link_hover};
     text-decoration: underline;
+}}
+QPushButton#Link:disabled {{
+    color: {c.disabled_text};
+    text-decoration: none;
 }}
 QToolButton {{
     background-color: transparent;
@@ -518,6 +546,11 @@ QToolButton:checked {{
     color: {c.text_inverted};
     border-color: {c.accent};
 }}
+QToolButton:disabled {{
+    color: {c.disabled_text};
+    background-color: transparent;
+    border-color: transparent;
+}}
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QComboBox {{
     background-color: {c.input_bg};
     color: {c.text};
@@ -529,6 +562,12 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QComboBox {{
 }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {{
     border-color: {c.accent};
+}}
+QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
+QSpinBox:disabled, QComboBox:disabled {{
+    background-color: {c.disabled_bg};
+    color: {c.disabled_text};
+    border-color: {c.disabled_border};
 }}
 QComboBox::drop-down {{
     border: none;
@@ -587,6 +626,9 @@ QTabBar::tab:selected {{
     color: {c.text};
     border-bottom-color: {c.accent};
     font-weight: 600;
+}}
+QTabBar::tab:disabled {{
+    color: {c.disabled_text};
 }}
 QSplitter::handle {{
     background-color: {c.border};
@@ -652,6 +694,20 @@ QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
     background-color: {c.accent};
     border-color: {c.accent};
 }}
+QCheckBox:disabled, QRadioButton:disabled {{
+    color: {c.disabled_text};
+}}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
+    background-color: {c.disabled_bg};
+    border-color: {c.disabled_border};
+}}
+QCheckBox::indicator:checked:disabled, QRadioButton::indicator:checked:disabled {{
+    background-color: {c.disabled_border};
+    border-color: {c.disabled_border};
+}}
+QLabel:disabled {{
+    color: {c.disabled_text};
+}}
 QMenu {{
     background-color: {c.surface_raised};
     color: {c.text};
@@ -667,7 +723,7 @@ QMenu::item:selected {{
     color: {c.selection_text};
 }}
 QMenu::item:disabled {{
-    color: {c.text_muted};
+    color: {c.disabled_text};
 }}
 QMenu::separator {{
     height: 1px;
@@ -686,6 +742,9 @@ QMenuBar::item {{
 QMenuBar::item:selected {{
     background-color: {c.button_hover};
     border-radius: 4px;
+}}
+QMenuBar::item:disabled {{
+    color: {c.disabled_text};
 }}
 QProgressBar {{
     background-color: {c.surface_alt};

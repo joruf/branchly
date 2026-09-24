@@ -9,6 +9,7 @@ changes, which have news on the server, and which need a decision.
 
 from __future__ import annotations
 
+import html
 import time
 
 from PySide6.QtCore import Qt, Signal
@@ -41,6 +42,66 @@ from ui.widgets import Badge, format_relative_check_time
 
 _ROLE_ENTRY_KEY = int(Qt.ItemDataRole.UserRole)
 _ROLE_CATEGORY = int(Qt.ItemDataRole.UserRole) + 1
+
+
+def repo_tooltip(entry: RepoEntry, now: float) -> str:
+    """
+    Builds the hover text for one project row.
+
+    Two questions get asked of a row again and again: where does this thing live
+    on disk, and which server does it belong to. A row shows neither, because
+    both are far too long to sit in a list, so the tooltip is where they go.
+
+    Qt renders a tooltip as rich text as soon as the string looks like HTML, so
+    a small table does the job and no custom popup widget is needed. The table
+    is what makes it readable: labels in one column, values in the other, lined
+    up under each other instead of run together on one line.
+
+    Args:
+        entry: Repository to describe.
+        now: Current Unix timestamp, for the "checked ..." line.
+
+    Returns:
+        str: Rich text for ``setToolTip``.
+    """
+
+    colors = get_theme_colors()
+    rows: list[str] = []
+
+    def line(label: str, value: str, color: str) -> None:
+        """
+        Adds one labelled line to the table.
+
+        Args:
+            label: Caption in the left column.
+            value: Text in the right column.
+            color: Colour for the value.
+
+        Returns:
+            None
+        """
+
+        rows.append(
+            f'<tr><td style="color:{colors.text_muted};padding-right:10px;'
+            f'white-space:nowrap;">{html.escape(label)}</td>'
+            f'<td style="color:{color};">{html.escape(value)}</td></tr>'
+        )
+
+    line(i18n.t("repo.tip_remote"), entry.remote_url or i18n.t("repo.tip_no_remote"), colors.text)
+    line(i18n.t("repo.tip_local"), str(entry.path), colors.text)
+
+    if not entry.exists:
+        state = i18n.t("repo.missing")
+        state_color = colors.danger
+    else:
+        state = format_relative_check_time(entry.status.checked_at, now)
+        state_color = colors.text_muted
+
+    return (
+        f'<div style="margin:0;"><b>{html.escape(entry.name)}</b>'
+        f'<table style="margin-top:4px;">{"".join(rows)}</table>'
+        f'<div style="margin-top:4px;color:{state_color};">{html.escape(state)}</div></div>'
+    )
 
 
 class RepoRow(QWidget):
@@ -123,13 +184,12 @@ class RepoRow(QWidget):
         self._name.setText(entry.name)
 
         missing = not entry.exists
-        if missing:
-            self._name.setStyleSheet(f"color: {colors.danger};")
-            self._name.setToolTip(i18n.t("repo.missing_hint", path=str(entry.path)))
-        else:
-            self._name.setStyleSheet(f"color: {colors.text};")
-            checked = format_relative_check_time(entry.status.checked_at, time.time())
-            self._name.setToolTip(f"{entry.path}\n{checked}")
+        self._name.setStyleSheet(f"color: {colors.danger if missing else colors.text};")
+        # On the row as well as on the label, so the hover works anywhere along
+        # the row rather than only over the few characters of the name.
+        tooltip = repo_tooltip(entry, time.time())
+        self._name.setToolTip(tooltip)
+        self.setToolTip(tooltip)
 
         while self._badges.count():
             item = self._badges.takeAt(0)

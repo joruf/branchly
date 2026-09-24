@@ -493,6 +493,10 @@ class ComparisonPanes(QWidget):
     * **A signal that sets the other side's value comes straight back.** Every
       handler therefore runs behind one guard flag rather than disconnecting and
       reconnecting.
+    * **Each side says in words which version it is.** Left and right alone do
+      not tell anyone which one is the old file, and guessing wrong turns an
+      addition into a deletion. The captions sit above the views rather than
+      inside the documents, so they stay put while the content scrolls.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -510,18 +514,70 @@ class ComparisonPanes(QWidget):
 
         self._split = QSplitter(Qt.Orientation.Horizontal, self)
         self._split.setChildrenCollapsible(False)
-        self._old = self._build_pane()
-        self._new = self._build_pane()
+        self._old_caption, old_side, self._old = self._build_side("diff.pane_old", "tip.pane_old")
+        self._new_caption, new_side, self._new = self._build_side("diff.pane_new", "tip.pane_new")
         # The left side's vertical bar is hidden rather than removed: the view
         # still scrolls vertically, it just does not draw a second bar.
         self._old.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._split.addWidget(self._old)
-        self._split.addWidget(self._new)
+        self._split.addWidget(old_side)
+        self._split.addWidget(new_side)
         self._split.setSizes([500, 500])
         layout.addWidget(self._split)
 
+        self.refresh()
+
         self._link(self._old, self._new)
         self._link(self._new, self._old)
+
+    def _build_side(
+        self, caption_key: str, tip_key: str
+    ) -> tuple[QLabel, QWidget, QTextBrowser]:
+        """
+        Builds one column: a caption naming the version, and the view under it.
+
+        Args:
+            caption_key: Translation key for the caption.
+            tip_key: Translation key for the caption's hover text.
+
+        Returns:
+            tuple[QLabel, QWidget, QTextBrowser]: The caption, the column and the
+                view inside it.
+        """
+
+        holder = QWidget(self)
+        column = QVBoxLayout(holder)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+
+        caption = QLabel(i18n.t(caption_key), holder)
+        caption.setToolTip(i18n.t(tip_key))
+        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        column.addWidget(caption)
+
+        pane = self._build_pane()
+        pane.setParent(holder)
+        column.addWidget(pane, 1)
+        return caption, holder, pane
+
+    def refresh(self, theme: str | None = None) -> None:
+        """
+        Repaints the captions after a theme change.
+
+        Args:
+            theme: Theme to read the colours from. Defaults to the active one.
+
+        Returns:
+            None
+        """
+
+        colors = get_theme_colors(theme) if theme else get_theme_colors()
+        style = (
+            f"background-color: {colors.surface_alt}; color: {colors.text_muted};"
+            f"border-bottom: 1px solid {colors.border}; padding: 4px 6px;"
+            "font-weight: 600; letter-spacing: 0.4px;"
+        )
+        for caption in (self._old_caption, self._new_caption):
+            caption.setStyleSheet(style)
 
     def _build_pane(self) -> QTextBrowser:
         """
@@ -610,6 +666,17 @@ class ComparisonPanes(QWidget):
         for pane in (self._old, self._new):
             pane.verticalScrollBar().setValue(0)
             pane.horizontalScrollBar().setValue(0)
+
+    @property
+    def captions(self) -> tuple[str, str]:
+        """
+        Returns what the two columns are called.
+
+        Returns:
+            tuple[str, str]: The old side's caption and the new side's caption.
+        """
+
+        return self._old_caption.text(), self._new_caption.text()
 
     @property
     def panes(self) -> tuple[QTextBrowser, QTextBrowser]:
