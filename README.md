@@ -120,6 +120,11 @@ the state from before.
 - Sending and fetching work on a machine where Git has no stored login: for a
   GitHub HTTPS remote, Branchly offers the token from its keychain, through
   `GIT_ASKPASS` so it never reaches a file or a command line
+- Sign in from the Account menu, either through the browser with GitHub's device
+  flow or by pasting a token. Either way the token is checked before it is kept
+  and lives in the system keychain
+- Side by side, optionally with the unchanged text around a change: up to 20
+  lines above and below, drawn in a quiet grey so the change still stands out
 
 **Keeping itself up to date**
 - Once a day on startup Branchly asks GitHub whether a newer version exists and

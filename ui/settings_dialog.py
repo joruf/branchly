@@ -305,6 +305,11 @@ class SettingsDialog(QDialog):
         self._diff_words.setToolTip(i18n.t("tip.diff_words"))
         self._diff_words.setChecked(self._original.diff_word_level)
         form.addRow("", self._diff_words)
+
+        self._diff_context = QCheckBox(i18n.t("diff.full_context"), page)
+        self._diff_context.setToolTip(i18n.t("tip.diff_context"))
+        self._diff_context.setChecked(self._original.diff_full_context)
+        form.addRow("", self._diff_context)
         return page
 
     def _build_github_tab(self) -> QWidget:
@@ -525,6 +530,7 @@ class SettingsDialog(QDialog):
             diff_mode=str(self._diff_mode.currentData() or self._original.diff_mode),
             diff_ignore_whitespace=self._diff_whitespace.isChecked(),
             diff_word_level=self._diff_words.isChecked(),
+            diff_full_context=self._diff_context.isChecked(),
             github_enabled=self._github_enabled.isChecked(),
             show_avatars=self._show_avatars.isChecked(),
             confirm_destructive=self._confirm.isChecked(),
