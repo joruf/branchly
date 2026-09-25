@@ -289,8 +289,16 @@ Versionskontrolle genommen wird.
 
 Zwei Einstellungen, unabhängig voneinander:
 
-**Darstellung** — Nebeneinander oder Eine Spalte, „Abstände ignorieren",
-„Geänderte Wörter hervorheben".
+**Darstellung**: Nebeneinander oder Eine Spalte, „Abstände ignorieren",
+„Geänderte Wörter hervorheben", „Unveränderten Text zeigen".
+
+**Unveränderten Text zeigen** blendet ein, was um eine Änderung herum gleich
+geblieben ist, höchstens 20 Zeilen darüber und 20 darunter. Dieser Text steht in
+einem ruhigen Grau, gut lesbar, aber deutlich zurückgenommen, damit die Änderung
+selbst das Auffällige bleibt. Ohne die Option sind es drei Zeilen, was reicht, um
+eine Änderung einzuordnen, aber nicht, um sie im Zusammenhang zu lesen. Die
+Begrenzung auf 20 Zeilen ist Absicht: bei einer langen Datei hat der Rest mit der
+Änderung nichts zu tun.
 
 Bei **Nebeneinander** stehen zwei getrennte Ansichten: links der alte Stand,
 rechts der neue. Über jeder der beiden steht, welche sie ist, nämlich „Alte
@@ -448,6 +456,32 @@ und lässt es auch bearbeiten. Nur für Projekte auf GitHub und nur mit hinterle
 Zugriffstoken (Einstellungen → GitHub). Ohne Token oder bei GitLab und selbst
 gehosteten Servern sagt das Panel das ausdrücklich, alles andere funktioniert
 normal weiter.
+
+### Anmelden
+
+In der Menüleiste unter *Konto* steht **Bei GitHub anmelden**. Darunter steht
+immer, wer gerade angemeldet ist, und **Abmelden** entfernt das Token wieder vom
+Rechner. Auf dem Server ändert sich dabei nichts.
+
+![Anmelden](screenshots/signin-dark.png)
+
+Zwei Wege, beide enden im selben Ergebnis, nämlich einem Token im
+Schlüsselspeicher des Systems:
+
+**Über den Browser.** Branchly zeigt einen kurzen Code und legt ihn in die
+Zwischenablage, GitHub öffnet sich im Browser, du fügst den Code ein und
+bestätigst. Fertig. Du hantierst dabei nie selbst mit einem Zugangsschlüssel, und
+die Berechtigungen setzt Branchly, nicht du. Dieser Weg braucht eine registrierte
+OAuth-App (siehe unten); ist keine eingetragen, sagt der Dialog das und der Knopf
+bleibt aus.
+
+**Über ein Token.** Funktioniert immer und braucht keine Einrichtung. Der Knopf
+öffnet die GitHub-Seite mit bereits gesetzten Häkchen, du legst das Token an und
+fügst es ein. Branchly fragt GitHub, wem es gehört, und speichert es nur, wenn
+eine Antwort kommt. Ein Token, das nicht funktioniert, wird nicht abgelegt.
+
+Mit der Anmeldung schaltet Branchly die GitHub-Funktionen ein, und das Token wird
+ab dann auch zum Senden und Holen benutzt.
 
 ### Das Token
 

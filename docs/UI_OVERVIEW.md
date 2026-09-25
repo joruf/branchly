@@ -245,6 +245,22 @@ zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel a
 zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
 Wechsel neu anläuft.
 
+## Anmelden (`ui/signin_dialog.py`)
+
+Zwei Abschnitte untereinander, Browser und Token, beide immer sichtbar. Der
+Token-Weg steht nicht hinter einem „Probleme?"-Link, denn er ist der einzige, der
+ohne Einrichtung funktioniert. Ist keine OAuth-App eingetragen, ist der
+Browser-Knopf aus und der Hinweis darüber sagt warum.
+
+Beide Wege laufen durch dieselbe Prüfung, `viewer()`, bevor gespeichert wird. Die
+Arbeit läuft je auf einem eigenen `QThread`; `done()` und `closeEvent()` brechen
+ihn ab, denn der Device-Flow-Thread schläft die meiste Zeit zwischen zwei
+Abfragen, und Qt bricht den Prozess ab, wenn ein Thread seinen Besitzer
+überlebt.
+
+Im Menü liegt das unter *Konto*: Anmelden, Abmelden, und darunter als nicht
+anklickbarer Eintrag, wer gerade angemeldet ist.
+
 ## Anmeldung am Server (`services/git_credentials.py`)
 
 `_do_push`, `_do_pull` und `_do_fetch` holen sich über `_credentials()` eine
@@ -255,6 +271,12 @@ Schlägt eine Anmeldung fehl, entscheidet `_report_sync()` über die Formulierun
 „Prüfe deine gespeicherten Zugangsdaten" ist der falsche Rat für jemanden mit
 einem GitHub-Projekt und ohne Token, dort gibt es nichts zu prüfen, sondern
 etwas nachzutragen.
+
+## Unveränderter Text (`ui/diff_view.py`)
+
+Der Schalter „Unveränderten Text zeigen" holt einen neuen Diff mit
+`--unified=20` statt `--unified=3`, denn die Zeilen stehen nicht im vorhandenen.
+Gezeichnet werden sie über `diff_context_quiet`, einen eigenen, blasseren Token.
 
 ## Kopfzeilen brechen um (`ui/widgets.py`, `FlowLayout`)
 

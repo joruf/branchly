@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from constants import DIFF_MAX_LINES
+from constants import DIFF_CONTEXT_LINES, DIFF_MAX_LINES
 from gitops.refname import is_safe_argument, is_valid_revision
 from gitops.runner import run, run_binary
 
@@ -195,7 +195,7 @@ def build_diff_args(
     ignore_whitespace: bool = False,
     rev_a: str = "",
     rev_b: str = "",
-    context_lines: int = 3,
+    context_lines: int = DIFF_CONTEXT_LINES,
 ) -> list[str] | None:
     """
     Builds the git arguments for one comparison.
@@ -501,6 +501,7 @@ def commit_diff(
     revision: str,
     ignore_whitespace: bool = False,
     word_level: bool = True,
+    context_lines: int = DIFF_CONTEXT_LINES,
 ) -> list[FileDiff]:
     """
     Produces the full diff a single commit introduced.
@@ -514,6 +515,7 @@ def commit_diff(
         revision: Commit to show.
         ignore_whitespace: Whether whitespace-only changes are hidden.
         word_level: Whether to compute intra-line highlight spans.
+        context_lines: Unchanged lines to show above and below each change.
 
     Returns:
         list[FileDiff]: One entry per changed file, empty when unreadable.
@@ -526,7 +528,7 @@ def commit_diff(
         "--no-color",
         "--no-ext-diff",
         "--first-parent",
-        "--unified=3",
+        f"--unified={max(0, context_lines)}",
         "--format=",
         revision,
     ]
@@ -544,6 +546,7 @@ def range_diff(
     rev_b: str,
     ignore_whitespace: bool = False,
     word_level: bool = True,
+    context_lines: int = DIFF_CONTEXT_LINES,
 ) -> list[FileDiff]:
     """
     Produces the full diff between two revisions.
@@ -554,12 +557,15 @@ def range_diff(
         rev_b: Newer revision.
         ignore_whitespace: Whether whitespace-only changes are hidden.
         word_level: Whether to compute intra-line highlight spans.
+        context_lines: Unchanged lines to show above and below each change.
 
     Returns:
         list[FileDiff]: One entry per changed file, empty when unreadable.
     """
 
-    args = build_diff_args(TARGET_COMMITS, None, ignore_whitespace, rev_a, rev_b)
+    args = build_diff_args(
+        TARGET_COMMITS, None, ignore_whitespace, rev_a, rev_b, context_lines
+    )
     if args is None:
         return []
     result = run(args, cwd=repo, read_only=True)
@@ -616,6 +622,7 @@ def file_diff(
     word_level: bool = True,
     rev_a: str = "",
     rev_b: str = "",
+    context_lines: int = DIFF_CONTEXT_LINES,
 ) -> FileDiff:
     """
     Produces the diff of one file.
@@ -628,12 +635,13 @@ def file_diff(
         word_level: Whether to compute intra-line highlight spans.
         rev_a: Left revision for commit and branch comparisons.
         rev_b: Right revision for commit and branch comparisons.
+        context_lines: Unchanged lines to show above and below each change.
 
     Returns:
         FileDiff: Parsed diff, carrying ``error_key`` when it could not be read.
     """
 
-    args = build_diff_args(target, path, ignore_whitespace, rev_a, rev_b)
+    args = build_diff_args(target, path, ignore_whitespace, rev_a, rev_b, context_lines)
     if args is None:
         return FileDiff(path=path, error_key="error.unsafe_argument")
     result = run(args, cwd=repo, read_only=True)

@@ -491,6 +491,72 @@ nachholte. Qt bricht den Prozess ab, wenn ein Thread seinen Pool überlebt
 sporadisch beim Beenden, seit auf Fokus und auf jeden Projektwechsel gescannt
 wird.
 
+### Anmelden: Device Flow statt Redirect
+
+Von den OAuth-Varianten passt genau eine zu einem Desktop-Programm. Ein
+Client Secret kann es nicht geheim halten, jeder kann es aus den Dateien lesen.
+Eine Redirect-URL kann es nicht besitzen, es gibt keinen Webserver, und ein
+lokaler wäre ein eigenes Problem. Der Device Flow braucht beides nicht: GitHub
+gibt einen kurzen Code aus, der Nutzer tippt ihn in seinem eigenen Browser ein,
+und das Programm fragt so lange nach, bis GitHub zustimmt.
+
+`github_api/oauth.py` führt das Gespräch. Die vier Antworten, die nicht „hier ist
+dein Token" lauten, bedeuten alle etwas anderes, und jede davon falsch zu
+behandeln bricht den Ablauf auf eine eigene Art:
+
+| Antwort | Bedeutung | Falsche Reaktion |
+| --- | --- | --- |
+| `authorization_pending` | Der Nutzer tippt noch | Aufgeben, während er tippt |
+| `slow_down` | Zu oft gefragt, neues Intervall beachten | Weiterfragen, bis GitHub ganz abweist |
+| `access_denied` | Im Browser abgelehnt | Ewig auf etwas warten, das nie kommt |
+| `expired_token` | Code abgelaufen | Dasselbe |
+
+Eine fehlgeschlagene HTTP-Anfrage mittendrin ist bewusst `pending` und kein
+Fehler: ein verlorenes Paket ist keine abgelehnte Anmeldung. Die Gesamtfrist
+beendet das Warten, wenn das Netz wegbleibt.
+
+`interval` und `expires_in` kommen vom Server und werden als Schlafdauer und als
+Frist benutzt. Eine Null oder ein Wort darin würde drehen oder nie enden, also
+geht beides durch `_positive()`.
+
+**Die Client-ID ist kein Geheimnis.** Genau dafür gibt es den Device Flow. Sie
+steht trotzdem leer in `constants.py`, denn sie benennt eine konkrete
+registrierte App. `BRANCHLY_GITHUB_CLIENT_ID` überschreibt sie, ohne dass Code
+angefasst werden muss. Ist keine gesetzt, meldet `is_configured()` das und der
+Dialog bietet nur den Token-Weg an, der nichts braucht.
+
+Eine App eintragen, einmalig:
+
+1. github.com → Settings → Developer settings → OAuth Apps → **New OAuth App**
+2. Name frei wählbar, Homepage-URL beliebig, Callback-URL beliebig (der Device
+   Flow benutzt keine)
+3. Nach dem Anlegen **Enable Device Flow** ankreuzen, sonst weist GitHub die
+   Anfrage mit `device_flow_disabled` ab
+4. Die Client-ID in `GITHUB_OAUTH_CLIENT_ID` eintragen oder als
+   `BRANCHLY_GITHUB_CLIENT_ID` in die Umgebung legen
+
+Ein Client Secret wird nicht gebraucht und darf hier auch nicht hin.
+
+**Gespeichert wird nur, was nachweislich funktioniert.** Beide Wege laufen durch
+`viewer()`, bevor `token_store.save()` überhaupt gefragt wird. Ein Programm, das
+angemeldet aussieht und bei der ersten echten Aktion scheitert, ist schlimmer als
+eines, das die Anmeldung ablehnt.
+
+### Mehr Kontext in der Gegenüberstellung
+
+Die zusätzlichen Zeilen sind keine Darstellungsfrage, sie stehen schlicht nicht
+in dem Diff, den Branchly schon hat. `--unified=20` statt `--unified=3` heißt
+also: Git erneut fragen. Deshalb hängt der Schalter an `reload_requested` und
+nicht an `_rerender()` wie die Wort-Hervorhebung.
+
+Gezeichnet wird über einen zweiten Token, `diff_context_quiet`. Bei drei Zeilen
+Kontext ist der unveränderte Text ein Rahmen, bei zwanzig oben und unten ist er
+der größte Teil der Fläche. In der normalen Farbe konkurriert er dann mit der
+Änderung um die Aufmerksamkeit, also genau das Gegenteil des Zwecks.
+`_context_colors()` tauscht dafür einen einzigen Token per
+`dataclasses.replace()` aus, statt einen Schalter durch jede Renderfunktion zu
+reichen.
+
 ### Anmeldung: `GIT_ASKPASS` statt eines gespeicherten Passworts
 
 `GIT_TERMINAL_PROMPT=0` ist richtig, eine GUI hat kein Terminal. Der Preis ist,

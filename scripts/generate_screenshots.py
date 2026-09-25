@@ -540,6 +540,50 @@ def capture_conflict(theme: str, base: Path) -> Path:
     return target
 
 
+def capture_signin(theme: str) -> Path:
+    """
+    Photographs the sign-in dialog.
+
+    A client id is put in the environment so the browser route is shown as it
+    looks when it is available. The value names no real application and nothing
+    is sent anywhere: the dialog only reads it to decide whether to offer the
+    button.
+
+    Args:
+        theme: Theme to render.
+
+    Returns:
+        Path: The written file.
+    """
+
+    import os
+
+    from PySide6.QtWidgets import QApplication
+
+    from ui.signin_dialog import SignInDialog
+
+    i18n.set_language("de")
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    os.environ["BRANCHLY_GITHUB_CLIENT_ID"] = "Iv1.example"
+    try:
+        dialog = SignInDialog()
+        dialog.resize(560, 430)
+        dialog.show()
+        for _round in range(6):
+            app.processEvents()
+
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        target = OUTPUT_DIR / f"signin-{theme}.png"
+        dialog.grab().save(str(target))
+        dialog.done(0)
+    finally:
+        os.environ.pop("BRANCHLY_GITHUB_CLIENT_ID", None)
+    return target
+
+
 def main() -> int:
     """
     Generates every screenshot.
@@ -563,6 +607,7 @@ def main() -> int:
             print(f"wrote {capture_binary(theme, base)}")
             print(f"wrote {capture_discover(theme, base)}")
             print(f"wrote {capture_conflict(theme, base)}")
+            print(f"wrote {capture_signin(theme)}")
     return 0
 
 

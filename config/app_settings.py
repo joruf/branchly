@@ -176,6 +176,8 @@ class AppSettings:
         diff_mode: Default diff layout.
         diff_ignore_whitespace: Whether diffs ignore whitespace-only changes.
         diff_word_level: Whether changed lines get intra-line word highlighting.
+        diff_full_context: Whether the unchanged text around a change is shown
+            as well, up to twenty lines above and below it.
         github_enabled: Whether GitHub API features are active.
         show_avatars: Whether author avatars are downloaded and shown.
         confirm_destructive: Whether destructive actions require confirmation.
@@ -202,6 +204,7 @@ class AppSettings:
     diff_mode: str = DEFAULT_DIFF_MODE
     diff_ignore_whitespace: bool = False
     diff_word_level: bool = True
+    diff_full_context: bool = False
     github_enabled: bool = True
     show_avatars: bool = True
     confirm_destructive: bool = True
@@ -232,6 +235,7 @@ class AppSettings:
             diff_mode=normalize_diff_mode(self.diff_mode),
             diff_ignore_whitespace=bool(self.diff_ignore_whitespace),
             diff_word_level=bool(self.diff_word_level),
+            diff_full_context=bool(self.diff_full_context),
             github_enabled=bool(self.github_enabled),
             show_avatars=bool(self.show_avatars),
             confirm_destructive=bool(self.confirm_destructive),

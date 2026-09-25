@@ -13,6 +13,7 @@ good at: two nested colours per line, a gutter, and a monospace body.
 from __future__ import annotations
 
 import html
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -36,7 +37,7 @@ from PySide6.QtWidgets import (
 import i18n
 from config.app_settings import DIFF_SIDE_BY_SIDE, DIFF_UNIFIED, normalize_diff_mode
 from config.theme import ThemeColors, get_theme_colors
-from constants import DIFF_MAX_LINE_LENGTH
+from constants import DIFF_CONTEXT_LINES, DIFF_MAX_LINE_LENGTH, DIFF_WIDE_CONTEXT_LINES
 from gitops import blobs
 from gitops.blobs import BinaryComparison, BlobFacts
 from gitops.diff import (
@@ -137,6 +138,28 @@ def _truncate(text: str) -> tuple[str, bool]:
     if len(text) <= DIFF_MAX_LINE_LENGTH:
         return text, False
     return text[:DIFF_MAX_LINE_LENGTH], True
+
+
+def _context_colors(colors: ThemeColors, quiet: bool) -> ThemeColors:
+    """
+    Dims the unchanged lines when there are a lot of them.
+
+    Three lines of context place a change. Twenty lines of it above and below
+    are a different thing to look at: the unchanged text is no longer a frame,
+    it is most of the panel. Drawn in the normal colour it competes with the
+    change for attention, which is the opposite of the point.
+
+    Args:
+        colors: Active theme tokens.
+        quiet: Whether the surrounding text is being shown in full.
+
+    Returns:
+        ThemeColors: The tokens to render with.
+    """
+
+    if not quiet:
+        return colors
+    return replace(colors, diff_context_text=colors.diff_context_quiet)
 
 
 def _line_styles(kind: str, colors: ThemeColors) -> tuple[str, str, str]:
@@ -1011,6 +1034,7 @@ class DiffView(QWidget):
         mode: str,
         ignore_whitespace: bool,
         word_level: bool,
+        full_context: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         """
@@ -1018,6 +1042,7 @@ class DiffView(QWidget):
             mode: Initial layout.
             ignore_whitespace: Whether whitespace-only changes start hidden.
             word_level: Whether intra-line highlighting starts on.
+            full_context: Whether the unchanged text around a change is shown.
             parent: Parent widget.
         """
 
@@ -1031,7 +1056,7 @@ class DiffView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        layout.addWidget(self._build_toolbar(ignore_whitespace, word_level))
+        layout.addWidget(self._build_toolbar(ignore_whitespace, word_level, full_context))
 
         self._stack = QStackedWidget(self)
 
@@ -1062,13 +1087,16 @@ class DiffView(QWidget):
         layout.addWidget(self._stack, 1)
         self._stack.setCurrentWidget(self._empty)
 
-    def _build_toolbar(self, ignore_whitespace: bool, word_level: bool) -> QWidget:
+    def _build_toolbar(
+        self, ignore_whitespace: bool, word_level: bool, full_context: bool = False
+    ) -> QWidget:
         """
         Builds the option row above the diff.
 
         Args:
             ignore_whitespace: Initial state of the whitespace toggle.
             word_level: Initial state of the word-highlight toggle.
+            full_context: Initial state of the unchanged-text toggle.
 
         Returns:
             QWidget: The toolbar.
@@ -1131,6 +1159,14 @@ class DiffView(QWidget):
         self._words.toggled.connect(self._on_option_toggled)
         row.addWidget(self._words)
 
+        self._context = QCheckBox(i18n.t("diff.full_context"), left_holder)
+        self._context.setToolTip(i18n.t("tip.diff_context"))
+        self._context.setChecked(full_context)
+        # Not ``_on_option_toggled``: this one changes what git is asked for, not
+        # only how the answer is drawn, so the diff has to be read again.
+        self._context.toggled.connect(self._on_context_toggled)
+        row.addWidget(self._context)
+
         self._counts = QLabel("", right_holder)
         self._counts.setToolTip(i18n.t("tip.diff_counts"))
         self._counts.setObjectName("Muted")
@@ -1183,6 +1219,28 @@ class DiffView(QWidget):
         """
 
         return self._words.isChecked()
+
+    @property
+    def full_context(self) -> bool:
+        """
+        Reports whether the unchanged text around a change is shown.
+
+        Returns:
+            bool: True when on.
+        """
+
+        return self._context.isChecked()
+
+    @property
+    def context_lines(self) -> int:
+        """
+        Returns how many unchanged lines git should put around each change.
+
+        Returns:
+            int: The wide value when the option is on, git's default otherwise.
+        """
+
+        return DIFF_WIDE_CONTEXT_LINES if self.full_context else DIFF_CONTEXT_LINES
 
     @property
     def target(self) -> str:
@@ -1272,6 +1330,22 @@ class DiffView(QWidget):
             self.reload_requested.emit()
         else:
             self._rerender()
+
+    def _on_context_toggled(self, _checked: bool) -> None:
+        """
+        Applies the unchanged-text switch.
+
+        Args:
+            _checked: Unused state from the signal.
+
+        Returns:
+            None
+        """
+
+        # Twenty lines of context are not in the diff Branchly already has, so
+        # there is nothing to redraw from. Git has to be asked again.
+        self.options_changed.emit()
+        self.reload_requested.emit()
 
     def _on_target_changed(self, _index: int) -> None:
         """
@@ -1438,7 +1512,7 @@ class DiffView(QWidget):
             None
         """
 
-        colors = get_theme_colors()
+        colors = _context_colors(get_theme_colors(), self.full_context)
         two_columns = self._mode != DIFF_UNIFIED
 
         if self._many:

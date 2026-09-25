@@ -81,6 +81,7 @@ from ui.graph_view import GraphView
 from ui.pull_all_dialog import PullAllDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
+from ui.signin_dialog import SignInDialog
 from ui.update_dialog import UpdateDialog, build_update_thread, describe_update
 from ui.widgets import FlowLayout, InlineMessage, refresh_theme_aware
 
@@ -225,6 +226,7 @@ class MainWindow(QMainWindow):
             self._settings.diff_mode,
             self._settings.diff_ignore_whitespace,
             self._settings.diff_word_level,
+            self._settings.diff_full_context,
             content,
         )
         content.addWidget(self._diff)
@@ -379,6 +381,24 @@ class MainWindow(QMainWindow):
         branch_menu.addAction(i18n.t("sync.fetch"), self._do_fetch)
         branch_menu.addAction(i18n.t("sync.pull_generic"), self._do_pull)
         branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
+
+        account_menu = bar.addMenu(i18n.t("menu.account"))
+        account_menu.setToolTipsVisible(True)
+        self._signin_action = QAction(i18n.t("signin.menu"), self)
+        self._signin_action.setToolTip(i18n.t("tip.signin"))
+        self._signin_action.triggered.connect(self._open_signin)
+        account_menu.addAction(self._signin_action)
+        self._signout_action = QAction(i18n.t("signin.menu_out"), self)
+        self._signout_action.setToolTip(i18n.t("tip.signout"))
+        self._signout_action.triggered.connect(self._sign_out)
+        account_menu.addAction(self._signout_action)
+        account_menu.addSeparator()
+        # Not an action, a line of text: who is signed in is the first thing
+        # anybody opens this menu to find out.
+        self._account_label = QAction("", self)
+        self._account_label.setEnabled(False)
+        account_menu.addAction(self._account_label)
+        self._refresh_account_menu()
 
         help_menu = bar.addMenu(i18n.t("menu.help"))
         help_menu.addAction(i18n.t("menu.check_updates"), self._open_update_dialog)
@@ -768,6 +788,7 @@ class MainWindow(QMainWindow):
             self._diff.target,
             self._diff.ignore_whitespace,
             self._diff.word_level,
+            context_lines=self._diff.context_lines,
         )
         if parsed.binary:
             # Every file git calls binary gets the two versions compared, not
@@ -837,7 +858,11 @@ class MainWindow(QMainWindow):
         if self._tabs.currentIndex() != TAB_GRAPH:
             return
         diffs = diff_mod.commit_diff(
-            entry.path, oid, self._diff.ignore_whitespace, self._diff.word_level
+            entry.path,
+            oid,
+            self._diff.ignore_whitespace,
+            self._diff.word_level,
+            context_lines=self._diff.context_lines,
         )
         self._diff.show_many(diffs, oid[:7])
 
@@ -857,7 +882,12 @@ class MainWindow(QMainWindow):
         if entry is None:
             return
         diffs = diff_mod.range_diff(
-            entry.path, older, newer, self._diff.ignore_whitespace, self._diff.word_level
+            entry.path,
+            older,
+            newer,
+            self._diff.ignore_whitespace,
+            self._diff.word_level,
+            context_lines=self._diff.context_lines,
         )
         self._diff.set_target_choices([diff_mod.TARGET_COMMITS])
         self._diff.show_many(diffs, f"{older[:7]} → {newer[:7]}")
@@ -873,6 +903,7 @@ class MainWindow(QMainWindow):
         self._settings.diff_mode = self._diff.mode
         self._settings.diff_ignore_whitespace = self._diff.ignore_whitespace
         self._settings.diff_word_level = self._diff.word_level
+        self._settings.diff_full_context = self._diff.full_context
 
     # -------------------------------------------------------------------- commit
 
@@ -1802,6 +1833,7 @@ class MainWindow(QMainWindow):
 
         login, repository, count, check = outcome
         self._viewer_login = login
+        self._refresh_account_menu()
         if not repository.ok:
             self._pull_requests.show_message("error.title", repository.error_key, "danger")
             return
@@ -2054,6 +2086,76 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(i18n.t("error.title"), 4000)
 
     # ------------------------------------------------------------------ settings
+
+    def _refresh_account_menu(self) -> None:
+        """
+        Matches the account menu to who is signed in.
+
+        Returns:
+            None
+        """
+
+        signed_in = bool(token_store.load())
+        self._signin_action.setText(
+            i18n.t("signin.menu_change" if signed_in else "signin.menu")
+        )
+        self._signout_action.setEnabled(signed_in)
+        if not signed_in:
+            self._account_label.setText(i18n.t("signin.state_out"))
+            return
+        name = self._viewer_login
+        self._account_label.setText(
+            i18n.t("signin.state_in", login=name) if name else i18n.t("signin.state_in_unknown")
+        )
+
+    def _open_signin(self) -> None:
+        """
+        Opens the sign-in dialog and adopts the result.
+
+        Returns:
+            None
+        """
+
+        dialog = SignInDialog(self)
+        if dialog.exec() != SignInDialog.DialogCode.Accepted:
+            self._refresh_account_menu()
+            return
+
+        self._viewer_login = dialog.login
+        # Signing in is only useful if the panel comes on with it. Somebody who
+        # just proved who they are did not mean to leave GitHub switched off.
+        self._settings.github_enabled = True
+        save_settings(self._settings)
+        self._github.set_token(token_store.load())
+        self._refresh_account_menu()
+        self._reload_github()
+        self.statusBar().showMessage(i18n.t("signin.done", login=dialog.login), 6000)
+
+    def _sign_out(self) -> None:
+        """
+        Forgets the stored token.
+
+        Returns:
+            None
+        """
+
+        if self._settings.confirm_destructive:
+            answer = QMessageBox.question(
+                self,
+                i18n.t("signin.out_title"),
+                i18n.t("signin.out_prompt"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        token_store.delete()
+        self._viewer_login = ""
+        self._github.set_token("")
+        self._refresh_account_menu()
+        self._reload_github()
+        self.statusBar().showMessage(i18n.t("signin.out_done"), 6000)
 
     def _choose_theme(self, name: str) -> None:
         """

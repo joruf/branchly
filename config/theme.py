@@ -71,6 +71,11 @@ class ThemeColors:
         diff_gutter_bg: Line-number gutter background for context lines.
         diff_gutter_text: Line-number text color.
         diff_context_text: Unchanged diff line text color.
+        diff_context_quiet: Unchanged diff line text color while the panel is
+            showing the surrounding text as well. Paler than
+            ``diff_context_text``: with twenty lines of it around every change,
+            the unchanged part has to stay readable without competing with the
+            change itself.
         status_modified: Icon/label color for modified files.
         status_added: Icon/label color for added files.
         status_deleted: Icon/label color for deleted files.
@@ -138,6 +143,7 @@ class ThemeColors:
     diff_gutter_bg: str
     diff_gutter_text: str
     diff_context_text: str
+    diff_context_quiet: str
     status_modified: str
     status_added: str
     status_deleted: str
@@ -205,6 +211,7 @@ _DARK_COLORS = ThemeColors(
     diff_gutter_bg="#222938",
     diff_gutter_text="#6d7f97",
     diff_context_text="#c3cedd",
+    diff_context_quiet="#7b8798",
     status_modified="#e0b341",
     status_added="#4ec98a",
     status_deleted="#e8705f",
@@ -281,6 +288,7 @@ _LIGHT_COLORS = ThemeColors(
     diff_gutter_bg="#f2f4f7",
     diff_gutter_text="#8b97a8",
     diff_context_text="#33415a",
+    diff_context_quiet="#95a1b3",
     status_modified="#8a5a06",
     status_added="#16794a",
     status_deleted="#b02a1c",
