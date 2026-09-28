@@ -484,6 +484,37 @@ sind. Anlegen heftet den Namen an den Stand, den du gerade ausgecheckt hast.
 Löschen entfernt ihn nur von diesem Rechner: ein Tag, der schon auf einem Server
 liegt, bleibt dort, bis ihn dort jemand entfernt.
 
+### Ein Projekt mit einem Online-Repository verbinden
+
+Liegt ein Projekt bisher nur auf deinem Rechner, steht im Rechtsklickmenü der
+Projektliste **Mit Online-Repository verbinden**. Hat es schon eine Adresse,
+heißt der Eintrag stattdessen *Online-Repository ändern*.
+
+Branchly schlägt eine Adresse vor, abgeleitet aus dem Ordnernamen und dem Konto,
+zu dem deine übrigen Projekte gehören. Für den Ordner `ebay-listing` also
+`https://github.com/joruf/ebay-listing.git`. Du kannst sie überschreiben.
+
+**Server fragen, was dort liegt** sieht nach, bevor irgendetwas geschrieben wird.
+Je nachdem, was gefunden wird, sagt Branchly etwas anderes:
+
+| Lage | Was Branchly sagt |
+|---|---|
+| Das Repository ist leer | Es kann nichts überschrieben werden, dein erstes Senden füllt es |
+| Dort liegt etwas, hier noch nichts | Die Serverfassung wird einfach zu deiner. Holen ist voreingestellt |
+| Beide Seiten haben eigene Commits | Warnung mit Auswahl, siehe unten |
+| Keine Antwort | Vielleicht gibt es das Repository noch nicht. Verbinden bleibt möglich |
+
+Der letzte Fall ist der einzige, in dem wirklich etwas auf dem Spiel steht. Das
+Verbinden selbst überschreibt nichts, es schreibt eine Zeile in die
+Git-Konfiguration. Aber das nächste Senden wird abgelehnt, und es zu erzwingen
+würde eine der beiden Historien wegwerfen. Deshalb hast du zwei Möglichkeiten:
+
+- **Nur verbinden.** Es wird nichts gesendet und nichts geholt. Das ist
+  voreingestellt.
+- **Verbinden und die Serverfassung holen.** Geschrieben werden nur Verweise,
+  keine Datei auf deiner Festplatte ändert sich. Danach kannst du dir ansehen,
+  was dort liegt, und in Ruhe entscheiden.
+
 ### Serveradresse ändern
 
 *Branch → Serveradresse ändern* setzt, wohin `origin` zeigt. Hat das Projekt noch

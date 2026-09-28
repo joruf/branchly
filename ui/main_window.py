@@ -65,7 +65,7 @@ from gitops.remote_url import github_slug
 from gitops.runner import GitResult
 from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
-from services import git_credentials, open_with, puller, scanner, updater
+from services import git_credentials, open_with, puller, remote_link, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui.changes_panel import ChangesPanel
@@ -78,6 +78,7 @@ from ui.github_lists import GitHubContext
 from ui.github_panel import GitHubPanel
 from ui.github_worker import ApiRunner
 from ui.graph_view import GraphView
+from ui.link_remote_dialog import AFTER_FETCH, LinkRemoteDialog
 from ui.pull_all_dialog import PullAllDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
@@ -460,6 +461,7 @@ class MainWindow(QMainWindow):
         self._sidebar.registry_changed.connect(self._save_registry)
         self._sidebar.open_folder_requested.connect(self._open_folder_of)
         self._sidebar.open_remote_requested.connect(self._open_remote_of)
+        self._sidebar.link_remote_requested.connect(self._link_remote)
         self._sidebar.rename_requested.connect(self._prompt_rename_repo)
         self._sidebar.remove_requested.connect(self._prompt_remove_repo)
 
@@ -1479,6 +1481,66 @@ class MainWindow(QMainWindow):
         dialog = TagDialog(entry.path, self._state.display_branch if self._state else "", self)
         dialog.exec()
         self._reload_current()
+
+    def _link_remote(self, key: str) -> None:
+        """
+        Gives a project a server, after saying what that would mean.
+
+        Args:
+            key: Registry key of the project.
+
+        Returns:
+            None
+        """
+
+        entry = self._find(key)
+        if entry is None or not entry.exists:
+            return
+
+        suggestion = remote_link.suggest_url(
+            entry.path.name,
+            [other.remote_url for other in self._registry.entries if other.remote_url],
+            fallback_owner=self._viewer_login,
+        )
+        dialog = LinkRemoteDialog(
+            Path(entry.path),
+            entry.name,
+            suggestion=suggestion,
+            current_url=entry.remote_url,
+            credentials=lambda: git_credentials.for_url(dialog.url),
+            parent=self,
+        )
+        if dialog.exec() != LinkRemoteDialog.DialogCode.Accepted:
+            return
+
+        url = dialog.url
+        if not url:
+            return
+        had_remote = bool(remote_mod.remote_fetch_url(entry.path))
+        result = (
+            remote_mod.set_remote_url(entry.path, url)
+            if had_remote
+            else remote_mod.add_remote(entry.path, url)
+        )
+        if result.failed:
+            self._report(result)
+            return
+
+        entry.remote_url = url
+        self._save_registry()
+        self._sidebar.refresh()
+        self.statusBar().showMessage(i18n.t("link.done", url=url), 6000)
+
+        if dialog.follow_up == AFTER_FETCH:
+            # Only tracking refs are written. No file in the working tree moves,
+            # which is what makes this safe to offer next to the connection.
+            fetched = remote_mod.fetch(entry.path, credentials=self._credentials(entry))
+            if fetched.failed:
+                self._report_sync(fetched, entry)
+
+        if entry.key == (self._entry.key if self._entry else ""):
+            self._reload_current()
+        self._start_scan(entry.key)
 
     def _prompt_remote_url(self) -> None:
         """

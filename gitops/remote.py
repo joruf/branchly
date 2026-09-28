@@ -185,6 +185,47 @@ def ls_remote_heads(
     return heads
 
 
+def ls_remote_url(url: str, credentials: dict[str, str] | None = None) -> list[str] | None:
+    """
+    Asks a server which branches it has, by address rather than by remote name.
+
+    Used before a project has a remote at all: whether an address is worth
+    connecting to has to be answerable before it is written into the config,
+    otherwise the only way to find out is to connect and see what breaks.
+
+    Read-only on both sides. Nothing is downloaded and nothing local changes.
+
+    Args:
+        url: Remote URL to ask.
+        credentials: Login for the server, as built by
+            ``services.git_credentials``.
+
+    Returns:
+        list[str] | None: Branch names, an empty list for a repository with no
+            branches yet, and None when the server could not be reached or
+            refused. Those are three different answers and the caller has to
+            tell them apart.
+    """
+
+    if not is_valid_remote_url(url):
+        return None
+    result = run(
+        ["ls-remote", "--heads", "--", url.strip()],
+        timeout=GIT_TIMEOUT_NETWORK,
+        read_only=True,
+        env_extra=credentials or None,
+    )
+    if result.failed:
+        return None
+
+    names: list[str] = []
+    for line in result.out_lines:
+        parts = line.split()
+        if len(parts) == 2 and parts[1].startswith("refs/heads/"):
+            names.append(parts[1][len("refs/heads/"):])
+    return names
+
+
 def local_ref_oid(repo: Path | str, ref: str) -> str:
     """
     Reads the commit id a local ref points at.
