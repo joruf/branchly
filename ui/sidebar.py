@@ -237,6 +237,7 @@ class Sidebar(QWidget):
     open_folder_requested = Signal(str)
     open_remote_requested = Signal(str)
     link_remote_requested = Signal(str)
+    revert_all_requested = Signal(str)
     rename_requested = Signal(str)
     remove_requested = Signal(str)
 
@@ -823,6 +824,12 @@ class Sidebar(QWidget):
         move.addAction(i18n.t("category.new"), lambda: self._prompt_new_category(assign_key=key))
 
         menu.addAction(i18n.t("action.rename"), lambda: self.rename_requested.emit(key))
+        menu.addSeparator()
+        revert = menu.addAction(
+            i18n.t("revert.menu_all"), lambda: self.revert_all_requested.emit(key)
+        )
+        revert.setToolTip(i18n.t("tip.revert_all"))
+        revert.setEnabled(entry.exists and entry.status.is_dirty)
         menu.addSeparator()
         remove = QAction(i18n.t("action.remove"), menu)
         remove.triggered.connect(lambda: self.remove_requested.emit(key))

@@ -715,6 +715,27 @@ Der Einstellungsdialog kennt das Feld nicht mehr und gibt `theme` unverändert a
 `self._original` zurück. Ohne das würde ein Besuch im Dialog die Wahl aus dem
 Menü mit dem Stand überschreiben, den der Dialog beim Öffnen gesehen hat.
 
+### Zurücksetzen
+
+Die einzige Operation, die nichts rückgängig machen kann. Ein Commit liegt im
+Reflog, ein gelöschter Branch auch, eine verworfene Änderung nirgends. Deshalb
+trennt `services/revert.py` zwei Fälle, die in einer gemeinsamen Zählung
+untergehen würden:
+
+- **`ACTION_RESTORE`**: getrackte Datei, es gibt einen committeten Stand.
+- **`ACTION_DELETE`**: ungetrackte Datei, es gibt keinen. Ebenso eine nur
+  vorgemerkte neue Datei, denn sie aus dem Commit zu nehmen hinterlässt exakt
+  eine ungetrackte Datei, und die stehen zu lassen wäre nach „alles
+  zurücksetzen" nicht erklärbar.
+
+`restore_committed()` setzt `--source=HEAD --staged --worktree`, also beide
+Seiten. Nur den Arbeitsbaum zurückzusetzen ließe eine vorgemerkte Änderung
+stehen, und die Datei stünde unmittelbar danach wieder in der Liste, die der
+Nutzer gerade geleert hat.
+
+Der Plan wird im Fenster aus `read_state()` neu gelesen, nicht aus dem, was auf
+dem Schirm steht. Die Liste, der jemand zustimmt, muss der Stand von jetzt sein.
+
 ### Ein Projekt mit einem Server verbinden
 
 `services/remote_link.py` beantwortet die Frage, die vor dem Schreiben steht, und

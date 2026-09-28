@@ -130,6 +130,11 @@ the state from before.
 - Branch rename and delete, stash, tags, the server address, and an overwrite
   that uses `--force-with-lease` so it fails rather than deleting somebody's work
 - The installer adds Branchly to the application menu
+- Revert a whole project or any selection of files, always through a window that
+  names every file and what happens to it. Files Git never had a copy of are
+  listed apart, in bold, because deleting those is the half nothing can undo
+- Adding a folder that is not a project yet offers to make it one, then asks for
+  the server address
 - Right-click a local-only project to give it a server. Branchly proposes the
   address from the company your other projects keep, asks the server what is
   already there, and spells out the choice when both sides have their own history

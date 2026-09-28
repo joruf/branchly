@@ -65,7 +65,15 @@ from gitops.remote_url import github_slug
 from gitops.runner import GitResult
 from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
-from services import git_credentials, open_with, puller, remote_link, scanner, updater
+from services import (
+    git_credentials,
+    open_with,
+    puller,
+    remote_link,
+    scanner,
+    updater,
+)
+from services import revert as revert_mod
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui.changes_panel import ChangesPanel
@@ -80,6 +88,7 @@ from ui.github_worker import ApiRunner
 from ui.graph_view import GraphView
 from ui.link_remote_dialog import AFTER_FETCH, LinkRemoteDialog
 from ui.pull_all_dialog import PullAllDialog
+from ui.revert_dialog import RevertDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
 from ui.signin_dialog import SignInDialog
@@ -462,6 +471,7 @@ class MainWindow(QMainWindow):
         self._sidebar.open_folder_requested.connect(self._open_folder_of)
         self._sidebar.open_remote_requested.connect(self._open_remote_of)
         self._sidebar.link_remote_requested.connect(self._link_remote)
+        self._sidebar.revert_all_requested.connect(self._revert_all)
         self._sidebar.rename_requested.connect(self._prompt_rename_repo)
         self._sidebar.remove_requested.connect(self._prompt_remove_repo)
 
@@ -1165,7 +1175,7 @@ class MainWindow(QMainWindow):
 
     def _confirm_discard(self, paths_to_discard: list[str]) -> None:
         """
-        Confirms and then throws away changes to the given files.
+        Shows what reverting these files would do, then does it.
 
         Args:
             paths_to_discard: Repository-relative paths.
@@ -1177,18 +1187,77 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None or not paths_to_discard:
             return
-        name = paths_to_discard[0] if len(paths_to_discard) == 1 else f"{len(paths_to_discard)}"
-        if not self._confirm(
-            i18n.t("changes.discard_title"),
-            i18n.t("changes.discard_prompt", name=name),
-            i18n.t("changes.discard_action"),
-        ):
+        self._run_revert(entry, paths_to_discard)
+
+    def _revert_all(self, key: str) -> None:
+        """
+        Throws away every uncommitted change in one project.
+
+        Args:
+            key: Registry key of the project.
+
+        Returns:
+            None
+        """
+
+        entry = self._find(key)
+        if entry is None or not entry.exists:
             return
-        result = stage_mod.discard_changes(entry.path, paths_to_discard)
-        if result.failed:
-            self._report(result)
+        self._run_revert(entry, None, project=entry.name)
+
+    def _run_revert(
+        self, entry: RepoEntry, paths: list[str] | None, project: str = ""
+    ) -> None:
+        """
+        Puts a revert in front of the user and carries it out if they agree.
+
+        The state is read again here rather than taken from what is on screen.
+        This is the one operation nothing can undo, so the list the user agrees
+        to has to be what git says now, not what it said when the panel was last
+        drawn.
+
+        Args:
+            entry: The project.
+            paths: Files to revert, or None for everything in the project.
+            project: Project name, set when the whole project is meant.
+
+        Returns:
+            None
+        """
+
+        state = read_state(entry.path)
+        plan = revert_mod.plan(state.files, paths)
+        if plan.is_empty:
+            self._show_notice("revert.nothing_title", "revert.nothing_hint", "info")
             return
+
+        dialog = RevertDialog(plan, project, self)
+        if dialog.exec() != RevertDialog.DialogCode.Accepted:
+            return
+
+        outcome = revert_mod.apply(entry.path, plan)
+        if not outcome.ok:
+            self._show_notice(
+                "revert.partial",
+                "revert.partial_hint",
+                "danger",
+                count=len(outcome.failed),
+                detail=outcome.error or ", ".join(outcome.failed[:5]),
+            )
+        else:
+            self.statusBar().showMessage(
+                i18n.plural(len(plan.items), "revert.done_one", "revert.done_many"), 6000
+            )
+
+        # What was reverted is gone, so a deselection about it means nothing any
+        # more, and neither does a block selection.
+        reverted = [item.path for item in plan.items]
+        self._changes.forget_selection(reverted)
+        entry.forget_selection(reverted)
+        self._forget_hunk_selection(reverted)
+        self._save_registry()
         self._reload_current()
+        self._start_scan(entry.key)
 
     # -------------------------------------------------------------------- branch
 
@@ -2030,20 +2099,71 @@ class MainWindow(QMainWindow):
             return
         outcome, entry = self._registry.add(chosen)
         if outcome == ADD_NOT_A_REPOSITORY:
+            # A folder that is not a project yet is not a mistake, it is the
+            # normal state of work that has not been put under version control.
+            # Refusing it and stopping there left the user with nothing to do.
+            entry = self._offer_setup(Path(chosen))
+            if entry is None:
+                return
+        elif entry is None:
             QMessageBox.information(
-                self, i18n.t("repo.add_not_git"), i18n.t("repo.add_not_git_hint", path=chosen)
+                self, i18n.t("error.title"), i18n.t("repo.add_not_git_hint", path=chosen)
             )
             return
-        if entry is None:
-            QMessageBox.information(self, i18n.t("error.title"), i18n.t("repo.add_not_git_hint", path=chosen))
-            return
-        if outcome == ADD_DUPLICATE:
+        elif outcome == ADD_DUPLICATE:
             self.statusBar().showMessage(i18n.t("repo.add_duplicate"), 4000)
+
         self._save_registry()
         self._sidebar.refresh()
         self._sidebar.select_key(entry.key)
         self._activate(entry)
         self._start_scan(entry.key)
+
+    def _offer_setup(self, folder: Path) -> RepoEntry | None:
+        """
+        Offers to make a plain folder into a project, then to give it a server.
+
+        The two steps are separate questions because they are separate
+        decisions. A project that stays on this computer is a perfectly good
+        project, so the address is offered and not demanded.
+
+        Args:
+            folder: The folder the user picked.
+
+        Returns:
+            RepoEntry | None: The new entry, or None when the user said no or it
+                could not be created.
+        """
+
+        answer = QMessageBox.question(
+            self,
+            i18n.t("repo.setup_title"),
+            i18n.t("repo.setup_prompt", path=str(folder)),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return None
+
+        created = branch_mod.init_repository(folder)
+        if created.failed:
+            self._report(created)
+            return None
+
+        outcome, entry = self._registry.add(folder)
+        if entry is None:
+            self._show_notice("repo.setup_failed", "repo.add_not_git_hint", "danger", path=str(folder))
+            return None
+        if outcome == ADD_DUPLICATE:
+            self.statusBar().showMessage(i18n.t("repo.add_duplicate"), 4000)
+
+        self._save_registry()
+        self._sidebar.refresh()
+        # Straight on to the address, because "where does this live on a server"
+        # is the next thing anybody wants to answer, and cancelling out of it
+        # leaves a working local project behind.
+        self._link_remote(entry.key)
+        return entry
 
     def _discover_repositories(self, roots: list[Path] | None = None) -> None:
         """
