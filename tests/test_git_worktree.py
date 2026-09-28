@@ -352,11 +352,21 @@ class StageTests(unittest.TestCase):
             stage_mod.stage_files(repo.root, ["a.txt"])
             self.assertTrue(stage_mod.unstage_files(repo.root, ["a.txt"]).ok)
 
-    def test_discard_restores_the_committed_content(self) -> None:
+    def test_restore_brings_back_the_committed_content(self) -> None:
         with temp_repo() as repo:
             repo.commit_file("a.txt", "original\n")
             repo.write("a.txt", "broken\n")
-            self.assertTrue(stage_mod.discard_changes(repo.root, ["a.txt"]).ok)
+            self.assertTrue(stage_mod.restore_committed(repo.root, ["a.txt"]).ok)
+            self.assertEqual("original\n", (repo.root / "a.txt").read_text(encoding="utf-8"))
+
+    def test_restore_also_clears_the_staged_side(self) -> None:
+        # Only the working tree would leave the file listed as changed right
+        # after somebody asked for it not to be.
+        with temp_repo() as repo:
+            repo.commit_file("a.txt", "original\n")
+            repo.write("a.txt", "broken\n")
+            stage_mod.stage_files(repo.root, ["a.txt"])
+            self.assertTrue(stage_mod.restore_committed(repo.root, ["a.txt"]).ok)
             self.assertEqual("original\n", (repo.root / "a.txt").read_text(encoding="utf-8"))
 
     def test_delete_untracked_removes_the_file(self) -> None:
@@ -376,7 +386,7 @@ class StageTests(unittest.TestCase):
     def test_unsafe_paths_are_refused(self) -> None:
         with temp_repo() as repo:
             self.assertTrue(stage_mod.stage_files(repo.root, ["--force"]).failed)
-            self.assertTrue(stage_mod.discard_changes(repo.root, ["-x"]).failed)
+            self.assertTrue(stage_mod.restore_committed(repo.root, ["-x"]).failed)
 
     def test_stage_a_single_hunk(self) -> None:
         with temp_repo() as repo:

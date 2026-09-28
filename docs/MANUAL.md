@@ -62,6 +62,18 @@ erhalten, die Projektdateien kommen daneben. Hätte eine Datei aus dem Projekt
 denselben Namen wie eine vorhandene, bricht Git ab und ändert nichts. Du
 verlierst also nichts, auch wenn du dich verklickst.
 
+### Einen Ordner ohne Git aufnehmen
+
+Wählst du unter **Hinzufügen** einen Ordner, der noch kein Git-Projekt ist,
+bricht Branchly nicht mehr ab, sondern fragt, ob es eines daraus machen soll.
+Im Ordner wird dabei nichts verändert: Was schon da ist, wird als noch nicht
+gespeichert geführt und wartet auf deinen ersten Commit.
+
+Direkt danach fragt Branchly nach der Adresse des Online-Repositories, also
+genau den Dialog aus dem vorigen Abschnitt. Brichst du dort ab, bleibt ein
+funktionierendes lokales Projekt zurück, das du jederzeit später verbinden
+kannst.
+
 ### Alle Projekte auf einmal finden
 
 *Projekt → Nach neuen Repositories suchen…* durchsucht einen Ordner nach
@@ -483,6 +495,34 @@ einen Konflikt, öffnet sich der Konflikt-Assistent wie sonst auch.
 sind. Anlegen heftet den Namen an den Stand, den du gerade ausgecheckt hast.
 Löschen entfernt ihn nur von diesem Rechner: ein Tag, der schon auf einem Server
 liegt, bleibt dort, bis ihn dort jemand entfernt.
+
+### Änderungen zurücksetzen
+
+Zwei Wege, beide enden im selben Fenster:
+
+- **Rechtsklick auf ein Projekt** in der Liste links, dann *Alle Änderungen
+  zurücksetzen*. Betrifft alles, was in diesem Projekt noch nicht gespeichert
+  ist.
+- **Rechtsklick auf eine oder mehrere Dateien** im Änderungsfenster, dann
+  *Diese Datei zurücksetzen* bzw. *N Dateien zurücksetzen*. Mehrere Zeilen
+  wählst du wie gewohnt mit Strg oder Umschalt aus.
+
+Bevor etwas passiert, öffnet sich ein Fenster mit jeder einzelnen Datei und
+daneben, was mit ihr geschieht. Zwei Fälle, die bewusst getrennt stehen:
+
+| Anzeige | Bedeutung |
+|---|---|
+| zurück auf den letzten gespeicherten Stand | Die Datei bleibt, ihr Inhalt wird ersetzt |
+| **wird von der Festplatte gelöscht** | Fett und rot. Git hat nie eine Kopie davon gehabt |
+
+Der zweite Fall betrifft Dateien, die in diesem Projekt noch nie gespeichert
+wurden, und ebenso solche, die nur für den nächsten Commit vorgemerkt sind.
+Dort gibt es nichts, wohin die Datei zurückkehren könnte, sie verschwindet.
+Deshalb steht das gesondert da und noch einmal als Satz darunter.
+
+Erst ein Klick auf **Zurücksetzen** führt das aus. Voreingestellt ist
+*Abbrechen*, damit eine versehentliche Eingabetaste keine Arbeit vernichtet.
+Danach lässt sich hiervon nichts wiederherstellen, auch nicht über Git.
 
 ### Ein Projekt mit einem Online-Repository verbinden
 

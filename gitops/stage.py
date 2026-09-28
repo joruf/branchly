@@ -78,13 +78,18 @@ def unstage_files(repo: Path | str, paths: list[str]) -> GitResult:
     return run(["restore", "--staged", "--", *checked], cwd=repo)
 
 
-def discard_changes(repo: Path | str, paths: list[str]) -> GitResult:
+def restore_committed(repo: Path | str, paths: list[str]) -> GitResult:
     """
-    Throws away unstaged changes to tracked files.
+    Puts tracked files back to the last committed version, both sides.
 
-    Destructive and unrecoverable — the caller must have confirmed with the user
-    first. Untracked files are not touched here; deleting a file git never knew
-    about is handled separately so the two cases stay distinguishable.
+    Destructive and unrecoverable, so the caller must have confirmed with the
+    user first. Untracked files are not touched here: deleting a file git never
+    knew about is a different thing with a different risk, and the two stay
+    apart on purpose.
+
+    The index is reset along with the working tree. Restoring only the working
+    tree would leave a staged change behind, and the file would still be listed
+    as changed immediately after somebody asked for it not to be.
 
     Args:
         repo: Working tree path.
@@ -97,7 +102,7 @@ def discard_changes(repo: Path | str, paths: list[str]) -> GitResult:
     checked = checked_paths(paths)
     if checked is None:
         return GitResult(returncode=-1, stdout="", stderr="unsafe path", args=("restore",))
-    return run(["restore", "--worktree", "--", *checked], cwd=repo)
+    return run(["restore", "--source=HEAD", "--staged", "--worktree", "--", *checked], cwd=repo)
 
 
 def delete_untracked(repo: Path | str, paths: list[str]) -> tuple[bool, list[str]]:

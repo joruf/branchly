@@ -196,6 +196,11 @@ class ChangesPanel(QWidget):
         self._list = QListWidget(self)
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._show_context_menu)
+        # Several rows at once, because throwing away one change at a time is
+        # exactly the job nobody wants to do twenty times. The tick boxes stay
+        # what they are: selection is "which rows am I acting on now", ticking is
+        # "what goes into the commit".
+        self._list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._list.setItemDelegate(StatusGlyphDelegate(self._list))
         # A long path loses its middle rather than its file name.
         self._list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
@@ -431,6 +436,25 @@ class ChangesPanel(QWidget):
             item.setData(_ROLE_PARTIAL, path in self._partial)
         self._list.blockSignals(False)
         self._update_selected_label()
+
+    def selected_paths(self) -> list[str]:
+        """
+        Returns the rows that are highlighted right now.
+
+        Different from ``checked_paths``: a tick says what goes into the next
+        commit, a selection says which rows the next command acts on. Mixing the
+        two would mean right-clicking a file could throw away twenty others.
+
+        Returns:
+            list[str]: Paths of the selected rows, in list order.
+        """
+
+        found: list[str] = []
+        for item in self._list.selectedItems():
+            value = item.data(_ROLE_PATH)
+            if isinstance(value, str) and value:
+                found.append(value)
+        return found
 
     def checked_paths(self) -> list[str]:
         """
@@ -700,6 +724,12 @@ class ChangesPanel(QWidget):
         path = item.data(_ROLE_PATH)
         if not isinstance(path, str) or not path:
             return
+        # Right-clicking a row that is not part of the selection means that row,
+        # not the selection somewhere else in the list.
+        if not item.isSelected():
+            self._list.clearSelection()
+            item.setSelected(True)
+            self._list.setCurrentItem(item)
         untracked = bool(item.data(_ROLE_UNTRACKED))
         conflicted = bool(item.data(_ROLE_CONFLICTED))
 
@@ -726,11 +756,15 @@ class ChangesPanel(QWidget):
         if conflicted:
             menu.addSeparator()
             menu.addAction(i18n.t("conflict.intro_start"), self.resolve_requested.emit)
-        elif not untracked:
-            menu.addSeparator()
-            menu.addAction(
-                i18n.t("changes.discard_action"), lambda: self.discard_requested.emit([path])
-            )
+
+        chosen = self.selected_paths() or [path]
+        menu.addSeparator()
+        revert = menu.addAction(
+            i18n.plural(len(chosen), "revert.menu_one", "revert.menu_many"),
+            lambda: self.discard_requested.emit(list(chosen)),
+        )
+        revert.setToolTip(i18n.t("tip.revert_selected"))
+        menu.setToolTipsVisible(True)
         menu.exec(self._list.viewport().mapToGlobal(position))
 
     def _copy_path(self, path: str) -> None:

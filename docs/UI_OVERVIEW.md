@@ -258,6 +258,24 @@ Die Auswahl selbst liegt im Fenster (`_hunk_selection`), nicht im Panel, weil si
 den Commit steuert und nicht die Darstellung. Die Dateiliste zeigt sie als halben
 Haken.
 
+## Zurücksetzen (`ui/revert_dialog.py`)
+
+Jede Datei mit Namen und daneben, was mit ihr passiert. Die zu löschenden fett
+und in `danger`, dazu darunter noch einmal ein Satz: eine Liste von Dateinamen
+liest sich für sich genommen nicht als Warnung. *Abbrechen* ist der
+Standardknopf, damit eine versehentliche Eingabetaste nichts vernichtet.
+
+Der Bestätigungsknopf trägt `objectName("Danger")` und braucht danach ein
+`unpolish`/`polish`: Qt hat den Knopf einer `QDialogButtonBox` bereits gestylt,
+wenn man ihn bekommt, und ein nachträglich gesetzter Name erreicht das
+Stylesheet nicht von allein.
+
+Die Dateiliste im Änderungsfenster steht auf `ExtendedSelection`. Auswahl und
+Haken sind zwei verschiedene Dinge: der Haken sagt, was in den nächsten Commit
+kommt, die Auswahl, worauf der nächste Befehl wirkt. Ein Rechtsklick auf eine
+nicht ausgewählte Zeile wählt erst sie allein aus, sonst würde ein Klick auf
+eine Datei zwanzig andere treffen.
+
 ## Mit einem Server verbinden (`ui/link_remote_dialog.py`)
 
 Adressfeld mit Vorschlag, ein Knopf, der den Server fragt, und ein Hinweisstreifen

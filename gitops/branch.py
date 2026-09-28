@@ -160,6 +160,34 @@ def branch_exists(repo: Path | str, name: str) -> bool:
     return result.ok
 
 
+def init_repository(path: Path | str, branch: str = "main") -> GitResult:
+    """
+    Turns a plain folder into a git project.
+
+    Nothing in the folder is touched. Whatever is already there becomes
+    untracked, which is the honest starting point: the user decides what goes
+    into the first commit, not the program.
+
+    Args:
+        path: Folder to initialise.
+        branch: Name for the first branch.
+
+    Returns:
+        GitResult: Outcome of ``git init``.
+    """
+
+    if not is_valid_branch_name(branch):
+        return _refused("init", "invalid branch name")
+    target = Path(path)
+    if not target.is_dir():
+        return _refused("init", "not a directory")
+    if (target / ".git").exists():
+        # Running init over an existing repository is harmless but pointless,
+        # and saying so beats a success message for something that did nothing.
+        return _refused("init", "already a repository")
+    return run(["init", "-b", branch], cwd=target)
+
+
 def create_branch(repo: Path | str, name: str, start_point: str = "", checkout: bool = True) -> GitResult:
     """
     Creates a branch, optionally switching to it.
