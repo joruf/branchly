@@ -236,6 +236,7 @@ class Sidebar(QWidget):
     registry_changed = Signal()
     open_folder_requested = Signal(str)
     open_remote_requested = Signal(str)
+    link_remote_requested = Signal(str)
     rename_requested = Signal(str)
     remove_requested = Signal(str)
 
@@ -785,6 +786,7 @@ class Sidebar(QWidget):
         self._tree.setCurrentItem(item)
 
         menu = QMenu(self)
+        menu.setToolTipsVisible(True)
         favorite = menu.addAction(
             i18n.t("repo.favorite_off" if entry.favorite else "repo.favorite_on")
         )
@@ -796,6 +798,13 @@ class Sidebar(QWidget):
             i18n.t("repo.open_remote"), lambda: self.open_remote_requested.emit(key)
         )
         remote_action.setEnabled(bool(entry.remote_url))
+        # A project with no server is the case this exists for, so it says so
+        # rather than offering the same neutral wording either way.
+        link = menu.addAction(
+            i18n.t("repo.link_remote" if not entry.remote_url else "repo.relink_remote"),
+            lambda: self.link_remote_requested.emit(key),
+        )
+        link.setToolTip(i18n.t("tip.link_remote"))
         menu.addSeparator()
 
         move = menu.addMenu(i18n.t("category.move_to"))

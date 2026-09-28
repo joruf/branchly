@@ -14,7 +14,7 @@ branch switch in a project a worker is halfway through.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -112,8 +112,18 @@ class PullAllDialog(QDialog):
         self._list = QListWidget(self)
         self._list.setAlternatingRowColors(False)
         self._list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        self._list.setVisible(False)
-        self._list.setMinimumHeight(220)
+        self._list.setToolTip(i18n.t("tip.pull_all_list"))
+        # Filled before the run rather than during it. A hidden list contributes
+        # nothing to the window's size hint, so the window opened at the height
+        # of the explanation and had no room left once the entries appeared.
+        # Showing what is about to be touched is also the more useful thing to
+        # put in front of somebody who has not pressed Start yet.
+        self._rows: dict[str, QListWidgetItem] = {}
+        for job in jobs:
+            item = QListWidgetItem(i18n.t("pull_all.pending", name=job.name), self._list)
+            item.setForeground(QColor(token_color("text_muted")))
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self._rows[job.key] = item
         layout.addWidget(self._list, 1)
 
         row = QHBoxLayout()
@@ -142,6 +152,33 @@ class PullAllDialog(QDialog):
             )
             self._start.setEnabled(False)
 
+        self.resize(620, self._preferred_height(len(jobs)))
+
+    def _preferred_height(self, count: int) -> int:
+        """
+        Works out how tall the window should open.
+
+        Tall enough for the list it holds, and never taller than the screen it
+        is opening on. A window that does not fit has its bottom edge, and with
+        it the Start button, somewhere below the desktop.
+
+        Args:
+            count: Number of projects in the run.
+
+        Returns:
+            int: Height in pixels.
+        """
+
+        # The explanation, the progress bar, the buttons and the margins.
+        chrome = 190
+        row = max(20, self._list.sizeHintForRow(0) if count else 24)
+        wanted = chrome + row * min(max(count, 4), 14)
+
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is not None:
+            wanted = min(wanted, int(screen.availableGeometry().height() * 0.8))
+        return max(360, wanted)
+
     # -------------------------------------------------------------------- running
 
     def _begin(self) -> None:
@@ -158,8 +195,6 @@ class PullAllDialog(QDialog):
             return
         self._running = True
         self.results = []
-        self._list.clear()
-        self._list.setVisible(True)
         self._progress.setVisible(True)
         self._start.setEnabled(False)
         # Nothing to cancel into: a worker mid-pull would keep writing into a
@@ -196,12 +231,18 @@ class PullAllDialog(QDialog):
         """
 
         self.results.append(result)
-        item = QListWidgetItem(describe_result(result), self._list)
+        # The row is already there, waiting. Replacing its text keeps the order
+        # of the list the order of the project list, rather than the order in
+        # which the workers happened to finish.
+        item = self._rows.get(result.key)
+        if item is None:
+            item = QListWidgetItem(self._list)
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self._rows[result.key] = item
+        item.setText(describe_result(result))
         item.setForeground(QColor(token_color(_TOKENS.get(result.state, "text"))))
-        item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-        if result.detail:
-            item.setToolTip(result.detail)
-        self._list.scrollToBottom()
+        item.setToolTip(result.detail or "")
+        self._list.scrollToItem(item)
 
     def _on_worker_error(self, key: str, message: str) -> None:
         """

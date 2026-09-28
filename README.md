@@ -130,6 +130,9 @@ the state from before.
 - Branch rename and delete, stash, tags, the server address, and an overwrite
   that uses `--force-with-lease` so it fails rather than deleting somebody's work
 - The installer adds Branchly to the application menu
+- Right-click a local-only project to give it a server. Branchly proposes the
+  address from the company your other projects keep, asks the server what is
+  already there, and spells out the choice when both sides have their own history
 
 **Keeping itself up to date**
 - Once a day on startup Branchly asks GitHub whether a newer version exists and

@@ -258,6 +258,17 @@ Die Auswahl selbst liegt im Fenster (`_hunk_selection`), nicht im Panel, weil si
 den Commit steuert und nicht die Darstellung. Die Dateiliste zeigt sie als halben
 Haken.
 
+## Mit einem Server verbinden (`ui/link_remote_dialog.py`)
+
+Adressfeld mit Vorschlag, ein Knopf, der den Server fragt, und ein Hinweisstreifen
+mit dem Ergebnis. Die Auswahl darunter erscheint nur, wenn es etwas zu wählen
+gibt, also wenn auf dem Server etwas liegt. Jede Änderung am Adressfeld wirft das
+Ergebnis weg, denn eine Warnung über einen Server darf nicht für einen anderen
+stehen bleiben.
+
+Die Nachfrage läuft auf einem eigenen `QThread`, `done()` und `closeEvent()`
+brechen ihn ab.
+
 ## Tags (`ui/tag_dialog.py`)
 
 Liste, Feld, zwei Knöpfe. Löschen sagt im Text ausdrücklich, dass nur die lokale

@@ -715,6 +715,30 @@ Der Einstellungsdialog kennt das Feld nicht mehr und gibt `theme` unverändert a
 `self._original` zurück. Ohne das würde ein Besuch im Dialog die Wahl aus dem
 Menü mit dem Stand überschreiben, den der Dialog beim Öffnen gesehen hat.
 
+### Ein Projekt mit einem Server verbinden
+
+`services/remote_link.py` beantwortet die Frage, die vor dem Schreiben steht, und
+`ls_remote_url()` macht sie überhaupt beantwortbar: `ls-remote` gegen eine
+**Adresse** statt gegen einen konfigurierten Remote. Ob eine Adresse taugt, muss
+feststehen, bevor sie in der Konfiguration landet, sonst ist der einzige Weg zur
+Antwort, sie einzutragen und zu sehen, was kaputtgeht.
+
+Die Funktion unterscheidet drei Antworten, und alle drei bedeuten etwas anderes:
+eine Liste von Branches, eine leere Liste (Repository existiert, ist aber leer)
+und `None` (nicht erreichbar). Zusammengefasst wären sie unbrauchbar.
+
+Der entscheidende Punkt ist `collides`: Historie auf dem Server **und** hier. Das
+Verbinden überschreibt nichts, es schreibt eine Zeile. Das nächste Senden wird
+aber abgelehnt, und der übliche Ausweg wirft eine der beiden Historien weg. Nur
+in diesem Fall bekommt der Nutzer eine Auswahl, und voreingestellt ist die
+folgenlose.
+
+Der Vorschlag kommt aus der Nachbarschaft: welchem Besitzer die übrigen Projekte
+auf diesem Rechner gehören, ist mit großer Wahrscheinlichkeit auch der Besitzer
+dieses einen. Das schlägt eine Nachfrage beim Server, die Token und Netz
+braucht, und es rät nie auf ein fremdes Konto: ohne Anhaltspunkt bleibt das Feld
+leer.
+
 ### Eintrag im Anwendungsmenü
 
 `install_dependencies.install_desktop_entry()` schreibt nach einer erfolgreichen
