@@ -13,4 +13,4 @@ Categories=Development;RevisionControl;
 Keywords=git;version control;repository;commit;merge;
 Keywords[de]=git;versionsverwaltung;repository;commit;zusammenführen;
 StartupNotify=true
-StartupWMClass=branchly
+StartupWMClass=Branchly

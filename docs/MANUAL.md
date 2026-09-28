@@ -1,4 +1,4 @@
-# Branchly — Handbuch
+# Branchly: Handbuch
 
 Dieses Handbuch beschreibt jede Funktion in der Reihenfolge, in der man ihr im
 Programm begegnet. Git-Vorwissen wird nicht vorausgesetzt.
@@ -45,7 +45,7 @@ diesen Fällen, was fehlt.
 ### Hinzufügen und Klonen
 
 - **Hinzufügen** wählt einen Ordner, in dem schon ein Git-Projekt liegt. Du darfst
-  auch einen Unterordner wählen — Branchly findet den obersten Ordner selbst.
+  auch einen Unterordner wählen, Branchly findet den obersten Ordner selbst.
 - **Klonen** holt ein Projekt von einem Server.
 
 Beim Klonen prüft Branchly die Adresse, während du tippst:
@@ -59,7 +59,7 @@ Beim Klonen prüft Branchly die Adresse, während du tippst:
 
 **Klonen in einen Ordner, in dem schon etwas liegt:** Alles Vorhandene bleibt
 erhalten, die Projektdateien kommen daneben. Hätte eine Datei aus dem Projekt
-denselben Namen wie eine vorhandene, bricht Git ab und ändert nichts — du
+denselben Namen wie eine vorhandene, bricht Git ab und ändert nichts. Du
 verlierst also nichts, auch wenn du dich verklickst.
 
 ### Alle Projekte auf einmal finden
@@ -99,19 +99,19 @@ Kategorie.
 Rechtsklick in die Liste oder auf eine Kategorie:
 
 - **Neue Kategorie** anlegen
-- **In Kategorie verschieben** — auch direkt in eine neu angelegte
-- **Umbenennen** — die Projekte wandern mit
-- **Entfernen** — die Projekte bleiben, sie landen unter „Ohne Kategorie"
+- **In Kategorie verschieben**, auch direkt in eine neu angelegte
+- **Umbenennen**, die Projekte wandern mit
+- **Entfernen**: die Projekte bleiben, sie landen unter „Ohne Kategorie"
 - **Alle auf-/zuklappen**
 
 Der Zustand jeder Kategorie wird gespeichert. Eine **Suche zeigt auch Treffer in
-zugeklappten Kategorien** — sonst wäre nicht nachvollziehbar, warum ein Projekt
+zugeklappten Kategorien**, sonst wäre nicht nachvollziehbar, warum ein Projekt
 fehlt.
 
 ### Sternchen und Sortierung
 
 Das Sternchen links neben dem Namen heftet ein Projekt **innerhalb seiner
-Kategorie** nach oben. Das gilt in jeder Sortierung — dafür ist es da.
+Kategorie** nach oben. Das gilt in jeder Sortierung, dafür ist es da.
 
 Sortierungen: Name A–Z, Name Z–A, neueste Änderung zuerst, zuletzt geöffnet
 zuerst, Projekte mit Änderungen zuerst, eigene Reihenfolge.
@@ -120,7 +120,7 @@ zuerst, Projekte mit Änderungen zuerst, eigene Reihenfolge.
 
 | Badge | Bedeutung |
 |---|---|
-| `!` rot | Konflikt — eine Entscheidung fehlt |
+| `!` rot | Konflikt, eine Entscheidung fehlt |
 | `●` gelb | Geänderte Dateien im Projekt |
 | `↓` blau | Auf dem Server liegt Neues |
 | `↑` gelb | Commits, die noch nicht gesendet sind |
@@ -196,7 +196,7 @@ unangetastet und steht namentlich in der Liste:
 | *3 neue Commits* | Vorgespult, das Projekt ist auf dem Stand des Servers |
 | *schon aktuell* | Der Server hatte nichts Neues |
 | *eigene Änderungen sind noch nicht gespeichert* | Im Ordner liegt unfertige Arbeit |
-| *eigene Commits sind noch nicht gesendet* | Der Branch ist auseinandergelaufen — Vorspulen ist unmöglich |
+| *eigene Commits sind noch nicht gesendet* | Der Branch ist auseinandergelaufen, Vorspulen ist unmöglich |
 | *Konflikte warten auf eine Entscheidung* | Erst den Konflikt-Assistenten durchlaufen |
 | *kein Branch ausgewählt* | Detached HEAD |
 | *der Branch folgt keinem Server-Branch* | Kein Upstream gesetzt |
@@ -205,7 +205,7 @@ unangetastet und steht namentlich in der Liste:
 Übersprungene Projekte werden trotzdem **geholt** (`fetch`). Das rührt den Ordner
 nicht an, sorgt aber dafür, dass hinterher „3 warten auf dem Server" dasteht statt
 eines veralteten Badges. Ein solches Projekt aktualisierst du danach einzeln über
-**Änderungen vom Server holen** — dort führt Branchly bei Bedarf zusammen und
+**Änderungen vom Server holen**: dort führt Branchly bei Bedarf zusammen und
 öffnet den Konflikt-Assistenten.
 
 Während der Lauf arbeitet, lässt sich das Fenster nicht schließen: es schreibt in
@@ -220,6 +220,28 @@ schlechtere Variante.
 
 „Stattdessen zum letzten Commit hinzufügen" hängt die Auswahl an den vorherigen
 Commit, statt einen neuen anzulegen.
+
+### Nur einzelne Blöcke committen
+
+Manchmal stecken in einer Datei zwei Dinge, die nicht in denselben Commit
+gehören. Über jedem Block in der Gegenüberstellung steht deshalb ein Häkchen:
+
+| Anzeige | Bedeutung |
+|---|---|
+| ☑ dabei | Der Block kommt in den nächsten Commit |
+| ☐ draußen | Der Block bleibt liegen, blass dargestellt |
+
+Ein Klick auf das Häkchen schaltet um. Nimmst du etwas heraus, steht der Haken
+der Datei in der Liste links auf halb, und Branchly speichert beim Commit genau
+die Blöcke, die dabei sind. Was draußen bleibt, steht danach unverändert auf
+deiner Festplatte und taucht als Änderung wieder auf.
+
+Zwei Grenzen, beide mit Absicht:
+
+- Die Häkchen gibt es nur beim Vergleich **Deine Bearbeitung ↔ letzter Stand**.
+  Zwei Commits gegeneinander lassen sich nicht in einen neuen Commit verwandeln.
+- Ein Klick auf den Haken der ganzen Datei hebt die Blockauswahl wieder auf. Ein
+  Haken, der etwas anderes sagt als der Commit tut, wäre schlimmer als keiner.
 
 ### Die Auswahl bleibt erhalten
 
@@ -314,7 +336,7 @@ scrollen beide ebenfalls gemeinsam, damit die Zeilen auf gleicher Höhe bleiben.
 Die Trennlinie zwischen den beiden Seiten lässt sich ziehen, wenn eine Seite mehr
 Platz braucht als die andere.
 
-**Vergleichen** — was gegen was gehalten wird:
+**Vergleichen**: was gegen was gehalten wird:
 
 | Auswahl | Vergleicht |
 |---|---|
@@ -391,7 +413,7 @@ Der Assistent geht die Stellen einzeln durch:
 - **Das für alle übrigen so machen** als Abkürzung
 - **Zurück** und **Weiter**, rechts die Zahl der offenen Entscheidungen
 
-Bilder und andere Binärdateien lassen sich nicht Zeile für Zeile zusammenführen —
+Bilder und andere Binärdateien lassen sich nicht Zeile für Zeile zusammenführen,
 dort wählst du, welche Datei komplett bleibt. Hat eine Seite die Datei gelöscht
 und die andere sie geändert, lautet die Frage „behalten oder löschen".
 
@@ -408,7 +430,7 @@ letzten beiden steht die Anzahl, sobald etwas anliegt.
 Ein Branchname wird geprüft, bevor Git ihn sieht. Aus „Fix login bug" macht
 Branchly `fix-login-bug`.
 
-Zum Wechseln muss der Arbeitsstand sauber sein — sonst wärest du dir selbst im
+Zum Wechseln muss der Arbeitsstand sauber sein, sonst wärest du dir selbst im
 Weg. Speichere oder verwirf vorher.
 
 ### Anmeldung am Server
@@ -434,6 +456,52 @@ Eng gefasst, und zwar mit Absicht:
 Das Token wandert dabei nie in eine Datei, nie in die Repository-Konfiguration
 und nie auf die Kommandozeile. Es lebt in der Umgebung genau des einen
 Git-Prozesses, und die kann nur der eigene Benutzer lesen.
+
+### Branch umbenennen und löschen
+
+Beides steht im Menü unter *Branch*. Umbenannt wird immer der Branch, auf dem du
+gerade stehst. Beim Löschen fragt Branchly, welcher weg soll, und bietet den
+aktuellen gar nicht erst an, denn Git weigert sich, den Ast abzusägen, auf dem du
+sitzt.
+
+Liegen in einem Branch Commits, die es sonst nirgends gibt, fragt Branchly ein
+zweites Mal und sagt dazu, dass sie endgültig weg sind. Erst dann wird gelöscht.
+
+### Änderungen beiseitelegen
+
+*Branch → Meine Änderungen beiseitelegen* räumt den Arbeitsstand weg und gibt dir
+einen sauberen Ordner zurück, ohne dass du committen musst. Praktisch, wenn du
+schnell auf einen anderen Branch wechseln willst. Eine Beschriftung ist optional
+und hilft beim Wiedererkennen.
+
+*Meine Änderungen zurückholen* legt sie wieder in den Arbeitsstand. Gibt es dabei
+einen Konflikt, öffnet sich der Konflikt-Assistent wie sonst auch.
+
+### Tags
+
+*Branch → Tags* zeigt alle Namen, die in diesem Projekt an einen Stand geheftet
+sind. Anlegen heftet den Namen an den Stand, den du gerade ausgecheckt hast.
+Löschen entfernt ihn nur von diesem Rechner: ein Tag, der schon auf einem Server
+liegt, bleibt dort, bis ihn dort jemand entfernt.
+
+### Serveradresse ändern
+
+*Branch → Serveradresse ändern* setzt, wohin `origin` zeigt. Hat das Projekt noch
+gar keinen Server, wird er damit angelegt.
+
+### Server überschreiben
+
+*Branch → Server mit diesem Branch überschreiben* ist die Notbremse für einen
+Branch, an dem sonst niemand arbeitet, etwa nach einem Rebase. Branchly benutzt
+dabei eine Sicherung: hat sich auf dem Server etwas bewegt, seit Branchly zuletzt
+nachgesehen hat, wird nichts überschrieben und du bekommst Bescheid. Ein
+Überschreiben ohne diese Sicherung bietet Branchly nicht an.
+
+### Unfertiges Zusammenführen abbrechen
+
+Steckt das Projekt mitten in einem Zusammenführen, einem Cherry-Pick oder einem
+Revert, wird *Abbrechen* im Branch-Menü aktiv und setzt alles auf den Stand von
+davor zurück.
 
 ### Einen neuen Branch das erste Mal senden
 
@@ -620,14 +688,14 @@ Repositories" genau beim Klonen die eigentliche Frage ist.
 Beim Start fragt Branchly einmal am Tag bei GitHub nach, ob es eine neuere Version
 von sich selbst gibt. Findet es eine, erscheint über den Panels ein Streifen:
 **Installieren und neu starten** oder **Jetzt nicht**. Ohne Neuigkeit sagt es
-nichts — eine Meldung „alles beim Alten" braucht niemand.
+nichts. Eine Meldung „alles beim Alten" braucht niemand.
 
 „Jetzt nicht" heißt wirklich nur *jetzt* nicht: der Fund bleibt gemerkt, und beim
-nächsten Start steht der Streifen wieder da — ohne dass dafür erneut jemand gefragt
+nächsten Start steht der Streifen wieder da, ohne dass dafür erneut jemand gefragt
 werden muss. Weg ist er erst, wenn du das Update installiert hast.
 
 Sofort nachfragen: **Hilfe → Nach Updates suchen…**. Dort steht, welcher Stand
-installiert und welcher verfügbar ist — und unter **Was ist neu** alle Änderungen
+installiert und welcher verfügbar ist, und unter **Was ist neu** alle Änderungen
 seit deinem Stand, nicht nur die letzte. Sind es mehr als zehn, nennt die Liste am
 Ende die Zahl der übrigen.
 
@@ -647,7 +715,7 @@ wieder. Was dabei **nicht** passiert:
 
 Die Prüfung beim Start lässt sich in *Einstellungen → Automatische Prüfung*
 abschalten. Wie oft sie höchstens läuft, steht als `update_check_hours` in
-`settings.json` — `0` heißt „bei jedem Start".
+`settings.json`, wobei `0` „bei jedem Start" heißt.
 
 ## Einstellungen
 

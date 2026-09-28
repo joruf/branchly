@@ -5,7 +5,7 @@ a clear picture of what changed, and merges you can actually understand.
 
 Built because GitHub Desktop has no official Linux build, and because managing a
 dozen projects needs categories, favourites and a single glance at "where is
-something new" — locally *and* on the server.
+something new", locally *and* on the server.
 
 ![Main window](docs/screenshots/main-window-dark.png)
 
@@ -31,7 +31,7 @@ something new" — locally *and* on the server.
 - A background check on a configurable interval (off, 5, 15, 30, 60, 120 minutes)
 - Manual check for one project or for all of them, with progress
 - The online check uses `git ls-remote`, which asks the server a question and
-  changes nothing locally — a background check can never move your refs
+  changes nothing locally, so a background check can never move your refs
 
 **Seeing what changed**
 - Side-by-side or single-column, with word-level highlighting inside changed lines
@@ -63,7 +63,7 @@ something new" — locally *and* on the server.
 - Fetch, pull and push with the counts on the buttons
 - One action brings *every* project up to the server's version. Fast-forward only:
   nothing is merged, nothing is overwritten, and every project that was skipped is
-  named with the reason — unsaved work, own commits, a waiting conflict
+  named with the reason: unsaved work, own commits, a waiting conflict
 - Graph view with lanes: check out a version, branch from it, merge it,
   cherry-pick, revert, move the branch, tag it, or compare two versions
 
@@ -71,7 +71,7 @@ something new" — locally *and* on the server.
 
 ![Conflict assistant](docs/screenshots/conflict-assistant-dark.png)
 
-Three columns — your change, the server's, the result — with the reason in plain
+Three columns (your change, the server's, the result) with the reason in plain
 words and four buttons. No `<<<<<<<` markers, no "ours" and "theirs", no SHAs.
 Nothing is written until every decision is made, and backing out restores exactly
 the state from before.
@@ -125,6 +125,11 @@ the state from before.
   and lives in the system keychain
 - Side by side, optionally with the unchanged text around a change: up to 20
   lines above and below, drawn in a quiet grey so the change still stands out
+- A tick above every block of a diff, so two unrelated edits in one file do not
+  have to go into the same commit. What you leave out stays on disk
+- Branch rename and delete, stash, tags, the server address, and an overwrite
+  that uses `--force-with-lease` so it fails rather than deleting somebody's work
+- The installer adds Branchly to the application menu
 
 **Keeping itself up to date**
 - Once a day on startup Branchly asks GitHub whether a newer version exists and
@@ -171,10 +176,13 @@ cp resources/branchly.desktop ~/.local/share/applications/
 Branchly runs the real `git` binary rather than reimplementing it, which is also
 where most of its safety comes from. On top of that:
 
-- **No credentials are stored.** Git operations use your existing Git credential
-  helper (libsecret on Linux, Credential Manager on Windows). The GitHub API
-  token, the one thing Branchly does keep, goes into the system keychain, never
-  into a config file. Without a keychain, the GitHub features stay off.
+- **One credential, in the system keychain.** The GitHub token goes into the
+  keychain (libsecret on Linux, Credential Manager on Windows), never into a
+  config file. Without a keychain, the GitHub features stay off. Git operations
+  use your own Git credential helper first; only when that has nothing for a
+  GitHub HTTPS remote does Branchly offer the same token, through `GIT_ASKPASS`,
+  so it reaches the one git process and never a file or a command line. No other
+  host is ever offered it.
 - **Writing to GitHub is never implicit.** Nothing is created, changed or deleted
   without a click that says so, and every list is read-only until the token says
   the account may write. Deleting a repository asks for its full name, typed out.
@@ -193,7 +201,8 @@ where most of its safety comes from. On top of that:
 - **Opening files refuses `.desktop` and similar descriptors**, which describe a
   command rather than hold content, and refuses any path outside the repository.
 - **Destructive actions confirm first**, in a sentence saying what gets lost.
-  `--force-with-lease` is offered; a plain `--force` push is not.
+  Overwriting the server uses `--force-with-lease`, which fails if somebody
+  pushed in the meantime; a plain `--force` push is not offered at all.
 - **The bulk pull is fast-forward only.** Over twenty projects nobody is watching
   each one, so git is told to refuse anything but a fast-forward: it cannot build a
   merge commit, cannot leave a conflict behind, and cannot move a branch that has
@@ -223,9 +232,9 @@ the same on a developer machine and on a bare CI runner.
 
 ## Documentation
 
-- [`docs/MANUAL.md`](docs/MANUAL.md) — how to use it
-- [`docs/TECHNICAL.md`](docs/TECHNICAL.md) — architecture and the reasoning behind it
-- [`docs/UI_OVERVIEW.md`](docs/UI_OVERVIEW.md) — what each panel is for
+- [`docs/MANUAL.md`](docs/MANUAL.md): how to use it
+- [`docs/TECHNICAL.md`](docs/TECHNICAL.md): architecture and the reasoning behind it
+- [`docs/UI_OVERVIEW.md`](docs/UI_OVERVIEW.md): what each panel is for
 
 ## Licence
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -482,6 +483,76 @@ def needs_install(interpreter: Path | None = None) -> bool:
     return any(not status.ok for status in probe_package_status(target))
 
 
+def install_desktop_entry(log: LogFn | None = None) -> bool:
+    """
+    Puts Branchly into the desktop's application menu.
+
+    Only on Linux, and only into the user's own directories: a system-wide
+    install would need root for something that is nobody else's business.
+
+    The ``Exec`` line is rewritten to this installation's absolute path. The
+    shipped file works out its own location from ``%k``, which every desktop
+    fills in, except the ones that do not, and a launcher that silently does
+    nothing on one desktop in five is worse than a longer line.
+
+    Args:
+        log: Progress logger.
+
+    Returns:
+        bool: True when an entry was written.
+    """
+
+    emit = log or _default_log
+    if platform.system().lower() != "linux":
+        return False
+
+    source = _ROOT / "resources" / "branchly.desktop"
+    icon = _ROOT / "resources" / "branchly.png"
+    if not source.is_file():
+        return False
+
+    applications = Path.home() / ".local" / "share" / "applications"
+    icons = Path.home() / ".local" / "share" / "icons" / "hicolor" / "256x256" / "apps"
+    try:
+        applications.mkdir(parents=True, exist_ok=True)
+        icons.mkdir(parents=True, exist_ok=True)
+
+        launcher = _ROOT / "branchly.sh"
+        lines = []
+        for line in source.read_text(encoding="utf-8").splitlines():
+            if line.startswith("Exec="):
+                lines.append(f"Exec={launcher} %f")
+            elif line.startswith("# %k"):
+                continue
+            else:
+                lines.append(line)
+        target = applications / "branchly.desktop"
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        target.chmod(0o755)
+
+        if icon.is_file():
+            shutil.copyfile(icon, icons / "branchly.png")
+    except OSError as problem:
+        emit(f"the application menu entry could not be written: {problem}")
+        return False
+
+    # Best effort. A desktop that keeps no cache simply has nothing to update,
+    # and one that does will pick the file up on its own soon enough.
+    for command in (
+        ["update-desktop-database", str(applications)],
+        ["gtk-update-icon-cache", "-f", "-t", str(icons.parents[2])],
+    ):
+        if which(command[0]) is None:
+            continue
+        try:
+            subprocess.run(command, check=False, capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    emit(f"added to the application menu: {target}")
+    return True
+
+
 def run_install(
     options: InstallOptions | None = None,
     *,
@@ -518,6 +589,7 @@ def run_install(
 
     emit("")
     if verify(interpreter, log=emit):
+        install_desktop_entry(log=emit)
         emit(f"{APP_NAME} is ready. Start it with ./branchly.sh (or .venv/bin/python run.py).")
         return 0
     emit(

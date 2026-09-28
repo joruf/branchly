@@ -93,6 +93,8 @@ class DiffHunk:
         new_count: Number of lines covered on the right side.
         heading: Trailing context git puts after the ``@@`` marker.
         lines: Lines belonging to this hunk.
+        selected: Whether this block goes into the next commit. Only meaningful
+            for a working-tree diff, where the user may take single blocks out.
     """
 
     old_start: int = 0
@@ -101,6 +103,24 @@ class DiffHunk:
     new_count: int = 0
     heading: str = ""
     lines: list[DiffLine] = field(default_factory=list)
+    selected: bool = True
+
+    @property
+    def key(self) -> str:
+        """
+        Returns a stable identifier for this block.
+
+        The four line numbers rather than the position in the list: a selection
+        has to survive the diff being read again, and it has to stop being valid
+        as soon as the file underneath has moved. A key built from the numbers
+        does both by itself, because a changed file produces different ones and
+        the stale entries never match again.
+
+        Returns:
+            str: Identifier, unique within one file's diff.
+        """
+
+        return f"{self.old_start}:{self.old_count}:{self.new_start}:{self.new_count}"
 
     @property
     def header(self) -> str:
@@ -128,6 +148,10 @@ class FileDiff:
         added: Number of added lines.
         removed: Number of removed lines.
         error_key: Translation key when the diff could not be produced.
+        selectable: Whether single blocks may be taken out of the next commit.
+            Set by the caller rather than by the parser: it depends on what is
+            being compared, and only a comparison against the last saved version
+            can be turned into a commit.
     """
 
     path: str = ""
@@ -138,6 +162,7 @@ class FileDiff:
     added: int = 0
     removed: int = 0
     error_key: str = ""
+    selectable: bool = False
 
     @property
     def is_empty(self) -> bool:

@@ -1,9 +1,9 @@
-# Branchly — Technische Dokumentation
+# Branchly: Technische Dokumentation
 
 ## Grundentscheidung: Git macht die Arbeit
 
 Branchly implementiert Git nicht nachträglich, sondern ruft das installierte
-`git`-Binary auf — dasselbe, was GitHub Desktop über *dugite* tut. Der Grund ist
+`git`-Binary auf, dasselbe, was GitHub Desktop über *dugite* tut. Der Grund ist
 nicht Bequemlichkeit: Gits Verhalten bei Credential-Helpern, Hooks, `.gitattributes`,
 sparse-checkout, Zeilenenden und Submodulen ist die Referenz, und jede
 Reimplementierung weicht irgendwo davon ab. `pygit2`/libgit2 wurde deshalb
@@ -33,7 +33,7 @@ Regeln, die die Struktur tragen:
 
 - **Nur `gitops/runner.py` startet einen Prozess.** Kein Widget, kein Service.
 - **`ui/` parst keine Git-Ausgabe.** Das Parsen liegt in `gitops/`, damit es ohne
-  laufendes Qt testbar ist — die Diff-Tests brauchen kein Fenster.
+  laufendes Qt testbar ist: die Diff-Tests brauchen kein Fenster.
 - **`gitops/` kennt kein Qt.** Der komplette Git-Kern ist mit `unittest` gegen
   Wegwerf-Repos prüfbar.
 - **`models/` kennt nichts.** Reine Dataclasses mit defensivem `from_dict`.
@@ -46,7 +46,7 @@ Jeder Git-Aufruf geht durch `run()`. Dort und nur dort:
 
 | Maßnahme | Warum |
 |---|---|
-| `subprocess.run([...], shell=False)` | Argumentliste statt Kommandostring — Quoting kann nicht schiefgehen |
+| `subprocess.run([...], shell=False)` | Argumentliste statt Kommandostring, Quoting kann nicht schiefgehen |
 | Kein NUL-Byte in Argumenten | Trennt in C-Strings vorzeitig ab |
 | `--upload-pack`, `--receive-pack`, `--exec` werden abgewiesen | Kein Branchly-Kommando braucht sie; tauchen sie auf, kam sie aus ungeprüfter Eingabe |
 | `-c protocol.ext.allow=never` vor jedem Subkommando | Der `ext`-Transport führt Kommandos aus |
@@ -57,7 +57,7 @@ Jeder Git-Aufruf geht durch `run()`. Dort und nur dort:
 | `--no-optional-locks` bei Lesekommandos | Ein Hintergrund-Scan streitet nicht mit dem git des Nutzers um die Index-Sperre |
 
 **Bewusst nicht gesetzt: `GIT_PROTOCOL_FROM_USER=0`.** Das hätte auch lokale Pfade
-und Netzlaufwerke blockiert — ein Test hat das aufgedeckt. Der `ext`-Transport ist
+und Netzlaufwerke blockiert, was ein Test aufgedeckt hat. Der `ext`-Transport ist
 doppelt abgesichert (URL-Prüfung + `protocol.ext.allow=never`), die Variable hätte
 nur Funktionalität gekostet.
 
@@ -71,7 +71,7 @@ Klassifiziert jede Adresse, bevor Git sie sieht. Abgewiesen wird:
   CVE-2025-23040 in GitHub Desktop, Teil der „Clone2Leak"-Serie.
 - **`ext::`** und jedes andere `wort::`-Präfix (Transport-Helper führen Kommandos aus).
 - **`--upload-pack=`, `--receive-pack=`, führender Bindestrich.**
-- **Hostnamen, die mit `-` beginnen** — SSH liest die als Option. Auch das kam aus
+- **Hostnamen, die mit `-` beginnen**: SSH liest die als Option. Auch das kam aus
   einem Test, nicht aus dem Entwurf.
 
 Die Unterscheidung „Tippfehler" gegen „gecraftet" wird an die UI weitergegeben, damit
@@ -84,14 +84,14 @@ plus einem Zusatz: **ein führender Bindestrich ist immer verboten**. Ein Branch
 namens `--upload-pack=x` wäre sonst auf der Kommandozeile eine Option.
 
 `suggest_branch_name()` macht aus Prosa einen gültigen Namen und ist so gebaut,
-dass es nie einen ungültigen zurückgibt — das ist eigens getestet.
+dass es nie einen ungültigen zurückgibt, und das ist eigens getestet.
 
 ### Zugangsdaten
 
 Branchly speichert **keine** Git-Zugangsdaten. Git-Operationen nutzen den
 konfigurierten Credential-Helper des Nutzers. Nur das GitHub-API-Token wird
 gespeichert, und zwar über `keyring` im Schlüsselspeicher des Systems. Ist keiner
-verfügbar, bleiben die GitHub-Funktionen aus — es gibt bewusst **keinen** Rückfall
+verfügbar, bleiben die GitHub-Funktionen aus. Es gibt bewusst **keinen** Rückfall
 auf eine Datei.
 
 ## Nennenswerte Implementierungen
@@ -100,7 +100,7 @@ auf eine Datei.
 
 `git clone` verweigert ein nicht-leeres Ziel grundsätzlich. Der Ersatz ist der
 lange Weg: `git init` → `git remote add` → `git fetch` → `git checkout`. Gits
-Checkout weigert sich, eine vorhandene ungetrackte Datei zu überschreiben — genau
+Checkout weigert sich, eine vorhandene ungetrackte Datei zu überschreiben, genau
 die Zusicherung, die der Warndialog vorher ausspricht. Scheitert ein Schritt, wird
 das gerade erzeugte `.git` wieder entfernt, damit kein halbfertiges Repository
 zurückbleibt.
@@ -113,14 +113,14 @@ Basis, `:2:` unsere Fassung, `:3:` ihre. Die drei gehen durch
 Ergebnis mit Markern wird geparst und in Regionen zerlegt.
 
 Ein eigener 3-Wege-Merge wäre schwieriger und weniger verlässlich gewesen. Die
-Marker selbst erreichen die UI nie — sie werden im Parser verbraucht.
+Marker selbst erreichen die UI nie, sie werden im Parser verbraucht.
 
 ### Graph-Layout
 
 `git log --topo-order` liefert Commits mit Eltern-IDs; die Lane-Zuordnung passiert
 in `gitops/history.py`: jede Lane merkt sich, auf welchen Commit sie wartet. Ein
 Commit übernimmt die Lane, die auf ihn wartete, gibt sie an seinen ersten Eltern
-weiter und weist weiteren Eltern eine eigene zu — freie Slots vor neuen.
+weiter und weist weiteren Eltern eine eigene zu, freie Slots vor neuen.
 
 Gezeichnet wird von einem `QStyledItemDelegate` in Spalte 0 eines `QTreeWidget`.
 Das bringt Auswahl, Tastaturnavigation, Scrollen und Kontextmenüs kostenlos mit;
@@ -131,7 +131,7 @@ zu tun bleibt nur das Malen.
 Als HTML in einem `QTextBrowser`, nicht als eigengemalte Fläche: ein Diff ist genau
 das, wofür Markup gut ist. Die Renderer sind **reine Funktionen**
 (`render_side_by_side`, `render_unified`, `render_many`) und werden ohne Fenster
-getestet — inklusive Escaping, das dort ausdrücklich geprüft wird.
+getestet, inklusive Escaping, das dort ausdrücklich geprüft wird.
 
 Wort-Ebene über `difflib.SequenceMatcher` auf Wort-Token, nicht auf Zeichen: ein
 geänderter Identifier leuchtet als ein Block statt als Buchstabensalat.
@@ -140,7 +140,7 @@ geänderter Identifier leuchtet als ein Block statt als Buchstabensalat.
 
 `services/scheduler.py` hält einen `QThreadPool` mit **vier** gleichzeitigen
 Prozessen. Zwanzig Repos auf einmal würden kurz die Maschine sättigen und das
-Fenster ruckeln lassen — das Gegenteil von hilfreich. Ein zweiter Batch wird
+Fenster ruckeln lassen, also das Gegenteil von hilfreich. Ein zweiter Batch wird
 abgewiesen, solange einer läuft, statt sich einzureihen.
 
 Der Online-Teil nutzt `git ls-remote`. Das ist rein lesend: ein automatischer Scan
@@ -157,7 +157,7 @@ Arbeitsbaum.
 Die eine Entscheidung, auf der alles ruht: **`git pull --ff-only`**. Bei einem
 Projekt schaut der Nutzer hin und entscheidet; bei zwanzig nicht. Ohne `--ff-only`
 könnte ein Lauf zwanzig Merge-Commits bauen und in fünf Ordnern einen offenen
-Konflikt hinterlassen — genau das, was Branchly nie ohne Rückfrage tun darf. Mit
+Konflikt hinterlassen, genau das, was Branchly nie ohne Rückfrage tun darf. Mit
 `--ff-only` lehnt git ab und lässt HEAD stehen, wo es stand. `tests/test_pull_all.py`
 prüft beides an echten Klon-Paaren, inklusive „der Einzel-Button merged weiter".
 
@@ -168,7 +168,7 @@ erkannt, nicht aus einer Fehlermeldung von git: „dein Branch ist auseinanderge
 ist eine Aussage, die Branchly selbst treffen kann.
 
 Übersprungene Projekte bekommen trotzdem ein `fetch`. Fetch schreibt nur in die
-Tracking-Refs und lässt den Arbeitsbaum unberührt — dadurch stimmt hinterher das
+Tracking-Refs und lässt den Arbeitsbaum unberührt, dadurch stimmt hinterher das
 Badge, statt nach dem Lauf veraltet dazustehen.
 
 Der Dialog ist modal, und während der Lauf schreibt, ist *Schließen* gesperrt. Das
@@ -183,14 +183,14 @@ liefert ihn, `git rev-parse HEAD` liefert den eigenen. Kein Versionsvergleich, k
 Semantik, nichts, was falsch sortieren kann.
 
 Ungleiche Commits heißen aber **nicht** „hinterher". Wer an Branchly arbeitet, sitzt
-auf einem eigenen, noch nicht gepushten Commit — die reine Ungleichheit hätte dem
+auf einem eigenen, noch nicht gepushten Commit. Die reine Ungleichheit hätte dem
 ein Phantom-Update gemeldet, das kein `pull` je einlösen kann. Deshalb entscheidet
 `_is_behind()` in drei Stufen:
 
 1. `GET /compare/{local}...{remote}` → `ahead_by` ist die verbindliche Antwort.
    `0` heißt: der Server hat nichts, was hier fehlt.
 2. Antwortet der Vergleich nicht (404, weil GitHub den lokalen Commit nie gesehen
-   hat), fragt `git merge-base --is-ancestor` lokal nach — vorher prüft
+   hat), fragt `git merge-base --is-ancestor` lokal nach. Vorher prüft
    `git cat-file -e`, ob das Objekt überhaupt da ist.
 3. Ist beides nicht zu haben, bleibt die Ungleichheit als letzte Auskunft.
 
@@ -204,7 +204,7 @@ Der Fund selbst liegt in `settings.json` (`update_remote_commit`,
 die Drosselung verhindert die nächste Abfrage, und ein Neustart hätte den Streifen
 nicht zurückgebracht. Beim Start wird der gemerkte Commit ohne Netz gegen `HEAD`
 gehalten; passt er, erscheint der Streifen wieder, ist er installiert, wird er
-vergessen. Ein Klick auf *Installieren* prüft neu — das holt die Änderungsliste und
+vergessen. Ein Klick auf *Installieren* prüft neu, das holt die Änderungsliste und
 bestätigt, dass das Update überhaupt noch aussteht.
 
 Bewusst **nicht** über `github_api/client.py`: der Client dreht sich um das Token
@@ -222,8 +222,8 @@ Zwei Wege beim Einspielen, automatisch gewählt:
 
 Der Neustart ist das Letzte, was der Prozess tut: `ui/update_dialog.py` setzt nur
 `restart_wanted`, das Fenster schließt normal, `run.py` ruft danach
-`updater.restart()`. Dateien unter einem laufenden Python zu ersetzen ist harmlos —
-die Module sind längst geladen —, ein Neustart mitten in der Event-Loop nicht.
+`updater.restart()`. Dateien unter einem laufenden Python zu ersetzen ist harmlos
+(die Module sind längst geladen), ein Neustart mitten in der Event-Loop nicht.
 Unter POSIX ersetzt `os.execve` den Prozess, unter Windows startet ein Kind mit
 `pythonw.exe` und `CREATE_NO_WINDOW`. In beiden Fällen wird `BRANCHLY_REEXEC` aus
 der Umgebung entfernt, sonst würde das Kind seine venv nicht mehr betreten.
@@ -491,6 +491,41 @@ nachholte. Qt bricht den Prozess ab, wenn ein Thread seinen Pool überlebt
 sporadisch beim Beenden, seit auf Fokus und auf jeden Projektwechsel gescannt
 wird.
 
+### Einzelne Blöcke committen
+
+Drei Teile tragen das, und jeder kann für sich schiefgehen, ohne dass man es
+sieht. Deshalb liest `tests/test_hunk_selection.py` das Ergebnis aus Git zurück
+statt aus Branchly.
+
+**Die Identität eines Blocks.** `DiffHunk.key` sind die vier Zeilennummern, nicht
+die Position in der Liste. Eine Auswahl muss überleben, dass der Diff neu gelesen
+wird (bei jedem Fokuswechsel passiert das), und sie muss aufhören zu gelten,
+sobald sich die Datei darunter bewegt hat. Ein Schlüssel aus den Nummern leistet
+beides von allein: eine geänderte Datei erzeugt andere, und die alten Einträge
+passen nie wieder.
+
+**Ein Patch, nicht mehrere.** `stage.build_patch()` schreibt alle gewählten
+Blöcke in **einen** Patch. Die Zeilennummern jedes Blocks sind gegen dasselbe
+Original gezählt, also träfe bei einem Patch pro Block jeder folgende auf eine
+Datei, die der vorige schon verschoben hat. Git löst das, indem es den Kontext
+sucht, und trifft meistens richtig. „Meistens" ist keine brauchbare Eigenschaft
+für das, was den Inhalt eines Commits bestimmt.
+
+**Der Commit-Weg.** `_do_commit()` setzt den Index wie bisher zuerst zurück,
+genau dafür: der Patch wird gegen den letzten gespeicherten Stand angelegt.
+Dateien ohne Blockauswahl gehen weiterhin ganz über `stage_files()`, die anderen
+über `stage_selected_hunks()`. Danach wird die Auswahl vergessen, denn ihre
+Schlüssel zählen gegen einen Stand, der jetzt Geschichte ist.
+
+**Der halbe Haken.** `checked_paths()` zählt `PartiallyChecked` als dabei. Täte es
+das nicht, fielen genau die Blöcke still unter den Tisch, die jemand ausgewählt
+hat. Ein Klick auf den Haken selbst wirft die Blockauswahl weg
+(`partial_cleared`), sonst sagte die Anzeige etwas anderes als der Commit tut.
+
+Die Häkchen sind Links im gerenderten Dokument, weil in Rich Text kein Widget
+Platz hat. `QTextBrowser.anchorClicked` meldet den Klick, das Schema
+`branchly-hunk:` unterscheidet sie von einer echten Adresse.
+
 ### Anmelden: Device Flow statt Redirect
 
 Von den OAuth-Varianten passt genau eine zu einem Desktop-Programm. Ein
@@ -680,6 +715,24 @@ Der Einstellungsdialog kennt das Feld nicht mehr und gibt `theme` unverändert a
 `self._original` zurück. Ohne das würde ein Besuch im Dialog die Wahl aus dem
 Menü mit dem Stand überschreiben, den der Dialog beim Öffnen gesehen hat.
 
+### Eintrag im Anwendungsmenü
+
+`install_dependencies.install_desktop_entry()` schreibt nach einer erfolgreichen
+Installation `~/.local/share/applications/branchly.desktop` und kopiert das Icon
+nach `~/.local/share/icons/hicolor/256x256/apps/`. Nur unter Linux, nur in die
+Verzeichnisse des Benutzers: systemweit bräuchte es Root für etwas, das niemanden
+sonst angeht.
+
+Die `Exec`-Zeile wird dabei auf den absoluten Pfad dieser Installation
+umgeschrieben. Die ausgelieferte Datei ermittelt ihren Ort über `%k` selbst, und
+das füllt jede Desktop-Umgebung aus, außer denen, die es nicht tun. Ein Starter,
+der auf jedem fünften Desktop stillschweigend nichts tut, ist schlimmer als eine
+längere Zeile.
+
+`StartupWMClass` muss die **Klasse** aus `WM_CLASS` treffen, also `Branchly` und
+nicht `branchly`. Sonst ordnet die Taskleiste das Fenster dem Starter nicht zu
+und zeigt zwei Einträge für dasselbe Programm.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`
@@ -690,7 +743,7 @@ Steuerung im ausgeschalteten Zustand anders aussieht als im eingeschalteten.
 **Sprache:** Eine JSON-Datei in `locales/` ablegen. Englisch ist der Fallback für
 fehlende Schlüssel, `_label` liefert den Namen in der Auswahl.
 `tests/test_i18n.py` erzwingt, dass DE und EN identische Schlüssel **und**
-identische Platzhalter haben — das ist die Bremse gegen Auseinanderdriften.
+identische Platzhalter haben. Das ist die Bremse gegen Auseinanderdriften.
 
 ## Tests
 
@@ -701,7 +754,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -v
 `tests/support.py` baut Wegwerf-Repos mit eigenem `HOME` und eigener
 `GIT_CONFIG_GLOBAL`, damit die Suite auf einer Entwicklermaschine mit reicher
 `~/.gitconfig` genauso läuft wie auf einem nackten CI-Runner. `temp_repo_pair()`
-liefert zwei Clones eines Bare-Repos — die Form, die jeder Sync- und Konflikttest
+liefert zwei Clones eines Bare-Repos, die Form, die jeder Sync- und Konflikttest
 braucht.
 
 `tests/support_github.py` startet einen echten HTTP-Server auf localhost als
