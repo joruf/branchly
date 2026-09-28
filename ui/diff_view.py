@@ -76,6 +76,10 @@ GUTTER_WIDTH = 52
 SIDE_OLD = "old"
 SIDE_NEW = "new"
 
+# Marks a link inside a rendered diff as "this block's tick". A scheme of its
+# own, so it can never be confused with a real address the document might carry.
+HUNK_LINK_PREFIX = "branchly-hunk:"
+
 
 def _escape(text: str) -> str:
     """
@@ -227,19 +231,51 @@ def _hunk_label(hunk: DiffHunk) -> str:
     return f"{_escape(label)}{suffix}"
 
 
-def _hunk_header_row(hunk: DiffHunk, columns: int) -> str:
+def hunk_toggle(hunk: DiffHunk, colors: ThemeColors) -> str:
+    """
+    Builds the tick that takes one block out of the next commit.
+
+    A link rather than a real checkbox, because the block is drawn inside a rich
+    text document and a widget cannot be put into one. ``QTextBrowser`` reports
+    a click on it through ``anchorClicked``, which is all that is needed.
+
+    Args:
+        hunk: The block the tick belongs to.
+        colors: Active theme tokens.
+
+    Returns:
+        str: HTML for the tick and its label.
+    """
+
+    mark = "☑" if hunk.selected else "☐"
+    label = i18n.t("diff.hunk_in" if hunk.selected else "diff.hunk_out")
+    color = colors.text if hunk.selected else colors.text_muted
+    return (
+        f'<a href="{HUNK_LINK_PREFIX}{_escape(hunk.key)}" '
+        f'style="color:{color};text-decoration:none;">{mark} {_escape(label)}</a>'
+    )
+
+
+def _hunk_header_row(
+    hunk: DiffHunk, columns: int, colors: ThemeColors | None = None, selectable: bool = False
+) -> str:
     """
     Builds the row that introduces a hunk in the one-column layout.
 
     Args:
         hunk: Hunk being rendered.
         columns: Number of table columns to span.
+        colors: Active theme tokens, needed only when a tick is drawn.
+        selectable: Whether the block may be taken out of the next commit.
 
     Returns:
         str: HTML table row.
     """
 
-    return f'<tr class="hunk"><td colspan="{columns}">{_hunk_label(hunk)}</td></tr>'
+    label = _hunk_label(hunk)
+    if selectable and colors is not None:
+        label = f"{label}&nbsp;&nbsp;{hunk_toggle(hunk, colors)}"
+    return f'<tr class="hunk"><td colspan="{columns}">{label}</td></tr>'
 
 
 def _pane_header_row(text: str, style: str = "") -> str:
@@ -288,7 +324,9 @@ def _file_header_row(diff: FileDiff, columns: int, colors: ThemeColors) -> str:
     )
 
 
-def _cell(line: DiffLine | None, colors: ThemeColors, word_level: bool) -> str:
+def _cell(
+    line: DiffLine | None, colors: ThemeColors, word_level: bool, dim: bool = False
+) -> str:
     """
     Builds one side of a side-by-side row.
 
@@ -315,9 +353,17 @@ def _cell(line: DiffLine | None, colors: ThemeColors, word_level: bool) -> str:
         number = line.old_lineno
     text, cut = _truncate(line.text)
     highlight = colors.diff_word_added_bg if line.kind == LINE_ADDED else colors.diff_word_removed_bg
-    body = _with_spans(text, line.spans if word_level else [], highlight)
+    # A block that is staying out gets no word highlighting either: the span
+    # carries its own background, and one loud green word in an otherwise pale
+    # block reads as the opposite of what it is.
+    body = _with_spans(text, line.spans if word_level and not dim else [], highlight)
     if cut:
         body += f'<span style="color:{colors.text_muted};"> …</span>'
+    if dim:
+        # A block that stays out of the commit is still worth reading, it is just
+        # not part of what is about to happen.
+        background = "transparent"
+        foreground = colors.text_muted
     return (
         f'<td class="gutter" style="background-color:{gutter};">{number if number else ""}</td>'
         f'<td style="background-color:{background};color:{foreground};">{body}</td>'
@@ -344,10 +390,17 @@ def _pane_rows(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool)
 
     rows: list[str] = []
     for hunk in diff.hunks:
-        rows.append(_pane_header_row(_hunk_label(hunk)))
+        label = _hunk_label(hunk)
+        if diff.selectable:
+            # Only on the new side. The same tick in both panes reads as two
+            # separate switches for one thing.
+            toggle = hunk_toggle(hunk, colors) if side == SIDE_NEW else ""
+            label = f"{label}&nbsp;&nbsp;{toggle}" if toggle else label
+        style = "" if hunk.selected else f"opacity:0.55;color:{colors.text_muted};"
+        rows.append(_pane_header_row(label, style))
         for left, right in pair_lines(hunk):
             line = left if side == SIDE_OLD else right
-            rows.append(f"<tr>{_cell(line, colors, word_level)}</tr>")
+            rows.append(f"<tr>{_cell(line, colors, word_level, dim=not hunk.selected)}</tr>")
     return rows
 
 
@@ -430,15 +483,18 @@ def render_unified(diff: FileDiff, colors: ThemeColors, word_level: bool = True)
 
     rows: list[str] = []
     for hunk in diff.hunks:
-        rows.append(_hunk_header_row(hunk, 4))
+        rows.append(_hunk_header_row(hunk, 4, colors, diff.selectable))
         for line in hunk.lines:
             background, gutter, foreground = _line_styles(line.kind, colors)
+            dim = not hunk.selected
+            if dim:
+                background, foreground = "transparent", colors.text_muted
             marker = {LINE_ADDED: "+", LINE_REMOVED: "−", LINE_NO_NEWLINE: "\\"}.get(line.kind, " ")
             text, cut = _truncate(line.text)
             highlight = (
                 colors.diff_word_added_bg if line.kind == LINE_ADDED else colors.diff_word_removed_bg
             )
-            body = _with_spans(text, line.spans if word_level else [], highlight)
+            body = _with_spans(text, line.spans if word_level and not dim else [], highlight)
             if cut:
                 body += f'<span style="color:{colors.text_muted};"> …</span>'
             rows.append(
@@ -538,11 +594,15 @@ class ComparisonPanes(QWidget):
     * **A signal that sets the other side's value comes straight back.** Every
       handler therefore runs behind one guard flag rather than disconnecting and
       reconnecting.
+    * **A click on a link inside a pane is reported.** The per-block ticks are
+      links, because a rich text document cannot hold a real checkbox.
     * **Each side says in words which version it is.** Left and right alone do
       not tell anyone which one is the old file, and guessing wrong turns an
       addition into a deletion. The captions sit above the views rather than
       inside the documents, so they stay put while the content scrolls.
     """
+
+    link_clicked = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -573,6 +633,13 @@ class ComparisonPanes(QWidget):
 
         self._link(self._old, self._new)
         self._link(self._new, self._old)
+
+        for pane in (self._old, self._new):
+            # Through a lambda: the signal carries a plain string, because the
+            # only thing anyone does with it is read the address back out.
+            pane.anchorClicked.connect(
+                lambda url: self.link_clicked.emit(url.toString())
+            )
 
     def _build_side(
         self, caption_key: str, tip_key: str
@@ -1028,6 +1095,7 @@ class DiffView(QWidget):
     reload_requested = Signal()
     open_file_requested = Signal(str)
     reveal_file_requested = Signal(str)
+    hunk_toggled = Signal(str)
 
     def __init__(
         self,
@@ -1066,11 +1134,13 @@ class DiffView(QWidget):
         self._browser = QTextBrowser(self)
         self._browser.setOpenExternalLinks(False)
         self._browser.setOpenLinks(False)
+        self._browser.anchorClicked.connect(self._on_anchor)
         self._browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
         apply_monospace(self._browser, -1)
         self._stack.addWidget(self._browser)
 
         self._panes = ComparisonPanes(self)
+        self._panes.link_clicked.connect(self._on_anchor)
         self._stack.addWidget(self._panes)
 
         self._notice_holder = QWidget(self)
@@ -1347,6 +1417,24 @@ class DiffView(QWidget):
         self.options_changed.emit()
         self.reload_requested.emit()
 
+    def _on_anchor(self, url: object) -> None:
+        """
+        Turns a click on a link inside the diff into a signal.
+
+        Args:
+            url: The address Qt reports, a ``QUrl``.
+
+        Returns:
+            None
+        """
+
+        address = url.toString() if hasattr(url, "toString") else str(url)
+        if not address.startswith(HUNK_LINK_PREFIX):
+            return
+        key = address[len(HUNK_LINK_PREFIX):]
+        if key:
+            self.hunk_toggled.emit(key)
+
     def _on_target_changed(self, _index: int) -> None:
         """
         Announces a new comparison target.
@@ -1500,9 +1588,15 @@ class DiffView(QWidget):
 
         self._render()
         if self._diff is not None and self._diff.truncated:
-            self._counts.setText(
-                f"{self._counts.text()}  ·  {i18n.t('diff.too_large', count=self._diff.line_count)}"
+            note = i18n.t("diff.too_large", count=self._diff.line_count)
+            self._counts.setText(f"{self._counts.text()}  ·  {note}")
+            # The label says the file was cut off; the hover says what that means
+            # and what to do about it.
+            self._counts.setToolTip(
+                i18n.t("diff.too_large_hint", count=self._diff.line_count)
             )
+        else:
+            self._counts.setToolTip(i18n.t("tip.diff_counts"))
 
     def _render(self) -> None:
         """

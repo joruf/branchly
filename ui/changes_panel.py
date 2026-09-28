@@ -51,6 +51,7 @@ _ROLE_UNTRACKED = int(Qt.ItemDataRole.UserRole) + 1
 _ROLE_CONFLICTED = int(Qt.ItemDataRole.UserRole) + 2
 _ROLE_GLYPH = int(Qt.ItemDataRole.UserRole) + 3
 _ROLE_GLYPH_TOKEN = int(Qt.ItemDataRole.UserRole) + 4
+_ROLE_PARTIAL = int(Qt.ItemDataRole.UserRole) + 5
 
 
 class StatusGlyphDelegate(QStyledItemDelegate):
@@ -129,6 +130,8 @@ class ChangesPanel(QWidget):
         reveal_file_requested: Emitted with a path.
         resolve_requested: Emitted when the user wants the conflict assistant.
         selection_changed: Emitted when the ticked set changed.
+        partial_cleared: Emitted with a path whose per-block selection was
+            dropped because its tick box was clicked.
     """
 
     file_selected = Signal(str, bool)
@@ -138,6 +141,7 @@ class ChangesPanel(QWidget):
     reveal_file_requested = Signal(str)
     resolve_requested = Signal()
     selection_changed = Signal()
+    partial_cleared = Signal(str)
     ignore_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -199,6 +203,10 @@ class ChangesPanel(QWidget):
         # so a file that vanishes from the working tree and comes back later is
         # still unticked.
         self._deselected: set[str] = set()
+        # Files the user took single blocks out of, mapped to whether anything of
+        # them is still going in. A file with nothing left reads as unticked, one
+        # with some blocks left as half ticked.
+        self._partial: dict[str, bool] = {}
         self._list.currentItemChanged.connect(self._on_current_changed)
         self._list.itemChanged.connect(self._on_item_changed)
         self._stack.addWidget(self._list)
@@ -326,7 +334,8 @@ class ChangesPanel(QWidget):
                 # Everything is ticked unless the user said otherwise, and what
                 # they said survives a refresh and a restart alike.
                 keep = change.path not in self._deselected
-                item.setCheckState(Qt.CheckState.Checked if keep else Qt.CheckState.Unchecked)
+                item.setCheckState(self._state_for(change.path, keep))
+                item.setData(_ROLE_PARTIAL, change.path in self._partial)
         self._list.blockSignals(False)
 
         self._stack.setCurrentWidget(self._list)
@@ -376,6 +385,53 @@ class ChangesPanel(QWidget):
         value = item.data(_ROLE_PATH)
         return value if isinstance(value, str) else ""
 
+    def _state_for(self, path: str, keep: bool) -> Qt.CheckState:
+        """
+        Works out how a file's tick should look.
+
+        Args:
+            path: The file.
+            keep: Whether the file itself is ticked.
+
+        Returns:
+            Qt.CheckState: Checked, unchecked, or half ticked when only part of
+                the file is going into the commit.
+        """
+
+        if not keep:
+            return Qt.CheckState.Unchecked
+        if path not in self._partial:
+            return Qt.CheckState.Checked
+        return (
+            Qt.CheckState.PartiallyChecked
+            if self._partial[path]
+            else Qt.CheckState.Unchecked
+        )
+
+    def set_partial(self, partial: dict[str, bool]) -> None:
+        """
+        Marks files that only go into the commit in part.
+
+        Args:
+            partial: Path mapped to whether anything of it is still going in.
+
+        Returns:
+            None
+        """
+
+        self._partial = dict(partial)
+        self._list.blockSignals(True)
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            path = item.data(_ROLE_PATH)
+            if not item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+                continue
+            keep = path not in self._deselected
+            item.setCheckState(self._state_for(path, keep))
+            item.setData(_ROLE_PARTIAL, path in self._partial)
+        self._list.blockSignals(False)
+        self._update_selected_label()
+
     def checked_paths(self) -> list[str]:
         """
         Returns the ticked file paths.
@@ -391,7 +447,10 @@ class ChangesPanel(QWidget):
                 continue
             if not (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
                 continue
-            if item.checkState() == Qt.CheckState.Checked:
+            # Half ticked counts as in: the file is part of the commit, just not
+            # all of it. Leaving it out here would silently drop the blocks the
+            # user did pick.
+            if item.checkState() != Qt.CheckState.Unchecked:
                 value = item.data(_ROLE_PATH)
                 if isinstance(value, str):
                     found.append(value)
@@ -507,21 +566,31 @@ class ChangesPanel(QWidget):
                 continue
             if not (item.flags() & Qt.ItemFlag.ItemIsUserCheckable):
                 continue
-            if item.checkState() == Qt.CheckState.Checked:
+            if item.checkState() != Qt.CheckState.Unchecked:
                 self._deselected.discard(path)
             else:
                 self._deselected.add(path)
 
-    def _on_item_changed(self, _item: QListWidgetItem) -> None:
+    def _on_item_changed(self, item: QListWidgetItem) -> None:
         """
         Reacts to a tick box being toggled.
 
+        Clicking a half ticked box means "all of it" or "none of it", so the
+        block selection behind it is dropped. Leaving it in place would produce a
+        box that says one thing and a commit that does another.
+
         Args:
-            _item: The changed item.
+            item: The changed item.
 
         Returns:
             None
         """
+
+        path = item.data(_ROLE_PATH) if item is not None else None
+        if isinstance(path, str) and item.data(_ROLE_PARTIAL):
+            item.setData(_ROLE_PARTIAL, False)
+            self._partial.pop(path, None)
+            self.partial_cleared.emit(path)
 
         self._remember_ticks()
         self._update_selected_label()

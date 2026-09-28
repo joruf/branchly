@@ -63,7 +63,7 @@ from gitops.history import read_history
 from gitops.refname import suggest_branch_name
 from gitops.remote_url import github_slug
 from gitops.runner import GitResult
-from gitops.status import RepositoryState, read_state
+from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
 from services import git_credentials, open_with, puller, scanner, updater
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
@@ -82,6 +82,7 @@ from ui.pull_all_dialog import PullAllDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
 from ui.signin_dialog import SignInDialog
+from ui.tag_dialog import TagDialog
 from ui.update_dialog import UpdateDialog, build_update_thread, describe_update
 from ui.widgets import FlowLayout, InlineMessage, refresh_theme_aware
 
@@ -155,6 +156,12 @@ class MainWindow(QMainWindow):
         # Set when a scan was asked for while another batch was running, so it
         # can be made good once that batch is done rather than silently lost.
         self._pending_scan_key: str | None = None
+        # Per file, the blocks the user took out of the next commit. Stored the
+        # way the file selection is stored, as the exceptions rather than the
+        # rule: everything counts until somebody says otherwise, and a key that
+        # no longer matches any block is simply ignored, so a file changing under
+        # the selection cleans it up by itself.
+        self._hunk_selection: dict[str, set[str]] = {}
         self._update_info: updater.UpdateInfo | None = None
         self._restart_after_update = False
 
@@ -375,12 +382,42 @@ class MainWindow(QMainWindow):
         repo_menu.addAction(i18n.t("repo.open_remote"), self._open_current_remote)
 
         branch_menu = bar.addMenu(i18n.t("menu.branch"))
+        branch_menu.setToolTipsVisible(True)
         branch_menu.addAction(i18n.t("branch.new"), self._prompt_new_branch)
         branch_menu.addAction(i18n.t("branch.switch"), self._prompt_switch_branch)
+        branch_menu.addAction(i18n.t("branch.rename"), self._prompt_rename_branch)
+        self._delete_branch_action = QAction(i18n.t("branch.delete"), self)
+        self._delete_branch_action.setToolTip(i18n.t("tip.branch_delete"))
+        self._delete_branch_action.triggered.connect(self._prompt_delete_branch)
+        branch_menu.addAction(self._delete_branch_action)
         branch_menu.addSeparator()
+
+        self._stash_action = QAction(i18n.t("stash.push"), self)
+        self._stash_action.setToolTip(i18n.t("tip.stash_push"))
+        self._stash_action.triggered.connect(self._stash_changes)
+        branch_menu.addAction(self._stash_action)
+        self._stash_pop_action = QAction(i18n.t("stash.pop"), self)
+        self._stash_pop_action.setToolTip(i18n.t("tip.stash_pop"))
+        self._stash_pop_action.triggered.connect(self._stash_restore)
+        branch_menu.addAction(self._stash_pop_action)
+        branch_menu.addAction(i18n.t("tag.menu"), self._open_tags)
+        branch_menu.addSeparator()
+
         branch_menu.addAction(i18n.t("sync.fetch"), self._do_fetch)
         branch_menu.addAction(i18n.t("sync.pull_generic"), self._do_pull)
         branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
+        force_action = QAction(i18n.t("sync.force_push"), self)
+        force_action.setToolTip(i18n.t("tip.force_push"))
+        force_action.triggered.connect(self._do_force_push)
+        branch_menu.addAction(force_action)
+        branch_menu.addAction(i18n.t("remote.change"), self._prompt_remote_url)
+        branch_menu.addSeparator()
+
+        self._abort_action = QAction(i18n.t("merge.abort"), self)
+        self._abort_action.setToolTip(i18n.t("tip.merge_abort"))
+        self._abort_action.triggered.connect(self._abort_operation)
+        branch_menu.addAction(self._abort_action)
+        branch_menu.aboutToShow.connect(self._refresh_branch_menu)
 
         account_menu = bar.addMenu(i18n.t("menu.account"))
         account_menu.setToolTipsVisible(True)
@@ -401,6 +438,8 @@ class MainWindow(QMainWindow):
         self._refresh_account_menu()
 
         help_menu = bar.addMenu(i18n.t("menu.help"))
+        help_menu.addAction(i18n.t("menu.manual"), self._open_manual)
+        help_menu.addSeparator()
         help_menu.addAction(i18n.t("menu.check_updates"), self._open_update_dialog)
         help_menu.addSeparator()
         help_menu.addAction(i18n.t("menu.about"), self._show_about)
@@ -438,6 +477,8 @@ class MainWindow(QMainWindow):
         self._diff.target_changed.connect(lambda _target: self._reload_diff())
         self._diff.open_file_requested.connect(self._open_repo_file)
         self._diff.reveal_file_requested.connect(self._reveal_repo_file)
+        self._diff.hunk_toggled.connect(self._on_hunk_toggled)
+        self._changes.partial_cleared.connect(self._on_partial_cleared)
 
         self._graph.commit_selected.connect(self._show_commit_diff)
         self._graph.checkout_requested.connect(self._confirm_checkout_commit)
@@ -796,7 +837,110 @@ class MainWindow(QMainWindow):
             # is a change, and saying "not a text file" says nothing about it.
             self._show_binary_comparison(entry, path, untracked=False)
             return
+        self._apply_hunk_selection(parsed)
         self._diff.show_diff(parsed)
+
+    def _apply_hunk_selection(self, parsed: object) -> None:
+        """
+        Marks which blocks of a file go into the next commit.
+
+        Only a comparison against the last saved version can be turned into a
+        commit, so only that one gets the ticks. Looking at two commits or at
+        what is already staged is reading, not deciding.
+
+        Args:
+            parsed: The file's parsed diff, marked in place.
+
+        Returns:
+            None
+        """
+
+        parsed.selectable = self._diff.target == diff_mod.TARGET_WORKTREE_HEAD
+        if not parsed.selectable:
+            return
+        deselected = self._hunk_selection.get(parsed.path or self._changes.current_path(), set())
+        for hunk in parsed.hunks:
+            hunk.selected = hunk.key not in deselected
+
+    def _on_hunk_toggled(self, key: str) -> None:
+        """
+        Takes one block out of the next commit, or puts it back.
+
+        Args:
+            key: Identifier of the block, from ``DiffHunk.key``.
+
+        Returns:
+            None
+        """
+
+        path = self._changes.current_path()
+        if not path:
+            return
+        chosen = self._hunk_selection.setdefault(path, set())
+        if key in chosen:
+            chosen.discard(key)
+        else:
+            chosen.add(key)
+        if not chosen:
+            self._hunk_selection.pop(path, None)
+
+        # A file with nothing left in it is not part of the commit, and the tick
+        # in the list has to say so rather than claiming the whole file.
+        self._changes.set_partial(self._partial_paths())
+        self._reload_diff()
+
+    def _partial_paths(self) -> dict[str, bool]:
+        """
+        Reports which files are only partly in the next commit.
+
+        Returns:
+            dict[str, bool]: Path mapped to whether anything of it is left in.
+        """
+
+        entry = self._entry
+        if entry is None:
+            return {}
+        found: dict[str, bool] = {}
+        for path, deselected in self._hunk_selection.items():
+            if not deselected:
+                continue
+            parsed = diff_mod.file_diff(entry.path, path, diff_mod.TARGET_WORKTREE_HEAD)
+            keys = {hunk.key for hunk in parsed.hunks}
+            live = keys & deselected
+            if not live:
+                continue
+            found[path] = bool(keys - live)
+        return found
+
+    def _on_partial_cleared(self, path: str) -> None:
+        """
+        Drops a file's block selection because its tick box was clicked.
+
+        Args:
+            path: The file whose box was clicked.
+
+        Returns:
+            None
+        """
+
+        if self._hunk_selection.pop(path, None) is None:
+            return
+        if path == self._changes.current_path():
+            self._reload_diff()
+
+    def _forget_hunk_selection(self, paths: list[str]) -> None:
+        """
+        Drops the block selection of files that are settled.
+
+        Args:
+            paths: Paths whose selection no longer means anything.
+
+        Returns:
+            None
+        """
+
+        for path in paths:
+            self._hunk_selection.pop(path, None)
 
     def _show_binary_comparison(self, entry: RepoEntry, path: str, untracked: bool) -> None:
         """
@@ -927,10 +1071,27 @@ class MainWindow(QMainWindow):
         if staged.failed and "did not match" not in staged.message:
             self._report(staged)
             return
-        added = stage_mod.stage_files(entry.path, selected)
-        if added.failed:
-            self._report(added)
-            return
+
+        # Files the user took single blocks out of are staged block by block, the
+        # rest wholesale. The index has to start at the last saved version for
+        # that, which is exactly what the reset above leaves behind.
+        partial = self._partial_paths()
+        whole = [path for path in selected if path not in partial]
+        if whole:
+            added = stage_mod.stage_files(entry.path, whole)
+            if added.failed:
+                self._report(added)
+                return
+        for path in selected:
+            if path not in partial:
+                continue
+            parsed = diff_mod.file_diff(entry.path, path, diff_mod.TARGET_WORKTREE_HEAD)
+            self._apply_hunk_selection(parsed)
+            applied = stage_mod.stage_selected_hunks(entry.path, parsed)
+            if applied.failed:
+                self._report(applied)
+                return
+
         result = do_commit(entry.path, draft)
         if result.failed:
             self._report(result)
@@ -940,6 +1101,9 @@ class MainWindow(QMainWindow):
         # a future, unrelated change to the same file.
         self._changes.forget_selection(selected)
         entry.forget_selection(selected)
+        # The block keys are counted against the version that just became the
+        # last saved one, so none of them means anything any more.
+        self._forget_hunk_selection(selected)
         self._save_registry()
         self.statusBar().showMessage(draft.summary.strip(), 4000)
         self._reload_current()
@@ -1094,6 +1258,361 @@ class MainWindow(QMainWindow):
         if not accepted or not chosen:
             return
         self._checkout_branch(chosen)
+
+    def _refresh_branch_menu(self) -> None:
+        """
+        Matches the branch menu to what the repository currently allows.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        state = self._state
+        has_entry = entry is not None and entry.exists
+        # Deleting the branch you are standing on is the one branch operation git
+        # refuses outright, so the entry is off rather than failing on click.
+        self._delete_branch_action.setEnabled(
+            has_entry and len(branch_mod.list_branches(entry.path, include_remote=False)) > 1
+        )
+        dirty = bool(state and not state.is_clean)
+        self._stash_action.setEnabled(has_entry and dirty)
+        self._stash_pop_action.setEnabled(
+            has_entry and bool(branch_mod.stash_list(entry.path))
+        )
+        self._abort_action.setEnabled(has_entry and bool(self._unfinished_operation()))
+
+    def _unfinished_operation(self) -> str:
+        """
+        Names the operation the repository is stuck in the middle of.
+
+        Git leaves a marker file in the git directory while a merge, a cherry-pick
+        or a revert is unfinished, and each one needs its own abort command.
+
+        Returns:
+            str: ``merge``, ``cherry-pick``, ``revert``, or an empty string.
+        """
+
+        entry = self._entry
+        if entry is None:
+            return ""
+        marker_dir = git_dir(entry.path)
+        if marker_dir is None:
+            return ""
+        for marker, name in (
+            ("MERGE_HEAD", "merge"),
+            ("CHERRY_PICK_HEAD", "cherry-pick"),
+            ("REVERT_HEAD", "revert"),
+        ):
+            if (marker_dir / marker).exists():
+                return name
+        return ""
+
+    def _prompt_rename_branch(self) -> None:
+        """
+        Asks for a new name for the current branch.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        state = self._state
+        if entry is None or state is None or state.detached or not state.branch:
+            self._show_notice("sync.detached", "sync.detached_hint", "warning")
+            return
+
+        typed, accepted = QInputDialog.getText(
+            self,
+            i18n.t("branch.rename_title"),
+            i18n.t("branch.rename_prompt", name=state.branch),
+            text=state.branch,
+        )
+        if not accepted:
+            return
+        name = suggest_branch_name(typed) or typed.strip()
+        if not name or name == state.branch:
+            return
+        if branch_mod.branch_exists(entry.path, name):
+            self._show_notice("branch.exists", "branch.exists_hint", "warning", name=name)
+            return
+
+        result = branch_mod.rename_branch(entry.path, state.branch, name)
+        if result.failed:
+            self._report(result)
+            return
+        branch_mod.invalidate_branch_cache(entry.path)
+        self.statusBar().showMessage(i18n.t("branch.renamed", name=name), 4000)
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _prompt_delete_branch(self) -> None:
+        """
+        Asks which branch to delete and deletes it.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        branches = branch_mod.list_branches(entry.path, include_remote=False)
+        names = [item.name for item in branches if not item.is_current]
+        if not names:
+            self._show_notice("branch.delete_none", "branch.delete_none_hint", "info")
+            return
+
+        chosen, accepted = QInputDialog.getItem(
+            self, i18n.t("branch.delete_title"), i18n.t("branch.delete_pick"), names, 0, False
+        )
+        if not accepted or not chosen:
+            return
+        if self._settings.confirm_destructive:
+            answer = QMessageBox.question(
+                self,
+                i18n.t("branch.delete_title"),
+                i18n.t("branch.delete_prompt", name=chosen),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+
+        result = branch_mod.delete_branch(entry.path, chosen)
+        if result.failed:
+            # Git refuses a branch whose commits are nowhere else. That is the one
+            # case worth a second question rather than an error, because the user
+            # may well mean it.
+            if "not fully merged" not in result.message.lower():
+                self._report(result)
+                return
+            forced = QMessageBox.question(
+                self,
+                i18n.t("branch.delete_title"),
+                i18n.t("branch.delete_unmerged", name=chosen),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if forced != QMessageBox.StandardButton.Yes:
+                return
+            result = branch_mod.delete_branch(entry.path, chosen, force=True)
+            if result.failed:
+                self._report(result)
+                return
+
+        branch_mod.invalidate_branch_cache(entry.path)
+        self.statusBar().showMessage(i18n.t("branch.deleted", name=chosen), 4000)
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _stash_changes(self) -> None:
+        """
+        Puts the working tree aside so it can be picked up again later.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        label, accepted = QInputDialog.getText(
+            self, i18n.t("stash.push_title"), i18n.t("stash.push_prompt")
+        )
+        if not accepted:
+            return
+        result = branch_mod.stash_push(entry.path, label.strip())
+        if result.failed:
+            self._report(result)
+            return
+        self.statusBar().showMessage(i18n.t("stash.pushed"), 4000)
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _stash_restore(self) -> None:
+        """
+        Brings the most recently stashed changes back.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        entries = branch_mod.stash_list(entry.path)
+        if not entries:
+            return
+        answer = QMessageBox.question(
+            self,
+            i18n.t("stash.pop_title"),
+            i18n.t("stash.pop_prompt", label=entries[0]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        result = branch_mod.stash_pop(entry.path)
+        self._reload_current()
+        if result.failed:
+            if read_state(entry.path).has_conflicts:
+                self._open_conflict_assistant()
+                return
+            self._report(result)
+            return
+        self.statusBar().showMessage(i18n.t("stash.popped"), 4000)
+        self._start_scan(entry.key)
+
+    def _open_tags(self) -> None:
+        """
+        Opens the tag list.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        dialog = TagDialog(entry.path, self._state.display_branch if self._state else "", self)
+        dialog.exec()
+        self._reload_current()
+
+    def _prompt_remote_url(self) -> None:
+        """
+        Changes where the project's ``origin`` points.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        current = remote_mod.remote_fetch_url(entry.path)
+        typed, accepted = QInputDialog.getText(
+            self,
+            i18n.t("remote.change_title"),
+            i18n.t("remote.change_prompt"),
+            text=current,
+        )
+        if not accepted:
+            return
+        url = typed.strip()
+        if not url or url == current:
+            return
+
+        result = (
+            remote_mod.set_remote_url(entry.path, url)
+            if current
+            else remote_mod.add_remote(entry.path, url)
+        )
+        if result.failed:
+            self._report(result)
+            return
+        entry.remote_url = url
+        self._save_registry()
+        self.statusBar().showMessage(i18n.t("remote.changed"), 4000)
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _do_force_push(self) -> None:
+        """
+        Overwrites the server's branch with the local one.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        state = self._state
+        if entry is None:
+            return
+        if state is not None and state.detached:
+            self._show_notice("sync.detached", "sync.detached_hint", "warning")
+            return
+
+        answer = QMessageBox.question(
+            self,
+            i18n.t("confirm.force_push_title"),
+            f"{i18n.t('confirm.force_push_hint')}\n\n{i18n.t('confirm.force_push_lease')}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self.statusBar().showMessage(i18n.t("sync.working"))
+        result = remote_mod.push(
+            entry.path,
+            branch=state.branch if state else "",
+            set_upstream=bool(state and not state.upstream),
+            force_with_lease=True,
+            credentials=self._credentials(entry),
+        )
+        self.statusBar().clearMessage()
+        if result.failed:
+            # A lease that no longer holds is the whole point of the flag: somebody
+            # pushed in the meantime and their work would have been deleted.
+            if "stale info" in result.message.lower():
+                self._show_notice("sync.lease_stale", "sync.lease_stale_hint", "warning")
+            else:
+                self._report_sync(result, entry)
+            self._reload_current()
+            return
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _abort_operation(self) -> None:
+        """
+        Stops an unfinished merge, cherry-pick or revert.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        operation = self._unfinished_operation()
+        if entry is None or not operation:
+            return
+        answer = QMessageBox.question(
+            self,
+            i18n.t("merge.abort_title"),
+            i18n.t("merge.abort_prompt"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        runner = {
+            "merge": branch_mod.merge_abort,
+            "cherry-pick": branch_mod.cherry_pick_abort,
+            "revert": branch_mod.revert_abort,
+        }[operation]
+        result = runner(entry.path)
+        if result.failed:
+            self._report(result)
+            return
+        self.statusBar().showMessage(i18n.t("merge.aborted"), 4000)
+        self._reload_current()
+        self._start_scan(entry.key)
+
+    def _open_manual(self) -> None:
+        """
+        Opens the manual in whatever reads Markdown here.
+
+        Returns:
+            None
+        """
+
+        manual = paths.project_root() / "docs" / "MANUAL.md"
+        if not manual.is_file():
+            self._show_notice("manual.missing", "manual.missing_hint", "warning")
+            return
+        open_with.open_path(manual)
 
     def _checkout_branch(self, name: str) -> None:
         """
@@ -2523,8 +3042,15 @@ class MainWindow(QMainWindow):
             None
         """
 
-        if result.error_key() == "sync.auth_failed" and git_credentials.wants_token(entry.path):
-            self._show_notice("sync.auth_failed", "sync.auth_needs_token", "danger")
+        if result.error_key() == "sync.auth_failed":
+            # Two different pieces of advice. Somebody with a GitHub project and
+            # no token has nothing to check, they have something to add.
+            detail = (
+                "sync.auth_needs_token"
+                if git_credentials.wants_token(entry.path)
+                else "sync.auth_failed_hint"
+            )
+            self._show_notice("sync.auth_failed", detail, "danger")
             return
         self._report(result)
 
@@ -2546,6 +3072,10 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle(i18n.t("error.title"))
         box.setText(title)
+        # A refused argument is the one failure the user cannot act on without
+        # being told what Branchly objected to.
+        if key == "error.unsafe_argument":
+            box.setInformativeText(i18n.t("error.unsafe_argument_hint", value=detail or "?"))
         if detail:
             box.setDetailedText(detail)
         box.setIcon(QMessageBox.Icon.Warning)

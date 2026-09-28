@@ -47,6 +47,9 @@ _CALL = re.compile(r'i18n\.t\(\s*["\']([a-z0-9_.]+)["\']')
 # Tooltip keys handed to a helper as a plain string, which the call pattern
 # above cannot see.
 _TIP_LITERAL = re.compile(r'["\'](tip\.[a-z0-9_]+)["\']')
+# Any key handed to a helper rather than to ``i18n.t`` directly, which is how
+# every message with a headline and an explanation is written.
+_ANY_LITERAL = re.compile(r'["\']([a-z0-9_]+\.[a-z0-9_]+)["\']')
 
 # Controls whose own label is the entire explanation. Listing them is the point:
 # adding a control means deciding whether it needs one, rather than forgetting.
@@ -63,10 +66,9 @@ def _source_files() -> list[Path]:
         list[Path]: Python files of the application, tests excluded.
     """
 
-    found: list[Path] = []
-    for folder in ("ui", "gitops", "github_api", "services", "config", "models"):
+    found: list[Path] = list(ROOT.glob("*.py"))
+    for folder in ("ui", "gitops", "github_api", "services", "config", "models", "scripts"):
         found.extend(sorted((ROOT / folder).glob("*.py")))
-    found.append(ROOT / "run.py")
     return [item for item in found if item.is_file()]
 
 
@@ -81,6 +83,11 @@ class CatalogueTests(unittest.TestCase):
         cls.german = json.loads((LOCALES / "de.json").read_text(encoding="utf-8"))
         text = "\n".join(item.read_text(encoding="utf-8") for item in _source_files())
         cls.requested = set(_CALL.findall(text)) | set(_TIP_LITERAL.findall(text))
+        # Deliberately loose, and used only to ask whether a catalogue entry is
+        # mentioned anywhere at all. It also matches things that are not keys, a
+        # git config name or a file extension, which is harmless in that
+        # direction and would be wrong in the other one.
+        cls.mentioned = cls.requested | set(_ANY_LITERAL.findall(text))
 
     def test_every_requested_key_exists(self) -> None:
         missing = sorted(key for key in self.requested if key not in self.english)
@@ -95,6 +102,13 @@ class CatalogueTests(unittest.TestCase):
     def test_no_tooltip_is_declared_and_then_forgotten(self) -> None:
         declared = {key for key in self.english if key.startswith("tip.")}
         self.assertEqual([], sorted(declared - self.requested))
+
+    def test_no_text_at_all_is_declared_and_then_forgotten(self) -> None:
+        # The same rule for the whole catalogue, not only the tooltips. An entry
+        # nobody asks for is a promise the program does not keep: it reads like a
+        # feature that exists, and translating it is work spent on nothing.
+        declared = {key for key in self.english if key != "_label"}
+        self.assertEqual([], sorted(declared - self.mentioned))
 
     def test_tooltips_are_sentences_not_labels(self) -> None:
         # A tooltip repeating the button's own label teaches nothing. They are

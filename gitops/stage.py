@@ -139,46 +139,70 @@ def delete_untracked(repo: Path | str, paths: list[str]) -> tuple[bool, list[str
     return not failed, failed
 
 
-def build_hunk_patch(diff: FileDiff, hunk: DiffHunk) -> str:
+def build_patch(diff: FileDiff, hunks: list[DiffHunk]) -> str:
     """
-    Builds a patch containing exactly one hunk.
+    Builds a patch containing the given blocks of one file.
+
+    Several blocks go into **one** patch rather than one patch each. Every
+    block's line numbers are counted against the same original, so applying them
+    one after another would make each patch land against a file the previous one
+    had already moved. Git resolves that by searching for the context and usually
+    gets it right, and "usually" is not a good enough property for the thing that
+    decides what a commit contains.
 
     Unstaging uses the same forward patch with ``git apply --reverse``: reversing
     it by hand would mean recomputing every line number, and getting that subtly
     wrong corrupts the index.
 
     Args:
-        diff: The parsed diff the hunk belongs to, for the file headers.
-        hunk: The hunk to include.
+        diff: The parsed diff the blocks belong to, for the file headers.
+        hunks: The blocks to include, in the order they appear in the file.
 
     Returns:
-        str: Patch text ready for ``git apply``, empty when the hunk holds no lines.
+        str: Patch text ready for ``git apply``, empty when there is nothing to
+            apply.
     """
 
-    if not hunk.lines:
+    usable = [hunk for hunk in hunks if hunk.lines]
+    if not usable:
         return ""
     old_path = diff.old_path or diff.path
     new_path = diff.path or diff.old_path
     if not old_path or not new_path:
         return ""
 
-    header = [
+    parts = [
         f"diff --git a/{old_path} b/{new_path}",
         f"--- a/{old_path}",
         f"+++ b/{new_path}",
-        hunk.header,
     ]
-    body: list[str] = []
-    for line in hunk.lines:
-        if line.kind == LINE_ADDED:
-            body.append(f"+{line.text}")
-        elif line.kind == LINE_REMOVED:
-            body.append(f"-{line.text}")
-        elif line.kind == LINE_NO_NEWLINE:
-            body.append("\\ No newline at end of file")
-        else:
-            body.append(f" {line.text}")
-    return "\n".join([*header, *body]) + "\n"
+    for hunk in usable:
+        parts.append(hunk.header)
+        for line in hunk.lines:
+            if line.kind == LINE_ADDED:
+                parts.append(f"+{line.text}")
+            elif line.kind == LINE_REMOVED:
+                parts.append(f"-{line.text}")
+            elif line.kind == LINE_NO_NEWLINE:
+                parts.append("\\ No newline at end of file")
+            else:
+                parts.append(f" {line.text}")
+    return "\n".join(parts) + "\n"
+
+
+def build_hunk_patch(diff: FileDiff, hunk: DiffHunk) -> str:
+    """
+    Builds a patch containing exactly one block.
+
+    Args:
+        diff: The parsed diff the block belongs to, for the file headers.
+        hunk: The block to include.
+
+    Returns:
+        str: Patch text ready for ``git apply``, empty when it holds no lines.
+    """
+
+    return build_patch(diff, [hunk])
 
 
 def apply_hunk(repo: Path | str, patch: str, stage: bool = True, reverse: bool = False) -> GitResult:
@@ -236,6 +260,29 @@ def unstage_hunk(repo: Path | str, diff: FileDiff, hunk: DiffHunk) -> GitResult:
     """
 
     return apply_hunk(repo, build_hunk_patch(diff, hunk), stage=True, reverse=True)
+
+
+def stage_selected_hunks(repo: Path | str, diff: FileDiff) -> GitResult:
+    """
+    Stages the blocks of a file the user left ticked.
+
+    The index has to hold the last saved version of the file before this runs,
+    because the patch's line numbers are counted against exactly that. The commit
+    path clears the index first for precisely this reason.
+
+    Args:
+        repo: Working tree path.
+        diff: Working-tree diff of the file, with ``selected`` set per block.
+
+    Returns:
+        GitResult: Outcome. A diff with nothing ticked stages nothing and reports
+            success, because "none of this file" is a valid thing to mean.
+    """
+
+    chosen = [hunk for hunk in diff.hunks if hunk.selected]
+    if not chosen:
+        return GitResult(returncode=0, stdout="", stderr="", args=("apply",))
+    return apply_hunk(repo, build_patch(diff, chosen), stage=True, reverse=False)
 
 
 def stage_all(repo: Path | str) -> GitResult:

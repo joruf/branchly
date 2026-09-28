@@ -415,6 +415,26 @@ def push(
     return run(args, cwd=repo, timeout=GIT_TIMEOUT_NETWORK, env_extra=credentials or None)
 
 
+def add_remote(repo: Path | str, url: str, remote: str = "origin") -> GitResult:
+    """
+    Gives a project a server it did not have.
+
+    Args:
+        repo: Working tree path.
+        url: URL to record.
+        remote: Remote name.
+
+    Returns:
+        GitResult: Outcome.
+    """
+
+    if not is_valid_branch_name(remote):
+        return _refused("remote", "invalid remote name")
+    if not is_valid_remote_url(url):
+        return _refused("remote", "invalid remote url")
+    return run(["remote", "add", remote, url.strip()], cwd=repo)
+
+
 def set_remote_url(repo: Path | str, url: str, remote: str = "origin") -> GitResult:
     """
     Points a remote at a different URL.

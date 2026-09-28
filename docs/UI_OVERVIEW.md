@@ -1,4 +1,4 @@
-# Branchly — Aufbau der Oberfläche
+# Branchly: Aufbau der Oberfläche
 
 ## Gesamtlayout
 
@@ -37,7 +37,7 @@
 | Tooltip der Zeile | `repo_tooltip()`: Name, Serveradresse, lokaler Pfad, Prüfzeitpunkt |
 | Zusammenfassung | Ein Satz über alle Projekte |
 | Alle Projekte prüfen | Während des Laufs Fortschrittsbalken statt Zusammenfassung |
-| Alle Projekte aktualisieren | Öffnet den Massen-Pull. Während einer Prüfung gesperrt — beide würden um dieselben Index-Sperren streiten |
+| Alle Projekte aktualisieren | Öffnet den Massen-Pull. Während einer Prüfung gesperrt, beide würden um dieselben Index-Sperren streiten |
 
 Der Tooltip ist Rich Text. Qt entscheidet selbst, ob ein String Markup ist, also
 genügt eine kleine Tabelle und es braucht kein eigenes Popup-Widget. Die Tabelle
@@ -66,7 +66,7 @@ Erscheint nur, wenn es etwas zu sagen gibt, und immer mit Erklärung:
 | Kein Branch ausgewählt (Detached HEAD) | Warnung |
 | Server hat den Push abgelehnt | Warnung |
 | Ordner nicht mehr gefunden | Gefahr |
-| Konflikte offen — mit Button „Los geht's" | Warnung |
+| Konflikte offen, mit Button „Los geht's" | Warnung |
 
 Dies ist bewusst kein Modal: eine Erklärung soll stehen bleiben, während man
 weiterarbeitet.
@@ -74,7 +74,7 @@ weiterarbeitet.
 Darüber liegt ein **zweiter** Streifen derselben Bauart, nur für Branchly selbst:
 „Eine neuere Version ist verfügbar" mit *Installieren und neu starten* und *Jetzt
 nicht*. Ein eigener Streifen, weil die nächste Projektauswahl den unteren neu
-schreibt — eine Nachricht über das Programm darf dabei nicht verschwinden.
+schreibt. Eine Nachricht über das Programm darf dabei nicht verschwinden.
 
 ## Reiter Änderungen (`ui/changes_panel.py`)
 
@@ -85,7 +85,7 @@ Ansicht selbst zeichnet: mit einem eigenen Widget müsste man die nachbauen.
 
 Dateiliste mit Häkchen; die Farbe der Zeile sagt die Art (geändert, neu, gelöscht,
 umbenannt, nicht erfasst, Konflikt). Konfliktdateien sind fett und **nicht**
-anhakbar — sie können erst nach der Entscheidung gespeichert werden.
+anhakbar, sie können erst nach der Entscheidung gespeichert werden.
 
 Unten die Commit-Box. Der Button ist deaktiviert, solange keine Datei angehakt oder
 keine Kurzfassung geschrieben ist; der Tooltip sagt, was fehlt.
@@ -191,7 +191,7 @@ Abschluss. Die Ergebnis-Spalte bekommt einen farbigen Rahmen, sobald gewählt is
 
 Vier Reiter: Allgemein, Automatische Prüfung, Gegenüberstellung, GitHub. Das
 Erscheinungsbild steht nicht mehr darunter, es liegt in der Menüleiste.
-Bearbeitet wird eine Kopie — Abbrechen lässt wirklich alles, wie es war. Nur der
+Bearbeitet wird eine Kopie, Abbrechen lässt wirklich alles, wie es war. Nur der
 GitHub-Reiter hat sofortige Wirkung: ein gespeichertes Token wird augenblicklich
 gegen die API geprüft.
 
@@ -204,17 +204,17 @@ gegen die API geprüft.
 │ │ 2 aktualisiert · 6 neue Commits · 2 übersprungen   │ │
 │ └────────────────────────────────────────────────────┘ │
 │ ┌────────────────────────────────────────────────────┐ │
-│ │ snappix — eigene Änderungen … · 3 warten am Server │ │
-│ │ byteback — 3 neue Commits                          │ │
-│ │ consentry — 3 neue Commits                         │ │
-│ │ nudge — eigene Commits sind noch nicht gesendet    │ │
+│ │ snappix · eigene Änderungen … · 3 warten am Server │ │
+│ │ byteback · 3 neue Commits                          │ │
+│ │ consentry · 3 neue Commits                         │ │
+│ │ nudge · eigene Commits sind noch nicht gesendet    │ │
 │ └────────────────────────────────────────────────────┘ │
 │                                            [Schließen] │
 └────────────────────────────────────────────────────────┘
 ```
 
 Drei Zustände in einem Fenster: Ankündigung, Fortschritt, Bericht. Zeilenfarbe nach
-Ausgang — `success` vorgespult, `text_muted` schon aktuell, `warning` übersprungen,
+Ausgang: `success` vorgespult, `text_muted` schon aktuell, `warning` übersprungen,
 `danger` fehlgeschlagen. Modal, und während des Laufs ist *Schließen* gesperrt: es
 wird in Arbeitsbäume geschrieben.
 
@@ -226,7 +226,7 @@ wird in Arbeitsbäume geschrieben.
 │ Version 0.1.0                                          │
 │ ┌────────────────────────────────────────────────────┐ │
 │ │ Eine neuere Version ist verfügbar                  │ │
-│ │ Graph-Layout beschleunigt — Branchly kann sie holen│ │
+│ │ Graph-Layout beschleunigt · Branchly kann sie holen│ │
 │ └────────────────────────────────────────────────────┘ │
 │ Installiert fa5cf9e424, verfügbar 9c1d7ab002.          │
 │ [Erneut prüfen]   [Installieren und neu starten][Zu]   │
@@ -244,6 +244,24 @@ Beim Fokuswechsel (`changeEvent`) und beim Projektwechsel (`_activate`), zusätz
 zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel auf
 zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
 Wechsel neu anläuft.
+
+## Blockauswahl (`ui/diff_view.py`, `ui/changes_panel.py`)
+
+Über jedem Block der Gegenüberstellung steht ein Häkchen, gezeichnet als Link im
+Dokument, weil Rich Text kein Widget aufnimmt. Nur auf der neuen Seite: dasselbe
+Häkchen in beiden Spalten läse sich wie zwei Schalter für eine Sache. Ein
+abgewählter Block wird blass gezeichnet und verliert auch seine
+Wort-Hervorhebung, sonst bliebe ein grünes Wort in einem sonst grauen Block
+stehen und sagte das Gegenteil.
+
+Die Auswahl selbst liegt im Fenster (`_hunk_selection`), nicht im Panel, weil sie
+den Commit steuert und nicht die Darstellung. Die Dateiliste zeigt sie als halben
+Haken.
+
+## Tags (`ui/tag_dialog.py`)
+
+Liste, Feld, zwei Knöpfe. Löschen sagt im Text ausdrücklich, dass nur die lokale
+Kopie gemeint ist.
 
 ## Anmelden (`ui/signin_dialog.py`)
 
@@ -364,6 +382,7 @@ Kein Widget enthält einen Hex-Wert. Alles kommt aus `config/theme.py`:
 - `screenshots/github-panel-dark.png`, `github-panel-light.png`
 - `screenshots/binary-comparison-dark.png`, `binary-comparison-light.png`
 - `screenshots/discover-dark.png`, `discover-light.png`
+- `screenshots/signin-dark.png`, `signin-light.png`
 
 Neu erzeugen:
 
