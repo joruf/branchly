@@ -473,6 +473,39 @@ A click shows **everything that commit changed** on the right. Right-click:
 "Move branch here and throw my work away" is the only action that destroys work
 for good. It asks in plain words.
 
+### Files of a version and old files
+
+A **double click** on a version (or right-click, *Files of this version…*) opens
+a window with every file that version changed. On the left is the list with
+ticks, on the right the change of the file you are on.
+
+![The files of a version](screenshots/en/commit-files-dark.png)
+
+Every file starts ticked. The tick above the list works as under *Changes*: a
+click ticks everything or nothing, half ticked means some are chosen. Below are
+two actions, both for the ticked files:
+
+| Action | Effect |
+|---|---|
+| **Download…** | Asks for a folder (*Downloads* the first time, the last one chosen after that) and creates a new folder `<project>-<version>` there, e.g. `invoicing-4dda86e`, with the project's subfolders. The project stays as it is. The strip at the top says where the files went, with **Open folder** |
+| **Replace current version…** | Sets the files in the project folder to their state in this version, after asking |
+
+Both take the file as it was **in this version**, that is after the commit. A
+file this version deleted comes back as it was just before. Downloading the same
+version again goes into `…-2`, the first download is left alone.
+
+Before replacing, Branchly lists every file concerned:
+
+![The question before replacing](screenshots/en/restore-confirm-dark.png)
+
+Files with **changes that are not committed yet** come first and in red: their
+current content is not saved anywhere and is lost. The same goes for a file that
+is on disk but not tracked by git.
+
+Only the project folder changes, nothing is committed. Afterwards Branchly
+switches to *Changes*, where the replaced files are listed like any other
+change: look at them, commit them or throw them away again.
+
 ## Resolving conflicts
 
 When fetching or merging changed the same places on both sides, a strip appears

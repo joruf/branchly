@@ -66,6 +66,9 @@ something new", locally *and* on the server.
   named with the reason: unsaved work, own commits, a waiting conflict
 - Graph view with lanes: check out a version, branch from it, merge it,
   cherry-pick, revert, move the branch, tag it, or compare two versions
+- Double-click a version to list its files. Tick some, then download them as they
+  were into a folder of your choice, or put that state back into the project after
+  a question that names every file whose uncommitted work would be lost
 
 **Merge conflicts, one decision at a time**
 

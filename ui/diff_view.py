@@ -1509,7 +1509,8 @@ class DiffView(QWidget):
         if default_index >= 0:
             self._target.setCurrentIndex(default_index)
         self._target.currentIndexChanged.connect(self._on_target_changed)
-        row.addWidget(QLabel(i18n.t("diff.target_label"), left_holder))
+        self._target_label = QLabel(i18n.t("diff.target_label"), left_holder)
+        row.addWidget(self._target_label)
         row.addWidget(self._target)
 
         self._mode_box = QComboBox(left_holder)
@@ -1576,6 +1577,21 @@ class DiffView(QWidget):
         self._reveal_button.setEnabled(False)
         right.addWidget(self._reveal_button)
         return holder
+
+    def show_history_only(self) -> None:
+        """
+        Drops the controls that only mean something for the working tree.
+
+        Used where the view shows one file of a saved commit: there is nothing
+        to choose to compare against, and "open file" would open today's file,
+        not the one on screen.
+
+        Returns:
+            None
+        """
+
+        for widget in (self._target_label, self._target, self._open_button, self._reveal_button):
+            widget.setVisible(False)
 
     # ----------------------------------------------------------------- options
 

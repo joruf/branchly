@@ -955,6 +955,76 @@ def capture_gitignore(theme: str, base: Path) -> Path:
     return target
 
 
+def capture_commit_files(theme: str, base: Path) -> list[Path]:
+    """
+    Photographs the files of one commit and the question before replacing.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build a demo project in.
+
+    Returns:
+        list[Path]: The written files.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from gitops import snapshot
+    from gitops.history import read_history
+    from ui.commit_files_dialog import CommitFilesDialog, RestoreConfirmDialog, ViewOptions
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    repo = base / f"commit-files-{theme}"
+    (repo / "invoices").mkdir(parents=True)
+    env = _demo_env(base)
+    (repo / "config.py").write_text("port = 8080\ndebug = True\n", encoding="utf-8")
+    (repo / "README.md").write_text("# Invoicing\n", encoding="utf-8")
+    (repo / "numbers.txt").write_text("2026-0001\n2026-0002\n", encoding="utf-8")
+    _git(["init", "-b", "main"], repo, env)
+    _git(["add", "-A"], repo, env)
+    _git(["commit", "-m", "Initial layout"], repo, env)
+
+    (repo / "config.py").write_text(
+        'port = 8080\ndebug = False\ninvoice_prefix = "RE"\n', encoding="utf-8"
+    )
+    (repo / "README.md").write_text(
+        "# Invoicing\n\nNumbers come from the settings.\n", encoding="utf-8"
+    )
+    (repo / "invoices" / "numbering.py").write_text(
+        "def next_number(last):\n    return last + 1\n", encoding="utf-8"
+    )
+    (repo / "numbers.txt").unlink()
+    _git(["add", "-A"], repo, env)
+    _git(["commit", "-m", "Take the invoice numbers from the settings"], repo, env)
+    # Work not committed yet, so the question has something to warn about.
+    (repo / "config.py").write_text(
+        'port = 3000\ndebug = False\ninvoice_prefix = "RE"\n', encoding="utf-8"
+    )
+
+    commit = read_history(repo).commits[0]
+    dialog = CommitFilesDialog(repo, commit, "invoicing", ViewOptions(mode="split"))
+    # One file left out, so the box above the list shows its third state.
+    dialog.set_ticked({"config.py", "invoices/numbering.py", "numbers.txt"})
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    written = [_save(dialog, theme, "commit-files")]
+
+    files = [item for item in dialog.ticked() if item.restorable]
+    risky = snapshot.at_risk(repo, [item.path for item in files])
+    confirm = RestoreConfirmDialog(files, risky, commit.short, dialog)
+    confirm.show()
+    for _round in range(6):
+        app.processEvents()
+    written.append(_save(confirm, theme, "restore-confirm"))
+    confirm.done(0)
+    dialog.done(0)
+    return written
+
+
 def capture_blocks(theme: str, base: Path, repositories: list[Path]) -> Path:
     """
     Photographs the comparison with one block taken out of the commit.
@@ -1056,6 +1126,7 @@ def capture_all(language: str) -> list[Path]:
             written.append(capture_link_remote(theme, base))
             written.append(capture_tags(theme, base))
             written.append(capture_gitignore(theme, base))
+            written.extend(capture_commit_files(theme, base))
             written.append(capture_blocks(theme, base, repositories))
             written.extend(capture_menus(theme, base, repositories))
     return written

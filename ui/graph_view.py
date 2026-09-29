@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 import i18n
 from config.theme import get_theme_colors, lane_color
 from gitops.branch import RESET_HARD, RESET_MIXED, RESET_SOFT
-from gitops.history import GraphRow, History
+from gitops.history import Commit, GraphRow, History
 from ui.widgets import SectionHeader
 
 LANE_WIDTH = 14
@@ -147,6 +147,8 @@ class GraphView(QWidget):
         reset_requested: Emitted with ``(object id, mode)``.
         tag_requested: Emitted with an object id.
         compare_requested: Emitted with ``(older, newer)``.
+        files_requested: Emitted with an object id when the files of that
+            commit should be listed.
         reload_requested: Emitted when the graph should be read again.
     """
 
@@ -159,6 +161,7 @@ class GraphView(QWidget):
     reset_requested = Signal(str, str)
     tag_requested = Signal(str)
     compare_requested = Signal(str, str)
+    files_requested = Signal(str)
     reload_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -200,6 +203,8 @@ class GraphView(QWidget):
         self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._show_context_menu)
         self._tree.currentItemChanged.connect(self._on_current_changed)
+        self._tree.itemDoubleClicked.connect(self._on_double_clicked)
+        self._tree.setToolTip(i18n.t("tip.graph_double_click"))
         layout.addWidget(self._tree, 1)
 
         self._marked_label = QLabel("", self)
@@ -328,6 +333,23 @@ class GraphView(QWidget):
         value = item.data(0, _ROLE_OID)
         return value if isinstance(value, str) else ""
 
+    def commit_of(self, oid: str) -> Commit | None:
+        """
+        Looks up a shown commit.
+
+        Args:
+            oid: Object id.
+
+        Returns:
+            Commit | None: The commit, or None when it is not in the graph.
+        """
+
+        history = self._history
+        if history is None:
+            return None
+        row = history.row_of(oid)
+        return history.rows[row].commit if row >= 0 else None
+
     @property
     def marked_for_compare(self) -> str:
         """
@@ -372,6 +394,22 @@ class GraphView(QWidget):
         if isinstance(oid, str) and oid:
             self.commit_selected.emit(oid)
 
+    def _on_double_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
+        """
+        Asks for the list of files of the double-clicked commit.
+
+        Args:
+            item: The row.
+            _column: Column clicked.
+
+        Returns:
+            None
+        """
+
+        oid = item.data(0, _ROLE_OID)
+        if isinstance(oid, str) and oid:
+            self.files_requested.emit(oid)
+
     def _show_context_menu(self, position) -> None:  # noqa: ANN001 - Qt passes a QPoint
         """
         Opens the action menu for the clicked commit.
@@ -393,6 +431,10 @@ class GraphView(QWidget):
         branch = self._current_branch or "?"
 
         menu = QMenu(self)
+        files = menu.addAction(i18n.t("graph.files"), lambda: self.files_requested.emit(oid))
+        files.setToolTip(i18n.t("tip.graph_double_click"))
+        menu.setDefaultAction(files)
+        menu.addSeparator()
         menu.addAction(i18n.t("graph.checkout"), lambda: self.checkout_requested.emit(oid))
         menu.addAction(i18n.t("graph.branch_from"), lambda: self.branch_from_requested.emit(oid))
         menu.addSeparator()

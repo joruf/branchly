@@ -348,6 +348,32 @@ Ob etwas *schon* ignoriert ist, kann nur git beantworten, denn dafür zählen al
 `.gitignore` nach oben, `.git/info/exclude` und die globale Ausschlussdatei. Das
 geht über `git check-ignore`.
 
+### Alte Fassungen holen
+
+`gitops/snapshot.py` liest die Dateien eines Commits und holt sie heraus.
+
+- **Liste:** `git show --raw -z --first-parent -M`, nicht `--name-status`, weil
+  nur die rohe Form den Dateimodus trägt, und der unterscheidet Datei, Link und
+  Submodul. Die Zeilenzahlen kommen aus einem zweiten Aufruf mit `--numstat`. Ein
+  Merge wird gegen den ersten Elternteil gelesen, wie sein Diff auch.
+- **Welche Fassung:** die Datei nach dem Commit. Eine gelöschte Datei hat keine,
+  dann gilt `<commit>^`, die letzte, die es gab (`source_revision`).
+- **Herunterladen:** `git cat-file --filters <rev>:<pfad>` wendet Zeilenenden und
+  Smudge-Filter wie Git LFS an, also landet die Datei so auf der Platte, wie ein
+  Checkout sie schreiben würde. Fehlt ein Filter auf dem Rechner, gilt der rohe
+  Blob. Ziel ist ein neuer Ordner `<projekt>-<kurz-id>`, bei Bedarf mit `-2`, damit
+  ein zweiter Download nie einen ersten überschreibt, der inzwischen bearbeitet
+  sein kann. `is_safe_path` weist absolute Pfade und `..` ab, bevor geschrieben
+  wird. Das Ausführbar-Bit wird übernommen, Links und Submodule nicht geschrieben.
+- **Ersetzen:** `git restore --source=<rev> --worktree`, der Index bleibt
+  unberührt, das Ergebnis ist eine gewöhnliche Änderung. Jeder Pfad geht als
+  `:(literal)<pfad>` hinein, sonst ersetzt `x*y.txt` auch `xAy.txt`. Die Pfade
+  laufen in Gruppen zu 100; scheitert eine Gruppe, wird sie Datei für Datei
+  wiederholt, damit genau die eine schlechte Datei als gescheitert gemeldet wird.
+- **Was verloren ginge:** `at_risk` meldet Pfade aus `git status` (geändert,
+  vorgemerkt, neu, Konflikt) und Dateien auf der Platte, die git gar nicht verfolgt,
+  auch ignorierte. Deren Inhalt hat sonst niemand.
+
 ### Dateien ohne vergleichbare Zeilen
 
 `gitops/blobs.py` beantwortet für beide Seiten einer Gegenüberstellung zwei Fragen:
