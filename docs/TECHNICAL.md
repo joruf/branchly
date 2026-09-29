@@ -577,6 +577,35 @@ Ein Client Secret wird nicht gebraucht und darf hier auch nicht hin.
 angemeldet aussieht und bei der ersten echten Aktion scheitert, ist schlimmer als
 eines, das die Anmeldung ablehnt.
 
+### Der Änderungsbalken
+
+`ui/change_map.py` zeichnet die ganze Datei als eine 20 Pixel breite Spalte und
+markiert jede Stelle mit einer Änderung. Ein Klick springt dorthin. Das ist die
+Idee der Scrollleiste, nur über den Inhalt statt über den Ausschnitt, weshalb er
+neben ihr sitzt und nicht an ihrer Stelle.
+
+**Eine Sprungmarke pro Änderungslauf, nicht pro Block.** Genau daran ist die
+erste Fassung gescheitert: Zeigt man die ganze Datei, liefert Git **einen**
+einzigen Block, und Marken pro Block zeigten alle auf den Dateianfang. Der
+Balken sah richtig aus und tat nichts.
+
+**Renderer und Balken müssen sich einig sein.** Beide laufen über denselben Diff
+und nummerieren die Läufe geänderter Zeilen, einer um die Sprungmarke zu setzen,
+einer um die Markierung zu zeichnen. Driften die beiden Läufe auseinander, zeigt
+jede Markierung woandershin, und nichts daran sieht falsch aus. Deshalb teilen
+sie sich `_row_changed()`, und `tests/test_change_map.py` vergleicht, was beide
+erzeugen: jede Sprungmarke aus `change_spans()` muss im gerenderten Dokument
+vorkommen, auf beiden Seiten und einspaltig.
+
+Gezeichnet wird mit den kräftigen Statusfarben, nicht mit den Diff-Hintergründen.
+Ein Hintergrund soll hinter Text zurücktreten; eine zwei Pixel hohe Marke in
+einer grauen Spalte muss auf einen Blick auffallen. Jede Marke ist mindestens
+drei Pixel hoch, sonst wäre der Balken genau dort leer, wo es darauf ankommt.
+
+Ein Klick nimmt die **nächstgelegene** Marke, nicht nur einen Treffer. Eine
+einzelne geänderte Zeile in einer langen Datei ist ein paar Pixel hoch, und
+darauf zielen zu müssen hieße, doch wieder die Scrollleiste zu benutzen.
+
 ### Mehr Kontext in der Gegenüberstellung
 
 Die zusätzlichen Zeilen sind keine Darstellungsfrage, sie stehen schlicht nicht

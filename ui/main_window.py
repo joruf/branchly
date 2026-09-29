@@ -1044,6 +1044,7 @@ class MainWindow(QMainWindow):
         self._settings.diff_ignore_whitespace = self._diff.ignore_whitespace
         self._settings.diff_word_level = self._diff.word_level
         self._settings.diff_full_context = self._diff.full_context
+        self._settings.diff_context_lines = self._diff.context_lines
 
     # -------------------------------------------------------------------- commit
 
@@ -2915,8 +2916,6 @@ class MainWindow(QMainWindow):
         self._settings = updated
         save_settings(self._settings)
 
-        self._diff.set_context_lines(self._settings.diff_context_lines)
-        self._reload_diff()
         self._sidebar.set_sort_mode(self._settings.sort_mode)
         self._pull_requests.set_show_avatars(self._settings.show_avatars)
         self._github.set_token(token_store.load() if self._settings.github_enabled else "")

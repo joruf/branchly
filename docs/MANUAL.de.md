@@ -337,15 +337,36 @@ Zwei Einstellungen, unabhängig voneinander:
 **Darstellung**: Nebeneinander oder Eine Spalte, „Abstände ignorieren",
 „Geänderte Wörter hervorheben", „Unveränderten Text zeigen".
 
-**Unveränderten Text zeigen** blendet die **ganze Datei** ein, nicht nur die
-Umgebung der Änderungen. Dieser Text steht in einem ruhigen Grau, gut lesbar,
-aber deutlich zurückgenommen, damit die Änderung selbst das Auffällige bleibt.
+**Drumherum** ist die Ausklappliste, die bestimmt, wie viel unveränderter Text um
+jede Änderung herum zu sehen ist: 3, 6, 10, 20 oder 50 Zeilen, oder **die ganze
+Datei**. Voreingestellt sind sechs. Git selbst zeigt drei, was reicht, um eine
+Änderung einzuordnen, aber nicht, um sie im Zusammenhang zu lesen.
 
-Ohne die Option siehst du sechs Zeilen über und sechs unter jeder Änderung.
-Git selbst zeigt drei, was reicht, um eine Änderung einzuordnen, aber nicht, um
-sie im Zusammenhang zu lesen. Wie viele es sein sollen, stellst du unter
-*Einstellungen → Gegenüberstellung* ein, von null bis hundert Zeilen. Null zeigt
-ausschließlich die geänderten Zeilen.
+Dieser Text steht in einem ruhigen Grau, gut lesbar, aber deutlich
+zurückgenommen, damit die Änderung selbst das Auffällige bleibt.
+
+#### Der Änderungsbalken
+
+Zeigst du die ganze Datei, erscheint zwischen *Alte Version* und *Neue Version*
+ein schmaler senkrechter Balken. Er stellt die **komplette Datei** dar, von oben
+nach unten, und markiert jede Stelle, an der sich etwas geändert hat:
+
+| Farbe | Bedeutung |
+|---|---|
+| Grün | Dort wurde etwas hinzugefügt |
+| Rot | Dort wurde etwas gelöscht |
+| Gelb | Dort steckt beides, eine Zeile wurde ersetzt |
+
+Ein Klick auf eine Markierung springt genau an diese Stelle, in beiden Spalten
+gleichzeitig. Bei einer Datei mit tausend Zeilen und drei Änderungen musst du
+also nicht mehr suchen. Der helle Rahmen im Balken zeigt, welcher Ausschnitt
+gerade auf dem Schirm ist.
+
+Triffst du die Markierung nicht genau, springt Branchly zur nächstgelegenen.
+Eine einzelne geänderte Zeile in einer langen Datei ist nur wenige Pixel hoch,
+und darauf zielen zu müssen wäre keine Hilfe.
+
+In der einspaltigen Ansicht sitzt derselbe Balken rechts neben dem Text.
 
 Bei **Nebeneinander** stehen zwei getrennte Ansichten: links der alte Stand,
 rechts der neue. Über jeder der beiden steht, welche sie ist, nämlich „Alte
@@ -826,7 +847,7 @@ abschalten. Wie oft sie höchstens läuft, steht als `update_check_hours` in
 |---|---|
 | Allgemein | Sprache, Standard-Sortierung, Nachfragen vor Verlust |
 | Automatische Prüfung | Intervall, ob dabei die Server gefragt werden, Update-Suche beim Start |
-| Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung, unveränderter Text und wie viel davon |
+| Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung |
 | GitHub | Token, GitHub-Funktionen ein/aus, Autorenbilder |
 
 ![Die Einstellungen](screenshots/de/settings-dark.png)

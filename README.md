@@ -123,8 +123,10 @@ the state from before.
 - Sign in from the Account menu, either through the browser with GitHub's device
   flow or by pasting a token. Either way the token is checked before it is kept
   and lives in the system keychain
-- Side by side, optionally with the unchanged text around a change: up to 20
-  lines above and below, drawn in a quiet grey so the change still stands out
+- Side by side, with a drop-down for how much unchanged text to show around a
+  change: 3 to 50 lines, or the whole file. Showing the whole file puts a bar
+  between the two columns that maps every change in it, so a click goes straight
+  to the next one instead of scrolling for it
 - A tick above every block of a diff, so two unrelated edits in one file do not
   have to go into the same commit. What you leave out stays on disk
 - Branch rename and delete, stash, tags, the server address, and an overwrite

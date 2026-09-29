@@ -324,14 +324,34 @@ Two settings, independent of each other:
 **Layout**: side by side or one column, "Ignore spacing", "Highlight changed
 words", "Show unchanged text".
 
-**Show unchanged text** brings in the **whole file**, not only the surroundings
-of the changes. That text is a quiet grey, readable but clearly held back, so
-that the change itself stays the thing that stands out.
+**Around it** is the drop-down deciding how much unchanged text is shown around
+each change: 3, 6, 10, 20 or 50 lines, or **the whole file**. Six is the default.
+Git itself shows three, which is enough to place a change and not enough to read
+it in context.
 
-Without the option you see six lines above and six below each change. Git itself
-shows three, which is enough to place a change and not enough to read it in
-context. How many it should be is set under *Settings → Comparison*, from zero to
-a hundred lines. Zero shows the changed lines and nothing else.
+That text is a quiet grey, readable but clearly held back, so that the change
+itself stays the thing that stands out.
+
+#### The change bar
+
+With the whole file on screen, a narrow vertical bar appears between *Old
+version* and *New version*. It stands for the **complete file**, top to bottom,
+and marks every place where something changed:
+
+| Colour | Meaning |
+|---|---|
+| Green | Something was added there |
+| Red | Something was deleted there |
+| Amber | Both, a line was replaced |
+
+Clicking a mark jumps straight to that place, in both columns at once. In a file
+of a thousand lines with three changes in it, there is nothing left to hunt for.
+The pale frame inside the bar shows which part is on screen right now.
+
+If you miss a mark, Branchly goes to the nearest one. A single changed line in a
+long file is only a few pixels tall, and having to aim at that would be no help.
+
+In the one-column layout the same bar sits to the right of the text.
 
 With **side by side** there are two separate views: the old version on the left,
 the new one on the right. Above each is a word saying which it is, "Old version"
@@ -798,7 +818,7 @@ often it runs at most is `update_check_hours` in `settings.json`, where `0` mean
 |---|---|
 | General | Language, default sort order, asking before anything is lost |
 | Automatic check | Interval, whether the servers are asked, update check on start |
-| Comparison | Default layout, spacing, word highlighting, unchanged text and how much of it |
+| Comparison | Default layout, spacing, word highlighting |
 | GitHub | Token, GitHub features on/off, author pictures |
 
 ![The settings](screenshots/en/settings-dark.png)

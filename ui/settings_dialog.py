@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -38,7 +37,6 @@ from config.app_settings import (
     DIFF_UNIFIED,
     AppSettings,
 )
-from constants import DIFF_CONTEXT_MAX, DIFF_CONTEXT_MIN
 from github_api import token as token_store
 from github_api.client import (
     SCOPE_DELETE_REPO,
@@ -308,39 +306,10 @@ class SettingsDialog(QDialog):
         self._diff_words.setChecked(self._original.diff_word_level)
         form.addRow("", self._diff_words)
 
-        self._diff_context = QCheckBox(i18n.t("diff.full_context"), page)
-        self._diff_context.setToolTip(i18n.t("tip.diff_context"))
-        self._diff_context.setChecked(self._original.diff_full_context)
-        form.addRow("", self._diff_context)
-
-        self._context_lines = QSpinBox(page)
-        self._context_lines.setRange(DIFF_CONTEXT_MIN, DIFF_CONTEXT_MAX)
-        self._context_lines.setValue(self._original.diff_context_lines)
-        self._context_lines.setToolTip(i18n.t("tip.settings_context_lines"))
-        form.addRow(i18n.t("settings.context_lines"), self._context_lines)
-
-        hint = QLabel(i18n.t("settings.context_lines_hint"), page)
-        hint.setWordWrap(True)
-        hint.setObjectName("Muted")
-        form.addRow("", hint)
-        # Meaningless while the whole file is on screen, so it says so by going
-        # grey rather than sitting there looking adjustable.
-        self._diff_context.toggled.connect(self._update_context_row)
-        self._update_context_row(self._diff_context.isChecked())
+        # How much surrounding text to show is picked above the comparison
+        # itself, where it is changed while reading rather than once at setup.
+        # Whatever was picked there last is what the panel starts on.
         return page
-
-    def _update_context_row(self, whole_file: bool) -> None:
-        """
-        Greys the line count out while the whole file is being shown.
-
-        Args:
-            whole_file: Whether the whole file is on screen.
-
-        Returns:
-            None
-        """
-
-        self._context_lines.setEnabled(not whole_file)
 
     def _build_github_tab(self) -> QWidget:
         """
@@ -560,8 +529,8 @@ class SettingsDialog(QDialog):
             diff_mode=str(self._diff_mode.currentData() or self._original.diff_mode),
             diff_ignore_whitespace=self._diff_whitespace.isChecked(),
             diff_word_level=self._diff_words.isChecked(),
-            diff_full_context=self._diff_context.isChecked(),
-            diff_context_lines=self._context_lines.value(),
+            diff_full_context=self._original.diff_full_context,
+            diff_context_lines=self._original.diff_context_lines,
             github_enabled=self._github_enabled.isChecked(),
             show_avatars=self._show_avatars.isChecked(),
             confirm_destructive=self._confirm.isChecked(),
