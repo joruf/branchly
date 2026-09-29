@@ -995,5 +995,9 @@
   "tip.snapshot_close": "Schließt das Fenster. Was schon heruntergeladen ist, bleibt, am Projekt ändert das Schließen nichts.",
   "tip.snapshot_open_folder": "Öffnet den Ordner mit den gespeicherten Dateien.",
   "tip.snapshot_confirm_list": "Jede Datei, die ersetzt wird. Rot: ihr aktueller Inhalt ist nirgends gesichert.",
-  "tip.snapshot_confirm": "Schreibt die alten Versionen in den Projektordner."
+  "tip.snapshot_confirm": "Schreibt die alten Versionen in den Projektordner.",
+  "github.renamed": "Auf GitHub heißt dieses Projekt jetzt {new}",
+  "github.renamed_hint": "Vorher hieß es {old}. Branchly hat die Server-Adresse auf {url} umgestellt, so wie GitHub Desktop das auch tut. Der Ordner „{folder}“ auf der Festplatte behält seinen Namen.",
+  "github.renamed_failed": "{old} heißt auf GitHub jetzt {new}",
+  "github.renamed_failed_hint": "Die Server-Adresse ließ sich nicht umstellen. Mit einem Rechtsklick auf das Projekt in der Projektliste und „Online-Repository ändern…“ lässt sie sich von Hand auf {url} setzen."
 }

@@ -863,6 +863,27 @@ Darf das Konto die Einstellungen nicht ändern, öffnet sich der Dialog trotzdem
 zeigt aber alles gesperrt und sagt den Grund. Ein leerer Dialog oder ein Fehler
 nach dem Speichern wäre die schlechtere Antwort.
 
+### Umbenannte oder umgezogene Repositorys
+
+Wird ein Repository auf GitHub umbenannt oder zu einem anderen Konto verschoben,
+merkt Branchly das beim nächsten Öffnen des Projekts, wie GitHub Desktop auch.
+GitHub leitet den alten Namen zwar eine Weile weiter, aber nur, bis jemand unter
+dem alten Namen ein neues Repository anlegt. Deshalb wartet Branchly nicht darauf.
+
+Was dabei passiert:
+
+- Die Server-Adresse des Projekts wird auf den neuen Namen umgestellt, auf
+  demselben Weg wie vorher: HTTPS bleibt HTTPS, SSH bleibt SSH.
+- Eine eigene Push-Adresse wird mit umgestellt, wenn sie auf den alten Namen
+  zeigte.
+- Hieß das Projekt in der Projektliste wie das Repository, bekommt es den neuen
+  Namen. Einen selbst vergebenen Namen behält es.
+- Der Ordner auf der Festplatte behält seinen Namen, denn andere Programme,
+  Terminals und Editoren zeigen vielleicht darauf.
+
+Oben erscheint ein Hinweis mit altem und neuem Namen. Das Erkennen braucht die
+Anmeldung bei GitHub, denn nur darüber sagt GitHub, wo ein Repository heute liegt.
+
 ### Neues Repository auf GitHub
 
 *Projekt → Neues Repository auf GitHub…* legt eines an: Name, Beschreibung,
