@@ -7,6 +7,9 @@ __pycache__/
 .ruff_cache/
 
 # Local state written at runtime
+# Derived from the history after every commit; a checked-in copy would be
+# stale one commit later.
+/VERSION
 settings.json
 repos.json
 *.tmp

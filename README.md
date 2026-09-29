@@ -181,6 +181,17 @@ For a desktop entry on Linux:
 cp resources/branchly.desktop ~/.local/share/applications/
 ```
 
+## Version number
+
+Nobody types it. It is derived from the commit history, the same way as in the
+other projects: `major.minor.patch (build)`, where minor counts the commits that
+gave Branchly a new window (a new `ui/*_dialog.py`), patch the commits since, and
+build every commit. See `version.py`.
+
+The number lands in an untracked `VERSION` file, written after every commit by
+`.githooks/post-commit`. The installer turns that hook on for a checkout; by hand
+it is `git config core.hooksPath .githooks`.
+
 ## Security
 
 Branchly runs the real `git` binary rather than reimplementing it, which is also

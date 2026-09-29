@@ -55,7 +55,7 @@ from constants import (
     APP_COMPANY,
     APP_COMPANY_URL,
     APP_NAME,
-    APP_VERSION,
+    APP_VERSION_LABEL,
 )
 from github_api import token as token_store
 from github_api.client import GitHubClient
@@ -2973,7 +2973,7 @@ class MainWindow(QMainWindow):
         box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         box.setText(
             f"<b>{html.escape(APP_NAME)}</b><br>"
-            f"{html.escape(i18n.t('about.version', version=APP_VERSION))}"
+            f"{html.escape(i18n.t('about.version', version=APP_VERSION_LABEL))}"
             f"<br><br>{html.escape(APP_AUTHOR)}, {html.escape(APP_COMPANY)}, "
             f"{link(APP_COMPANY_URL)}<br>{link(APP_AUTHOR_GITHUB)}"
             f"<br><br>{html.escape(i18n.t('about.credits'))}"

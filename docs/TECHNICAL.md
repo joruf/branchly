@@ -838,6 +838,63 @@ längere Zeile.
 nicht `branchly`. Sonst ordnet die Taskleiste das Fenster dem Starter nicht zu
 und zeigt zwei Einträge für dasselbe Programm.
 
+## Versionsnummer
+
+Die Nummer wird aus der Commit-Historie abgeleitet und von niemandem hochgezählt,
+nach demselben Verfahren wie in servicereports und pmtool (`version.py`):
+
+| Stelle | Bedeutung |
+|---|---|
+| major | Von Hand gesetzt, derzeit `0`. Nur für ein Release, das es wirklich rechtfertigt |
+| minor | Commits, in denen Branchly ein Fenster dazubekam: eine neue `ui/*_dialog.py` |
+| patch | Commits seitdem |
+| build | Alle Commits |
+
+`0.8.4 (26)` heißt also: der 26. Commit, das achte Fenster, vier Änderungen
+seitdem. Im About-Fenster stehen dazu der Kurz-Hash und das Datum des letzten
+Commits, sodass sich eine Nummer aus einem Fehlerbericht einem Commit zuordnen
+lässt.
+
+Ein Fenster ist die Schwelle, weil es eine vertretbare ist: etwas Neues, das man
+öffnen kann. Commits zu zählen, deren Titel mit „Add" anfängt, läuft davon, weil
+„Add" für ein korrigiertes Label genauso fällt wie für eine neue Funktion. Mehrere
+Fenster in einem Commit zählen einmal, das Bearbeiten eines vorhandenen gar nicht.
+
+Drei Quellen, in dieser Reihenfolge:
+
+| Quelle | Wann |
+|---|---|
+| `BRANCHLY_VERSION` | Fester Wert, für Tests und einmalige Läufe |
+| Git-Historie | Jeder Checkout |
+| Datei `VERSION` | Eine Installation ohne `.git` |
+
+`VERSION` ist nicht eingecheckt, denn eine eingecheckte Kopie wäre einen Commit
+später schon veraltet. Geschrieben wird sie vom Hook `.githooks/post-commit`
+nach jedem Commit und außerdem immer dann, wenn Branchly die Historie liest. Ein
+Zeitstempel aus `.git/logs/HEAD` und `.git/index` merkt, ob sich die Historie
+bewegt hat, sodass ein unveränderter Checkout beim Start ohne einen einzigen
+Git-Aufruf antwortet.
+
+Den Hook aktiviert man einmal pro Checkout:
+
+```
+git config core.hooksPath .githooks
+```
+
+Der Installer erledigt das für einen Checkout selbst, lässt aber einen schon
+gesetzten anderen `core.hooksPath` in Ruhe: wer den gesetzt hat, hatte einen
+Grund, und ihn zu überschreiben schaltete dessen Hooks still ab.
+
+Ein Update über das ZIP-Archiv bringt keine Historie mit. Die alte `VERSION`
+wird dabei entfernt, weil sie sonst eine Version behauptet, die die
+Installation nicht mehr ist. Es gibt bewusst keinen erfundenen Ersatz wie
+`0.0.0`: eine unbekannte Version heißt `unknown`.
+
+`version.py` ruft Git selbst auf, statt über `gitops` zu gehen, das sonst die
+einzige Stelle dafür ist. Der Grund ist ein Importzyklus: `constants` braucht die
+Version, und `gitops` braucht `constants`. Die Befehle sind fest, lesen nur und
+zeigen ausschließlich auf Branchlys eigenen Ordner.
+
 ## Themes und Sprachen erweitern
 
 **Theme:** In `config/theme.py` eine `ThemeColors`-Instanz anlegen und in `_THEMES`
