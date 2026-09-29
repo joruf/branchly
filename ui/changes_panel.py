@@ -118,6 +118,14 @@ class StatusGlyphDelegate(QStyledItemDelegate):
         return QSize(size.width() + GLYPH_WIDTH, size.height())
 
 
+# What the menu on empty space can ask the window to do. The project as a whole,
+# because a click that lands on no file is about none of them.
+ACTION_EDIT_GITIGNORE = "edit_gitignore"
+ACTION_OPEN_FOLDER = "open_folder"
+ACTION_REFRESH = "refresh"
+ACTION_REVERT_ALL = "revert_all"
+
+
 class SelectAllBox(QCheckBox):
     """
     The one tick that stands for all of them.
@@ -170,6 +178,7 @@ class ChangesPanel(QWidget):
     selection_changed = Signal()
     partial_cleared = Signal(str)
     ignore_requested = Signal(str)
+    project_action_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -214,6 +223,10 @@ class ChangesPanel(QWidget):
 
         self._stack = QStackedWidget(self)
         self._empty = EmptyState(i18n.t("changes.none_title"), i18n.t("changes.none_hint"), self)
+        # A clean project is exactly when the list is not there to right-click,
+        # and editing .gitignore is a thing one does in a clean project.
+        self._empty.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._empty.customContextMenuRequested.connect(self._show_empty_menu)
         self._stack.addWidget(self._empty)
 
         self._list = QListWidget(self)
@@ -764,6 +777,72 @@ class ChangesPanel(QWidget):
             return
         self.commit_requested.emit(self.commit_draft(), self.checked_paths())
 
+    def _show_project_menu(self, at) -> None:  # noqa: ANN001 - Qt passes a QPoint
+        """
+        Opens the menu for a click that landed on no file.
+
+        Args:
+            at: Where to open it, in screen coordinates.
+
+        Returns:
+            None
+        """
+
+        self.project_menu().exec(at)
+
+    def project_menu(self) -> QMenu:
+        """
+        Builds the menu for the project as a whole, without showing it.
+
+        Separate from showing it so the entries can be checked without a popup
+        waiting for a click nobody is going to make.
+
+        Returns:
+            QMenu: The menu, ready to be shown.
+        """
+
+        has_changes = bool(self._state is not None and self._state.files)
+        menu = QMenu(self)
+        menu.setToolTipsVisible(True)
+
+        edit = menu.addAction(
+            i18n.t("gitignore.menu"),
+            lambda: self.project_action_requested.emit(ACTION_EDIT_GITIGNORE),
+        )
+        edit.setToolTip(i18n.t("tip.gitignore_menu"))
+        menu.addSeparator()
+        menu.addAction(
+            i18n.t("repo.open_folder"),
+            lambda: self.project_action_requested.emit(ACTION_OPEN_FOLDER),
+        )
+        menu.addAction(
+            i18n.t("action.refresh"),
+            lambda: self.project_action_requested.emit(ACTION_REFRESH),
+        )
+        menu.addSeparator()
+        revert = menu.addAction(
+            i18n.t("revert.menu_all"),
+            lambda: self.project_action_requested.emit(ACTION_REVERT_ALL),
+        )
+        revert.setToolTip(i18n.t("tip.revert_all"))
+        # Greyed out rather than missing, so the menu looks the same whether
+        # there is anything to throw away or not.
+        revert.setEnabled(has_changes)
+        return menu
+
+    def _show_empty_menu(self, position) -> None:  # noqa: ANN001 - Qt passes a QPoint
+        """
+        Opens the same menu over the "no changes" note.
+
+        Args:
+            position: Click position inside the note.
+
+        Returns:
+            None
+        """
+
+        self._show_project_menu(self._empty.mapToGlobal(position))
+
     def _show_context_menu(self, position) -> None:  # noqa: ANN001 - Qt passes a QPoint
         """
         Opens the right-click menu for a file row.
@@ -777,6 +856,7 @@ class ChangesPanel(QWidget):
 
         item = self._list.itemAt(position)
         if item is None:
+            self._show_project_menu(self._list.viewport().mapToGlobal(position))
             return
         path = item.data(_ROLE_PATH)
         if not isinstance(path, str) or not path:

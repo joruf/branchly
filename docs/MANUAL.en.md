@@ -330,6 +330,31 @@ list. `.gitignore` only applies to files Git does not know yet. The entry is
 written all the same, so that it takes effect as soon as the file is taken out of
 version control.
 
+### Right-click on empty space
+
+A right-click below the files, or on the note when a project has no changes at
+all, opens a menu for the project as a whole:
+
+- **Edit .gitignore…** opens the file in a window of its own
+- **Open folder**
+- **Refresh**
+- **Revert all changes…**, greyed out when there is nothing to revert
+
+The window shows `.gitignore` as text, one pattern per line. Comments, blank
+lines and the order stay exactly as you type them, and a file written with
+Windows line endings goes back with Windows line endings. If there is none yet,
+*Save* creates it. Empty the field completely and the file is removed. *Save*
+stays grey until you have changed something, and cancelling with unsaved
+changes asks first.
+
+![Editing .gitignore](screenshots/en/gitignore-dark.png)
+
+A `.gitignore` that cannot be read is shown locked and never overwritten.
+
+New folders Git does not know yet are listed file by file, not as a single
+entry. That is the only way each of them can be ticked, compared or ignored on
+its own.
+
 ## The comparison
 
 Two settings, independent of each other:
