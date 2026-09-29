@@ -257,6 +257,22 @@ Die Erklärungen sind mitgewandert: die Tooltips hängen jetzt an den
 Menüeinträgen, und die Anzahl wartender Commits steht am Holen-Eintrag, den
 `_refresh_branch_menu()` beim Öffnen beschriftet.
 
+## Ein Haken für alle (`ui/changes_panel.py`, `SelectAllBox`)
+
+Statt der beiden Knöpfe *Alle auswählen* und *Auswahl aufheben* ein einziges
+Ankreuzfeld mit drei Zuständen. Es trägt die Zahl als Beschriftung, dadurch ist
+die ganze Zeile anklickbar und die Angabe steht nicht doppelt da.
+
+`nextCheckState()` ist überschrieben: Qts eigenes Dreizustandsfeld läuft beim
+Klicken durch die Mitte, und der mittlere Zustand ist hier nichts, was jemand
+anfordert, sondern etwas, das die Dateiliste erzeugt. Ein Klick heißt also „alles",
+außer es ist schon alles, dann heißt er „nichts".
+
+Halb gefüllt gilt auch, wenn jede Datei angehakt ist, aber ein einzelner Block
+draußen steht: beides ist dieselbe Antwort auf „kommt das alles in den Commit".
+Das Theme brauchte dafür eine eigene Regel für `:indeterminate`, sonst sah der
+mittlere Zustand aus wie der leere.
+
 ## Blockauswahl (`ui/diff_view.py`, `ui/changes_panel.py`)
 
 Über jedem Block der Gegenüberstellung steht ein Häkchen, gezeichnet als Link im

@@ -237,6 +237,21 @@ schlechtere Variante.
 2. Kurzfassung schreiben (Pflicht), Beschreibung optional
 3. **„n Datei(en) in <branch> speichern"**
 
+Über der Liste steht ein einzelner Haken, der für alle steht. Er trägt die Zahl
+als eigene Beschriftung, du kannst also die ganze Zeile anklicken, und er zeigt
+mit seinem Aussehen, woran du gerade bist:
+
+| Aussehen | Bedeutung |
+|---|---|
+| Blau angehakt | Alles kommt in den Commit. So fängt es an |
+| Gelb halb gefüllt | Ein Teil ist draußen, entweder eine ganze Datei oder ein einzelner Block |
+| Leer | Nichts ist ausgewählt |
+
+Ein Klick nimmt alles heraus, der nächste legt alles zurück. Steht der Haken auf
+halb, macht ein Klick daraus wieder **alles**, samt der Blöcke, die du einzeln
+abgewählt hattest. Ein Haken, der etwas anderes sagt, als der Commit tut, wäre
+schlimmer als keiner.
+
 „Stattdessen zum letzten Commit hinzufügen" hängt die Auswahl an den vorherigen
 Commit, statt einen neuen anzulegen.
 

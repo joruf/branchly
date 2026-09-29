@@ -230,6 +230,21 @@ and a half-finished project with nobody watching would be the worse option.
 2. Write a summary (required), a description is optional
 3. **"Save n file(s) to \<branch\>"**
 
+Above the list is a single tick standing for all of them. It carries the count as
+its own label, so the whole line is a click target, and its appearance says where
+you are:
+
+| Appearance | Meaning |
+|---|---|
+| Blue, ticked | All of it goes into the commit. This is how it starts |
+| Amber, half filled | Something is out, either a whole file or a single block |
+| Empty | Nothing is selected |
+
+One click takes everything out, the next puts everything back. From the half
+state a click means **all of it** again, including blocks you had taken out
+individually. A tick that says something other than what the commit does would be
+worse than none.
+
 "Add to the last commit instead" attaches the selection to the previous commit
 rather than creating a new one.
 
