@@ -995,5 +995,9 @@
   "tip.snapshot_close": "Closes the window. What was downloaded stays, and closing changes nothing in the project.",
   "tip.snapshot_open_folder": "Opens the folder with the saved files.",
   "tip.snapshot_confirm_list": "Every file that gets replaced. Red: its current content is not saved anywhere.",
-  "tip.snapshot_confirm": "Writes the old versions into the project folder."
+  "tip.snapshot_confirm": "Writes the old versions into the project folder.",
+  "github.renamed": "On GitHub this project is now called {new}",
+  "github.renamed_hint": "It used to be {old}. Branchly has moved the server address to {url}, as GitHub Desktop does. The folder “{folder}” on disk keeps its name.",
+  "github.renamed_failed": "{old} is now called {new} on GitHub",
+  "github.renamed_failed_hint": "The server address could not be changed. Right-click the project in the project list and use “Change the online repository…” to set it to {url} by hand."
 }

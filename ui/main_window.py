@@ -76,6 +76,7 @@ from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
 from services import (
     git_credentials,
+    github_rename,
     open_with,
     puller,
     remote_link,
@@ -2649,6 +2650,7 @@ class MainWindow(QMainWindow):
             return
 
         details = repository.payload
+        owner, repo = self._follow_github_rename(key, owner, repo, details.full_name)
         self._pull_requests.set_context(
             GitHubContext(
                 owner=owner,
@@ -2670,6 +2672,68 @@ class MainWindow(QMainWindow):
             entry.status.open_pull_requests = count
             entry.status.check_state = check
             self._sidebar.update_entry(entry)
+
+    def _follow_github_rename(
+        self, key: str, owner: str, repo: str, full_name: str
+    ) -> tuple[str, str]:
+        """
+        Moves the project's remote when GitHub reports the repository elsewhere.
+
+        GitHub answers a request for an old name with the repository under its
+        new one, so comparing the two is all it takes to notice a rename or a
+        transfer. Nothing is asked: the remote only follows where GitHub already
+        sends every request, and the strip above the tabs says what happened.
+
+        Args:
+            key: Registry key of the project.
+            owner: Owner from the remote URL.
+            repo: Repository name from the remote URL.
+            full_name: ``owner/name`` GitHub reported.
+
+        Returns:
+            tuple[str, str]: The owner and name to use from now on.
+        """
+
+        entry = self._find(key)
+        if entry is None:
+            return owner, repo
+        remote = remote_mod.remote_fetch_url(entry.path) or entry.remote_url
+        rename = github_rename.detect(remote, full_name)
+        if rename is None:
+            return owner, repo
+        new_owner, new_repo = rename.new_slug.split("/", 1)
+
+        outcome = github_rename.apply(entry.path, rename)
+        if not outcome.ok:
+            self._show_notice(
+                "github.renamed_failed",
+                "github.renamed_failed_hint",
+                "warning",
+                old=rename.old_slug,
+                new=rename.new_slug,
+                url=rename.new_url,
+            )
+            return new_owner, new_repo
+
+        entry.remote_url = rename.new_url
+        # A display name that was simply the old repository name follows it. One
+        # the user chose stays.
+        if entry.name == rename.old_name:
+            self._registry.rename(entry, rename.new_name)
+        self._save_registry()
+        self._sidebar.update_entry(entry)
+        if entry is self._entry:
+            self._repo_label.setText(entry.name)
+        self._show_notice(
+            "github.renamed",
+            "github.renamed_hint",
+            "info",
+            old=rename.old_slug,
+            new=rename.new_slug,
+            url=rename.new_url,
+            folder=entry.path.name,
+        )
+        return new_owner, new_repo
 
     def _create_github_repository(self) -> None:
         """

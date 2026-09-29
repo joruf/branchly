@@ -36,6 +36,10 @@ _FORBIDDEN_SUBSTRINGS = (
 # scp-style address: user@host:path — the form GitHub and GitLab hand out.
 _SCP_PATTERN = re.compile(r"^(?P<user>[A-Za-z0-9._-]+)@(?P<host>[A-Za-z0-9._-]+):(?P<path>.+)$")
 
+# What GitHub allows in an owner or repository name. Anything else coming back
+# from the API is not written into a remote.
+_SLUG_PART = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+
 # The first character must be alphanumeric: a host like ``-evil`` would be read
 # as an option by ssh, not as a host name.
 _HOST_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(?::\d{1,5})?$")
@@ -258,3 +262,43 @@ def github_slug(url: str) -> tuple[str, str] | None:
     if not owner or not repo:
         return None
     return owner, repo
+
+
+def with_github_slug(url: str, owner: str, repo: str) -> str:
+    """
+    Rewrites a GitHub remote URL to point at another ``owner/repo``.
+
+    Everything else is kept as it was: the transport (HTTPS or SSH), a user name
+    in front of the host, a trailing ``.git``. A repository renamed on GitHub
+    should go on being reached the same way it was before, only by its new name.
+
+    Args:
+        url: Current remote URL, a github.com one.
+        owner: New owner.
+        repo: New repository name.
+
+    Returns:
+        str: The rewritten URL, or an empty string when ``url`` is not a GitHub
+            remote or the new name would not make a valid URL.
+    """
+
+    if github_slug(url) is None or not _SLUG_PART.match(owner) or not _SLUG_PART.match(repo):
+        return ""
+    raw = normalized(url)
+    scp = _SCP_PATTERN.match(raw)
+    if scp:
+        prefix = raw[: scp.start("path")]
+        path = scp.group("path")
+    else:
+        scheme = next(item for item in ALLOWED_SCHEMES if raw.lower().startswith(item))
+        authority, _, path = raw[len(scheme):].partition("/")
+        prefix = f"{raw[: len(scheme)]}{authority}/"
+
+    leading = "/" if path.startswith("/") else ""
+    trailing = "/" if path.endswith("/") else ""
+    parts = [part for part in path.strip("/").split("/") if part]
+    suffix = ".git" if parts[1].endswith(".git") else ""
+    rest = "/".join(parts[2:])
+    new_path = f"{leading}{owner}/{repo}{suffix}" + (f"/{rest}" if rest else "") + trailing
+    rewritten = prefix + new_path
+    return rewritten if is_valid(rewritten) else ""

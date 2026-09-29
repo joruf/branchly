@@ -100,6 +100,9 @@ the state from before.
   to type the name, because it is the only action that cannot be undone
 - Build status as traffic lights, author avatars, and non-GitHub remotes say so
   plainly instead of showing empty panels
+- A repository renamed or moved on GitHub is noticed when the project is opened,
+  and the remote follows it the way GitHub Desktop does: same transport, new name,
+  the folder on disk left alone
 - Labels, milestones and collaborators are managed here too, and a review can
   be requested from anyone who can be assigned
 - An action the token may not perform is disabled with the reason, not hidden

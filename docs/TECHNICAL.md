@@ -267,6 +267,28 @@ einem Limit. Die vier ursprünglichen Lesemethoden (`viewer`, `pull_requests`,
 `issues`, `check_state`) behalten ihre alte Signatur, damit bestehende Aufrufer
 unverändert bleiben.
 
+### Umbenannte Repositorys (`services/github_rename.py`)
+
+GitHub beantwortet `GET /repos/<alt>/<name>` mit einem 301 auf
+`/repositories/<id>`, `requests` folgt dem, und die Antwort trägt den heutigen
+`full_name`. Branchly fragt ohnehin nach dem Repository, sobald ein Projekt
+geöffnet wird (`_fetch_github_context`). Erkennen kostet also keinen zusätzlichen
+Aufruf, nur einen Vergleich in `_follow_github_rename()`.
+
+- `detect()` vergleicht exakt, auch die Schreibweise: eine geänderte Groß- und
+  Kleinschreibung ist eine gewollte Umbenennung.
+- `remote_url.with_github_slug()` ersetzt nur Besitzer und Name. Schema, Benutzer
+  vor dem Host und ein `.git` am Ende bleiben, ein Name außerhalb von
+  `[A-Za-z0-9._-]` wird nicht in eine Adresse geschrieben.
+- `apply()` liest die Adresse vorher noch einmal und verweigert, wenn sie nicht
+  mehr die ist, aus der die Umbenennung berechnet wurde. Eine `pushurl` zieht nur
+  mit, wenn sie auf den alten Namen zeigte.
+- Der Anzeigename in der Projektliste folgt nur, wenn er genau der alte
+  Repository-Name war. Der Ordner wird nie umbenannt.
+
+Ohne Anmeldung gibt es kein Erkennen: ein privates Repository beantwortet GitHub
+ohne Token mit 404, nicht mit einer Weiterleitung.
+
 ### GitHub-Aufrufe und der UI-Thread
 
 Qt zeichnet nichts, solange ein Slot läuft, also ruft kein Widget den Client

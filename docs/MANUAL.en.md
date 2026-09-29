@@ -833,6 +833,27 @@ If the account may not change the settings, the dialog still opens, but shows
 everything locked and says why. An empty dialog, or an error after saving, would
 be the worse answer.
 
+### Renamed or moved repositories
+
+When a repository is renamed on GitHub or moved to another account, Branchly
+notices the next time the project is opened, as GitHub Desktop does. GitHub does
+redirect the old name for a while, but only until somebody creates a new
+repository under it. So Branchly does not wait for that.
+
+What happens:
+
+- The project's server address is moved to the new name, reached the same way
+  as before: HTTPS stays HTTPS, SSH stays SSH.
+- A separate push address moves as well when it pointed at the old name.
+- If the project in the project list was called like the repository, it gets
+  the new name. A name you chose yourself stays.
+- The folder on disk keeps its name, since other programs, terminals and editors
+  may point at it.
+
+A note at the top names the old and the new name. Noticing needs you to be
+signed in to GitHub, since only that way does GitHub say where a repository
+lives today.
+
 ### A new repository on GitHub
 
 *Project → New repository on GitHub…* creates one: name, description, personal
