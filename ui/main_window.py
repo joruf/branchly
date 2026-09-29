@@ -244,6 +244,7 @@ class MainWindow(QMainWindow):
             self._settings.diff_ignore_whitespace,
             self._settings.diff_word_level,
             self._settings.diff_full_context,
+            self._settings.diff_context_lines,
             content,
         )
         content.addWidget(self._diff)
@@ -305,26 +306,10 @@ class MainWindow(QMainWindow):
         buttons.setContentsMargins(0, 0, 0, 0)
         row.addWidget(actions)
 
-        self._new_branch_button = QPushButton(i18n.t("branch.new"), actions)
-        self._new_branch_button.setToolTip(i18n.t("tip.branch_new"))
-        self._new_branch_button.clicked.connect(self._prompt_new_branch)
-        buttons.addWidget(self._new_branch_button)
-
-        self._switch_branch_button = QPushButton(i18n.t("branch.switch"), actions)
-        self._switch_branch_button.setToolTip(i18n.t("tip.branch_switch"))
-        self._switch_branch_button.clicked.connect(self._prompt_switch_branch)
-        buttons.addWidget(self._switch_branch_button)
-
-        self._fetch_button = QPushButton(i18n.t("sync.fetch"), actions)
-        self._fetch_button.setToolTip(i18n.t("tip.fetch"))
-        self._fetch_button.clicked.connect(self._do_fetch)
-        buttons.addWidget(self._fetch_button)
-
-        self._pull_button = QPushButton(i18n.t("sync.pull_generic"), actions)
-        self._pull_button.setToolTip(i18n.t("tip.pull"))
-        self._pull_button.clicked.connect(self._do_pull)
-        buttons.addWidget(self._pull_button)
-
+        # Only sending stays in the bar. Fetching, pulling and the two branch
+        # actions live in the Branch menu, which is where somebody looks for
+        # them anyway, and five buttons across the top of every project were
+        # four more than the one thing people press all day.
         self._push_button = QPushButton(i18n.t("sync.push_generic"), actions)
         self._push_button.setToolTip(i18n.t("tip.push"))
         self._push_button.setObjectName("Primary")
@@ -385,16 +370,24 @@ class MainWindow(QMainWindow):
         refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
         refresh_action.triggered.connect(self._reload_current)
         repo_menu.addAction(refresh_action)
-        repo_menu.addAction(i18n.t("sidebar.check_all"), lambda: self._start_scan(""))
-        repo_menu.addAction(i18n.t("sidebar.pull_all"), self._pull_all)
+        # Checking and updating every project are the two buttons at the bottom
+        # of the project list, where they are always on screen. A second copy in
+        # a menu is a second place to keep correct for no gain.
         repo_menu.addSeparator()
         repo_menu.addAction(i18n.t("repo.open_folder"), self._open_current_folder)
         repo_menu.addAction(i18n.t("repo.open_remote"), self._open_current_remote)
 
         branch_menu = bar.addMenu(i18n.t("menu.branch"))
         branch_menu.setToolTipsVisible(True)
-        branch_menu.addAction(i18n.t("branch.new"), self._prompt_new_branch)
-        branch_menu.addAction(i18n.t("branch.switch"), self._prompt_switch_branch)
+        # These four used to sit as buttons across the top of every project as
+        # well. The menu is now the only place they live, so the explanations
+        # that hung on the buttons move here.
+        new_branch = branch_menu.addAction(i18n.t("branch.new"), self._prompt_new_branch)
+        new_branch.setToolTip(i18n.t("tip.branch_new"))
+        switch_branch = branch_menu.addAction(
+            i18n.t("branch.switch"), self._prompt_switch_branch
+        )
+        switch_branch.setToolTip(i18n.t("tip.branch_switch"))
         branch_menu.addAction(i18n.t("branch.rename"), self._prompt_rename_branch)
         self._delete_branch_action = QAction(i18n.t("branch.delete"), self)
         self._delete_branch_action.setToolTip(i18n.t("tip.branch_delete"))
@@ -413,8 +406,12 @@ class MainWindow(QMainWindow):
         branch_menu.addAction(i18n.t("tag.menu"), self._open_tags)
         branch_menu.addSeparator()
 
-        branch_menu.addAction(i18n.t("sync.fetch"), self._do_fetch)
-        branch_menu.addAction(i18n.t("sync.pull_generic"), self._do_pull)
+        self._fetch_action = branch_menu.addAction(i18n.t("sync.fetch"), self._do_fetch)
+        self._fetch_action.setToolTip(i18n.t("tip.fetch"))
+        self._pull_action = branch_menu.addAction(
+            i18n.t("sync.pull_generic"), self._do_pull
+        )
+        self._pull_action.setToolTip(i18n.t("tip.pull"))
         branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
         force_action = QAction(i18n.t("sync.force_push"), self)
         force_action.setToolTip(i18n.t("tip.force_push"))
@@ -726,14 +723,7 @@ class MainWindow(QMainWindow):
             None
         """
 
-        for button in (
-            self._fetch_button,
-            self._pull_button,
-            self._push_button,
-            self._new_branch_button,
-            self._switch_branch_button,
-        ):
-            button.setEnabled(enabled)
+        self._push_button.setEnabled(enabled)
 
     def _update_sync_buttons(self, state: RepositoryState) -> None:
         """
@@ -748,13 +738,7 @@ class MainWindow(QMainWindow):
 
         entry = self._entry
         has_remote = bool(entry and remote_mod.has_remote(entry.path))
-        self._set_sync_enabled(True)
-        for button in (self._fetch_button, self._pull_button, self._push_button):
-            button.setEnabled(has_remote)
-
-        self._pull_button.setText(
-            i18n.t("sync.pull", count=state.behind) if state.behind else i18n.t("sync.pull_generic")
-        )
+        self._push_button.setEnabled(has_remote)
         self._push_button.setText(
             i18n.t("sync.push", count=state.ahead) if state.ahead else i18n.t("sync.push_generic")
         )
@@ -1346,6 +1330,15 @@ class MainWindow(QMainWindow):
         self._delete_branch_action.setEnabled(
             has_entry and len(branch_mod.list_branches(entry.path, include_remote=False)) > 1
         )
+        # The count used to be on the button. It belongs wherever the action is.
+        behind = state.behind if state else 0
+        self._pull_action.setText(
+            i18n.t("sync.pull", count=behind) if behind else i18n.t("sync.pull_generic")
+        )
+        has_remote = bool(entry and entry.exists and remote_mod.has_remote(entry.path))
+        self._fetch_action.setEnabled(has_remote)
+        self._pull_action.setEnabled(has_remote)
+
         dirty = bool(state and not state.is_clean)
         self._stash_action.setEnabled(has_entry and dirty)
         self._stash_pop_action.setEnabled(
@@ -1739,8 +1732,15 @@ class MainWindow(QMainWindow):
             None
         """
 
-        manual = paths.project_root() / "docs" / "MANUAL.md"
-        if not manual.is_file():
+        # In the language the window is running in, with English as the fallback:
+        # a manual nobody can read is no more use than a missing one.
+        docs = paths.project_root() / "docs"
+        candidates = [
+            docs / f"MANUAL.{i18n.current_language()}.md",
+            docs / "MANUAL.en.md",
+        ]
+        manual = next((item for item in candidates if item.is_file()), None)
+        if manual is None:
             self._show_notice("manual.missing", "manual.missing_hint", "warning")
             return
         open_with.open_path(manual)
@@ -2915,6 +2915,8 @@ class MainWindow(QMainWindow):
         self._settings = updated
         save_settings(self._settings)
 
+        self._diff.set_context_lines(self._settings.diff_context_lines)
+        self._reload_diff()
         self._sidebar.set_sort_mode(self._settings.sort_mode)
         self._pull_requests.set_show_avatars(self._settings.show_avatars)
         self._github.set_token(token_store.load() if self._settings.github_enabled else "")

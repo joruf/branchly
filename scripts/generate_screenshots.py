@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -35,8 +36,56 @@ from config.theme import (  # noqa: E402
     set_current_theme,
 )
 
-OUTPUT_DIR = _ROOT / "docs" / "screenshots"
+SCREENSHOT_ROOT = _ROOT / "docs" / "screenshots"
+
+# Category names for the demo project list, per language.
+DEMO_CATEGORIES = {"en": ("Work", "Personal"), "de": ("Arbeit", "Privat")}
+
+
+def output_dir() -> Path:
+    """
+    Returns where the pictures for the active language belong.
+
+    One folder per language, because a manual in English showing a window in
+    German is worse than no picture at all.
+
+    Returns:
+        Path: The folder, created on demand by the caller.
+    """
+
+    return SCREENSHOT_ROOT / i18n.current_language()
 WINDOW_SIZE = (1400, 880)
+
+
+def _demo_env(base: Path) -> dict[str, str]:
+    """
+    Builds the git environment every demo repository runs in.
+
+    Nothing outside the sandbox is read or written, and the author is invented.
+
+    Args:
+        base: Sandbox directory.
+
+    Returns:
+        dict[str, str]: Environment for the git calls.
+    """
+
+    home = base / "gitenv"
+    home.mkdir(exist_ok=True)
+    env = dict(os.environ)
+    env.update(
+        {
+            "HOME": str(home),
+            "GIT_CONFIG_GLOBAL": str(home / ".gitconfig"),
+            "GIT_CONFIG_SYSTEM": str(home / ".gitconfig-system"),
+            "GIT_AUTHOR_NAME": "Alex Berg",
+            "GIT_AUTHOR_EMAIL": "alex@example.invalid",
+            "GIT_COMMITTER_NAME": "Alex Berg",
+            "GIT_COMMITTER_EMAIL": "alex@example.invalid",
+            "LC_ALL": "C",
+        }
+    )
+    return env
 
 
 def _git(args: list[str], cwd: Path, env: dict[str, str]) -> None:
@@ -74,10 +123,10 @@ def build_demo_repositories(base: Path) -> list[Path]:
             "HOME": str(home),
             "GIT_CONFIG_GLOBAL": str(home / ".gitconfig"),
             "GIT_CONFIG_SYSTEM": str(home / ".gitconfig-system"),
-            "GIT_AUTHOR_NAME": "Jo Ruf",
-            "GIT_AUTHOR_EMAIL": "jo@example.invalid",
-            "GIT_COMMITTER_NAME": "Jo Ruf",
-            "GIT_COMMITTER_EMAIL": "jo@example.invalid",
+            "GIT_AUTHOR_NAME": "Alex Berg",
+            "GIT_AUTHOR_EMAIL": "alex@example.invalid",
+            "GIT_COMMITTER_NAME": "Alex Berg",
+            "GIT_COMMITTER_EMAIL": "alex@example.invalid",
             "LC_ALL": "C",
         }
     )
@@ -86,11 +135,11 @@ def build_demo_repositories(base: Path) -> list[Path]:
 
     # A project with local changes, a side branch and a merge, so the graph has
     # something to draw and the changes panel is not empty.
-    main_repo = base / "pmtool"
+    main_repo = base / "invoicing"
     main_repo.mkdir()
     _git(["init", "-b", "main"], main_repo, env)
-    _git(["config", "user.name", "Jo Ruf"], main_repo, env)
-    _git(["config", "user.email", "jo@example.invalid"], main_repo, env)
+    _git(["config", "user.name", "Alex Berg"], main_repo, env)
+    _git(["config", "user.email", "alex@example.invalid"], main_repo, env)
 
     (main_repo / "config.py").write_text("port = 8080\ndebug = True\ntimeout = 30\n", encoding="utf-8")
     (main_repo / "README.md").write_text("# PM Tool\n\nProject management.\n", encoding="utf-8")
@@ -113,12 +162,12 @@ def build_demo_repositories(base: Path) -> list[Path]:
     (main_repo / "notes.md").write_text("- ask about the SSO deadline\n", encoding="utf-8")
     created.append(main_repo)
 
-    for name, subject in (("snappix", "Fix capture on Wayland"), ("consentry", "Pin the scanner")):
+    for name, subject in (("sitemap", "Fix capture on Wayland"), ("cookiecheck", "Pin the scanner")):
         repo = base / name
         repo.mkdir()
         _git(["init", "-b", "main"], repo, env)
-        _git(["config", "user.name", "Jo Ruf"], repo, env)
-        _git(["config", "user.email", "jo@example.invalid"], repo, env)
+        _git(["config", "user.name", "Alex Berg"], repo, env)
+        _git(["config", "user.email", "alex@example.invalid"], repo, env)
         (repo / "README.md").write_text(f"# {name}\n", encoding="utf-8")
         _git(["add", "-A"], repo, env)
         _git(["commit", "-m", subject], repo, env)
@@ -143,7 +192,6 @@ def capture(theme: str, repositories: list[Path], config_dir: Path) -> Path:
     from PySide6.QtWidgets import QApplication
 
     os.environ["XDG_CONFIG_HOME"] = str(config_dir / theme)
-    i18n.set_language("de")
     set_current_theme(theme)
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -156,10 +204,13 @@ def capture(theme: str, repositories: list[Path], config_dir: Path) -> Path:
     window.resize(*WINDOW_SIZE)
 
     registry = window._registry
-    registry.add_category("Arbeit")
-    registry.add_category("Privat")
+    # Invented, and in the language of the picture: a manual in English showing
+    # German category names reads as a screenshot of somebody else's program.
+    work, private = DEMO_CATEGORIES.get(i18n.current_language(), DEMO_CATEGORIES["en"])
+    registry.add_category(work)
+    registry.add_category(private)
     for index, path in enumerate(repositories):
-        _outcome, entry = registry.add(path, "Arbeit" if index == 0 else "Privat")
+        _outcome, entry = registry.add(path, work if index == 0 else private)
         if entry is not None and index == 0:
             entry.favorite = True
     window._sidebar.refresh()
@@ -171,21 +222,22 @@ def capture(theme: str, repositories: list[Path], config_dir: Path) -> Path:
     window.show()
     app.processEvents()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    target = OUTPUT_DIR / f"main-window-{theme}.png"
+    target_dir = output_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"main-window-{theme}.png"
     window.grab().save(str(target))
 
     # The graph tab, which is the other view worth showing.
     window._tabs.setCurrentIndex(1)
     app.processEvents()
-    graph_target = OUTPUT_DIR / f"graph-{theme}.png"
+    graph_target = target_dir / f"graph-{theme}.png"
     window.grab().save(str(graph_target))
 
     window.close()
     return target
 
 
-DEMO_OWNER = "joruf"
+DEMO_OWNER = "example-team"
 DEMO_REPO = "branchly"
 
 
@@ -219,31 +271,31 @@ def _demo_github_routes(server: object) -> None:
     server.json("GET", f"{base}/pulls", [
         {
             "number": 42, "title": "Konflikte einzeln entscheiden statt Marker zeigen",
-            "state": "open", "draft": False, "user": person("joruf"),
+            "state": "open", "draft": False, "user": person("example-team"),
             "head": {"ref": "konflikt-assistent", "sha": "b" * 40}, "base": {"ref": "main"},
-            "labels": [{"name": "feature"}], "assignees": [person("joruf")],
+            "labels": [{"name": "feature"}], "assignees": [person("example-team")],
             "updated_at": "2026-09-18T09:20:00Z",
             "body": "Drei Spalten, vier Knöpfe, keine `<<<<<<<` mehr.\n\n"
                     "Nichts wird geschrieben, bevor jede Entscheidung gefallen ist.",
         },
         {
             "number": 41, "title": "Alle Projekte in einem Rutsch holen",
-            "state": "open", "draft": True, "user": person("joruf"),
+            "state": "open", "draft": True, "user": person("example-team"),
             "head": {"ref": "pull-all", "sha": "c" * 40}, "base": {"ref": "main"},
             "updated_at": "2026-09-17T16:05:00Z",
         },
     ])
     server.json("GET", f"{base}/pulls/42", {
         "number": 42, "title": "Konflikte einzeln entscheiden statt Marker zeigen",
-        "state": "open", "draft": False, "user": person("joruf"),
+        "state": "open", "draft": False, "user": person("example-team"),
         "head": {"ref": "konflikt-assistent", "sha": "b" * 40}, "base": {"ref": "main"},
-        "labels": [{"name": "feature"}], "assignees": [person("joruf")],
+        "labels": [{"name": "feature"}], "assignees": [person("example-team")],
         "mergeable": True, "mergeable_state": "clean", "updated_at": "2026-09-18T09:20:00Z",
         "body": "Drei Spalten, vier Knöpfe, keine `<<<<<<<` mehr.\n\n"
                 "Nichts wird geschrieben, bevor jede Entscheidung gefallen ist.",
     })
     server.json("GET", f"{base}/issues/42/comments", [
-        {"id": 1, "user": person("joruf"), "created_at": "2026-09-18T10:02:00Z",
+        {"id": 1, "user": person("example-team"), "created_at": "2026-09-18T10:02:00Z",
          "body": "Getestet gegen ein Repo mit drei Konflikten in einer Datei."},
     ])
     server.json("GET", f"{base}/pulls/42/reviews", [])
@@ -287,7 +339,6 @@ def capture_github(theme: str, config_dir: Path) -> Path:
     from ui.github_panel import GitHubPanel
 
     os.environ["XDG_CONFIG_HOME"] = str(config_dir / f"{theme}-github")
-    i18n.set_language("de")
     set_current_theme(theme)
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -326,8 +377,9 @@ def capture_github(theme: str, config_dir: Path) -> Path:
             time.sleep(0.02)
         app.processEvents()
 
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        target = OUTPUT_DIR / f"github-panel-{theme}.png"
+        target_dir = output_dir()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"github-panel-{theme}.png"
         panel.grab().save(str(target))
         panel.stop()
         panel.close()
@@ -354,7 +406,6 @@ def capture_binary(theme: str, base: Path) -> Path:
     from gitops import blobs
     from ui.diff_view import BinaryComparisonView
 
-    i18n.set_language("de")
     set_current_theme(theme)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyleSheet(build_application_stylesheet(theme))
@@ -367,10 +418,10 @@ def capture_binary(theme: str, base: Path) -> Path:
             "HOME": str(root),
             "GIT_CONFIG_GLOBAL": str(root / ".gitconfig"),
             "GIT_CONFIG_SYSTEM": str(root / ".gitconfig-system"),
-            "GIT_AUTHOR_NAME": "Jo Ruf",
-            "GIT_AUTHOR_EMAIL": "jo@example.invalid",
-            "GIT_COMMITTER_NAME": "Jo Ruf",
-            "GIT_COMMITTER_EMAIL": "jo@example.invalid",
+            "GIT_AUTHOR_NAME": "Alex Berg",
+            "GIT_AUTHOR_EMAIL": "alex@example.invalid",
+            "GIT_COMMITTER_NAME": "Alex Berg",
+            "GIT_COMMITTER_EMAIL": "alex@example.invalid",
             "GIT_AUTHOR_DATE": "2026-09-14T10:15:00",
             "GIT_COMMITTER_DATE": "2026-09-14T10:15:00",
             "LC_ALL": "C",
@@ -388,8 +439,9 @@ def capture_binary(theme: str, base: Path) -> Path:
     view.show()
     app.processEvents()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    target = OUTPUT_DIR / f"binary-comparison-{theme}.png"
+    target_dir = output_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"binary-comparison-{theme}.png"
     view.grab().save(str(target))
     view.close()
     return target
@@ -413,7 +465,6 @@ def capture_discover(theme: str, base: Path) -> Path:
 
     from ui.discover_dialog import DiscoverDialog
 
-    i18n.set_language("de")
     set_current_theme(theme)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyleSheet(build_application_stylesheet(theme))
@@ -426,10 +477,10 @@ def capture_discover(theme: str, base: Path) -> Path:
             "HOME": str(home),
             "GIT_CONFIG_GLOBAL": str(home / ".gitconfig"),
             "GIT_CONFIG_SYSTEM": str(home / ".gitconfig-system"),
-            "GIT_AUTHOR_NAME": "Jo Ruf",
-            "GIT_AUTHOR_EMAIL": "jo@example.invalid",
-            "GIT_COMMITTER_NAME": "Jo Ruf",
-            "GIT_COMMITTER_EMAIL": "jo@example.invalid",
+            "GIT_AUTHOR_NAME": "Alex Berg",
+            "GIT_AUTHOR_EMAIL": "alex@example.invalid",
+            "GIT_COMMITTER_NAME": "Alex Berg",
+            "GIT_COMMITTER_EMAIL": "alex@example.invalid",
             "LC_ALL": "C",
         }
     )
@@ -438,16 +489,16 @@ def capture_discover(theme: str, base: Path) -> Path:
     for index, (name, branch) in enumerate(
         (
             ("branchly", "main"),
-            ("consentry", "main"),
-            ("pmtool", "feature/topdesk"),
-            ("snappix", "main"),
-            ("byteback", "main"),
+            ("cookiecheck", "main"),
+            ("invoicing", "feature/topdesk"),
+            ("sitemap", "main"),
+            ("backupd", "main"),
         )
     ):
         root = home / "Applications" / name
         root.mkdir(parents=True, exist_ok=True)
         _git(["init", "-b", branch], root, env)
-        _git(["remote", "add", "origin", f"https://github.com/joruf/{name}.git"], root, env)
+        _git(["remote", "add", "origin", f"https://github.com/example-team/{name}.git"], root, env)
         if index < 2:
             known.add(str(root.resolve()))
     # Something the walk must not report, so the picture shows the rule working.
@@ -466,8 +517,9 @@ def capture_discover(theme: str, base: Path) -> Path:
         time.sleep(0.02)
     app.processEvents()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    target = OUTPUT_DIR / f"discover-{theme}.png"
+    target_dir = output_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"discover-{theme}.png"
     dialog.grab().save(str(target))
     dialog.close()
     return target
@@ -491,7 +543,6 @@ def capture_conflict(theme: str, base: Path) -> Path:
     from gitops import conflict as conflict_mod
     from ui.conflict_dialog import ConflictDialog
 
-    i18n.set_language("de")
     set_current_theme(theme)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyleSheet(build_application_stylesheet(theme))
@@ -501,16 +552,16 @@ def capture_conflict(theme: str, base: Path) -> Path:
     env = dict(os.environ)
     env.update(
         {
-            "GIT_AUTHOR_NAME": "Jo Ruf",
-            "GIT_AUTHOR_EMAIL": "jo@example.invalid",
-            "GIT_COMMITTER_NAME": "Jo Ruf",
-            "GIT_COMMITTER_EMAIL": "jo@example.invalid",
+            "GIT_AUTHOR_NAME": "Alex Berg",
+            "GIT_AUTHOR_EMAIL": "alex@example.invalid",
+            "GIT_COMMITTER_NAME": "Alex Berg",
+            "GIT_COMMITTER_EMAIL": "alex@example.invalid",
             "LC_ALL": "C",
         }
     )
     _git(["init", "-b", "main"], repo, env)
-    _git(["config", "user.name", "Jo Ruf"], repo, env)
-    _git(["config", "user.email", "jo@example.invalid"], repo, env)
+    _git(["config", "user.name", "Alex Berg"], repo, env)
+    _git(["config", "user.email", "alex@example.invalid"], repo, env)
 
     (repo / "config.py").write_text("port = 1234\ndebug = True\ntimeout = 30\n", encoding="utf-8")
     _git(["add", "-A"], repo, env)
@@ -533,8 +584,9 @@ def capture_conflict(theme: str, base: Path) -> Path:
     dialog.show()
     app.processEvents()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    target = OUTPUT_DIR / f"conflict-assistant-{theme}.png"
+    target_dir = output_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"conflict-assistant-{theme}.png"
     dialog.grab().save(str(target))
     dialog.close()
     return target
@@ -562,7 +614,6 @@ def capture_signin(theme: str) -> Path:
 
     from ui.signin_dialog import SignInDialog
 
-    i18n.set_language("de")
     set_current_theme(theme)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyleSheet(build_application_stylesheet(theme))
@@ -575,8 +626,9 @@ def capture_signin(theme: str) -> Path:
         for _round in range(6):
             app.processEvents()
 
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        target = OUTPUT_DIR / f"signin-{theme}.png"
+        target_dir = output_dir()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"signin-{theme}.png"
         dialog.grab().save(str(target))
         dialog.done(0)
     finally:
@@ -584,30 +636,426 @@ def capture_signin(theme: str) -> Path:
     return target
 
 
-def main() -> int:
+
+def _save(widget: object, theme: str, name: str) -> Path:
     """
-    Generates every screenshot.
+    Writes one widget to the language's folder.
+
+    Args:
+        widget: The widget to photograph.
+        theme: Theme it was rendered in.
+        name: File name without the theme or the extension.
 
     Returns:
-        int: Process exit code.
+        Path: The written file.
     """
 
-    if shutil.which("git") is None:
-        print("git is required to build the demo repositories", file=sys.stderr)
-        return 2
+    target_dir = output_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{name}-{theme}.png"
+    widget.grab().save(str(target))
+    return target
 
+
+def _demo_window(theme: str, base: Path, repositories: list[Path]):  # noqa: ANN202
+    """
+    Builds a window on the demo projects, ready to be photographed.
+
+    Args:
+        theme: Theme to render.
+        base: Sandbox directory.
+        repositories: Demo projects, built once and reused.
+
+    Returns:
+        tuple: The application, the window and the first entry.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from config.app_settings import AppSettings
+    from ui.main_window import MainWindow
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    config_dir = base / "config"
+    config_dir.mkdir(exist_ok=True)
+    os.environ["XDG_CONFIG_HOME"] = str(config_dir)
+
+    window = MainWindow(
+        AppSettings(
+            theme=theme,
+            language=i18n.current_language(),
+            auto_check_minutes=0,
+            github_enabled=False,
+        )
+    )
+    entry = None
+    for path in repositories:
+        _outcome, added = window._registry.add(path)
+        entry = entry or added
+    window._sidebar.refresh()
+    if entry is not None:
+        window._activate(entry)
+    window._switch_scan_timer.stop()
+    window.resize(1400, 880)
+    window.show()
+    for _round in range(6):
+        app.processEvents()
+    return app, window, entry
+
+
+def capture_settings(theme: str) -> Path:
+    """
+    Photographs the settings window.
+
+    Args:
+        theme: Theme to render.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from config.app_settings import AppSettings
+    from ui.settings_dialog import SettingsDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    dialog = SettingsDialog(AppSettings(theme=theme, language=i18n.current_language()))
+    dialog.resize(640, 560)
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    target = _save(dialog, theme, "settings")
+    dialog.done(0)
+    return target
+
+
+def capture_pull_all(theme: str, base: Path) -> Path:
+    """
+    Photographs the bulk update window.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo projects in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from models.repository import RepoEntry, RepoStatus
+    from ui.pull_all_dialog import PullAllDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    names = ("invoicing", "sitemap", "cookiecheck", "backupd", "reminders", "planner")
+    jobs = [
+        RepoEntry(
+            path=base / "demo" / name,
+            name=name,
+            remote_url=f"https://github.com/{DEMO_OWNER}/{name}.git",
+            status=RepoStatus(branch="main", behind=2),
+        )
+        for name in names
+    ]
+    dialog = PullAllDialog(jobs)
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    target = _save(dialog, theme, "pull-all")
+    dialog.done(0)
+    return target
+
+
+def capture_revert(theme: str, base: Path) -> Path:
+    """
+    Photographs the revert confirmation.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build a demo project in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from gitops.status import read_state
+    from services import revert as revert_mod
+    from ui.revert_dialog import RevertDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    repo = base / f"revert-{theme}"
+    repo.mkdir(parents=True)
+    env = _demo_env(base)
+    for name in ("config.py", "listing.py", "README.md"):
+        (repo / name).write_text(f"{name}\n", encoding="utf-8")
+    _git(["init", "-b", "main"], repo, env)
+    _git(["add", "-A"], repo, env)
+    _git(["commit", "-m", "Initial layout"], repo, env)
+
+    (repo / "config.py").write_text("changed\n", encoding="utf-8")
+    (repo / "listing.py").write_text("changed too\n", encoding="utf-8")
+    (repo / "README.md").unlink()
+    (repo / "notes.txt").write_text("never saved\n", encoding="utf-8")
+    (repo / "output.log").write_text("never saved\n", encoding="utf-8")
+
+    dialog = RevertDialog(revert_mod.plan(read_state(repo).files), "invoicing")
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    target = _save(dialog, theme, "revert")
+    dialog.done(0)
+    return target
+
+
+def capture_link_remote(theme: str, base: Path) -> Path:
+    """
+    Photographs the connect window in the case that needs a decision.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo repositories in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from services import remote_link
+    from ui.link_remote_dialog import LinkRemoteDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    env = _demo_env(base)
+    local = base / f"link-{theme}"
+    local.mkdir(parents=True)
+    _git(["init", "-b", "main"], local, env)
+    (local / "a.txt").write_text("here\n", encoding="utf-8")
+    _git(["add", "-A"], local, env)
+    _git(["commit", "-m", "Local work"], local, env)
+
+    server = base / f"server-{theme}.git"
+    _git(["init", "--bare", "-b", "main", str(server)], base, env)
+    seed = base / f"seed-{theme}"
+    seed.mkdir()
+    _git(["init", "-b", "main"], seed, env)
+    (seed / "b.txt").write_text("there\n", encoding="utf-8")
+    _git(["add", "-A"], seed, env)
+    _git(["commit", "-m", "Server work"], seed, env)
+    _git(["remote", "add", "origin", str(server)], seed, env)
+    _git(["push", "-q", "-u", "origin", "main"], seed, env)
+
+    dialog = LinkRemoteDialog(
+        local, "invoicing", suggestion=f"https://github.com/{DEMO_OWNER}/invoicing.git"
+    )
+    dialog.resize(560, 300)
+    dialog.show()
+    for _round in range(4):
+        app.processEvents()
+    dialog._on_checked(remote_link.check(local, str(server)))
+    dialog.adjustSize()
+    for _round in range(4):
+        app.processEvents()
+    target = _save(dialog, theme, "link-remote")
+    dialog.done(0)
+    return target
+
+
+def capture_tags(theme: str, base: Path) -> Path:
+    """
+    Photographs the tag list.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build a demo project in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from ui.tag_dialog import TagDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    repo = base / f"tags-{theme}"
+    repo.mkdir(parents=True)
+    env = _demo_env(base)
+    _git(["init", "-b", "main"], repo, env)
+    (repo / "a.txt").write_text("one\n", encoding="utf-8")
+    _git(["add", "-A"], repo, env)
+    _git(["commit", "-m", "First release"], repo, env)
+    for name in ("v1.0.0", "v1.1.0", "v1.2.0"):
+        _git(["tag", name], repo, env)
+
+    dialog = TagDialog(repo, "main")
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    target = _save(dialog, theme, "tags")
+    dialog.reject()
+    return target
+
+
+def capture_blocks(theme: str, base: Path, repositories: list[Path]) -> Path:
+    """
+    Photographs the comparison with one block taken out of the commit.
+
+    Args:
+        theme: Theme to render.
+        base: Sandbox directory.
+        repositories: Demo projects, built once and reused.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from gitops import diff as diff_mod
+
+    app, window, entry = _demo_window(theme, base, repositories)
+    window._changes._list.setCurrentRow(0)
+    for _round in range(4):
+        app.processEvents()
+
+    parsed = diff_mod.file_diff(entry.path, "config.py", diff_mod.TARGET_WORKTREE_HEAD)
+    if len(parsed.hunks) > 1:
+        window._on_hunk_toggled(parsed.hunks[-1].key)
+    for _round in range(6):
+        app.processEvents()
+
+    target_dir = output_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"blocks-{theme}.png"
+    window.grab().copy(300, 120, 1100, 460).save(str(target))
+    window._closing = True
+    window.close()
+    app.processEvents()
+    return target
+
+
+def capture_menus(theme: str, base: Path, repositories: list[Path]) -> list[Path]:
+    """
+    Photographs the two menus people look for things in.
+
+    Args:
+        theme: Theme to render.
+        base: Sandbox directory.
+        repositories: Demo projects, built once and reused.
+
+    Returns:
+        list[Path]: The written files.
+    """
+
+    from PySide6.QtWidgets import QMenu
+
+    app, window, _entry = _demo_window(theme, base, repositories)
+    written: list[Path] = []
+
+    for title_key, name in (("menu.branch", "menu-branch"), ("menu.repository", "menu-project")):
+        for menu in window.menuBar().findChildren(QMenu):
+            if menu.title() != i18n.t(title_key):
+                continue
+            window._refresh_branch_menu()
+            menu.adjustSize()
+            for _round in range(4):
+                app.processEvents()
+            written.append(_save(menu, theme, name))
+            break
+
+    window._closing = True
+    window.close()
+    app.processEvents()
+    return written
+
+def capture_all(language: str) -> list[Path]:
+    """
+    Produces every picture in one language.
+
+    Args:
+        language: Language code the window should run in.
+
+    Returns:
+        list[Path]: The files that were written.
+    """
+
+    i18n.set_language(language)
+    written: list[Path] = []
     with tempfile.TemporaryDirectory(prefix="branchly-shots-") as tmp:
         base = Path(tmp)
         repositories = build_demo_repositories(base)
         config_dir = base / "config"
         config_dir.mkdir()
         for theme in (THEME_DARK, THEME_LIGHT):
-            print(f"wrote {capture(theme, repositories, config_dir)}")
-            print(f"wrote {capture_github(theme, config_dir)}")
-            print(f"wrote {capture_binary(theme, base)}")
-            print(f"wrote {capture_discover(theme, base)}")
-            print(f"wrote {capture_conflict(theme, base)}")
-            print(f"wrote {capture_signin(theme)}")
+            written.append(capture(theme, repositories, config_dir))
+            written.append(capture_github(theme, config_dir))
+            written.append(capture_binary(theme, base))
+            written.append(capture_discover(theme, base))
+            written.append(capture_conflict(theme, base))
+            written.append(capture_signin(theme))
+            written.append(capture_settings(theme))
+            written.append(capture_pull_all(theme, base))
+            written.append(capture_revert(theme, base))
+            written.append(capture_link_remote(theme, base))
+            written.append(capture_tags(theme, base))
+            written.append(capture_blocks(theme, base, repositories))
+            written.extend(capture_menus(theme, base, repositories))
+    return written
+
+
+def main(argv: list[str] | None = None) -> int:
+    """
+    Generates every screenshot, in every language or in the ones named.
+
+    Args:
+        argv: Command line arguments. ``--language de`` narrows it down.
+
+    Returns:
+        int: Process exit code.
+    """
+
+    parser = argparse.ArgumentParser(description="Regenerate the manual's screenshots")
+    parser.add_argument(
+        "--language",
+        action="append",
+        metavar="CODE",
+        help="only this language, may be given more than once",
+    )
+    args = parser.parse_args(argv)
+
+    if shutil.which("git") is None:
+        print("git is required to build the demo repositories", file=sys.stderr)
+        return 2
+
+    known = [code for code, _label in i18n.available_languages()]
+    wanted = args.language or known
+    unknown = [code for code in wanted if code not in known]
+    if unknown:
+        print(f"no such language: {', '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    for language in wanted:
+        for target in capture_all(language):
+            print(f"wrote {target}")
     return 0
 
 

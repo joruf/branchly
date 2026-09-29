@@ -245,6 +245,18 @@ zum Intervall und zum Start. Beides ist gebremst: der Fokus über eine Drossel a
 zwei Sekunden, der Projektwechsel über einen 300-ms-Timer, der bei jedem weiteren
 Wechsel neu anläuft.
 
+## Weniger Knöpfe, mehr Menü
+
+Die Kopfzeile eines Projekts trägt nur noch *Senden*. Neuer Branch, Branch
+wechseln, Server prüfen und Holen stehen ausschließlich im Branch-Menü, *Alle
+Projekte prüfen* und *aktualisieren* ausschließlich unter der Projektliste. Zwei
+Orte für dieselbe Aktion sind zwei Orte, die korrekt bleiben müssen, und der
+zweite gewinnt nichts.
+
+Die Erklärungen sind mitgewandert: die Tooltips hängen jetzt an den
+Menüeinträgen, und die Anzahl wartender Commits steht am Holen-Eintrag, den
+`_refresh_branch_menu()` beim Öffnen beschriftet.
+
 ## Blockauswahl (`ui/diff_view.py`, `ui/changes_panel.py`)
 
 Über jedem Block der Gegenüberstellung steht ein Häkchen, gezeichnet als Link im

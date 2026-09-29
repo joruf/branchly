@@ -240,7 +240,9 @@ the same on a developer machine and on a bare CI runner.
 
 ## Documentation
 
-- [`docs/MANUAL.md`](docs/MANUAL.md): how to use it
+- [`docs/MANUAL.en.md`](docs/MANUAL.en.md): how to use it, with a picture of
+  every feature. The German one is [`docs/MANUAL.de.md`](docs/MANUAL.de.md);
+  `scripts/build_manuals.py` rebuilds both and their screenshots
 - [`docs/TECHNICAL.md`](docs/TECHNICAL.md): architecture and the reasoning behind it
 - [`docs/UI_OVERVIEW.md`](docs/UI_OVERVIEW.md): what each panel is for
 

@@ -24,12 +24,19 @@ GIT_TIMEOUT_CLONE = 900
 # lines freezes the view and tells the user nothing they can act on.
 DIFF_MAX_LINES = 4000
 
-# Unchanged lines shown around each change. The narrow value is git's own
-# default and shows just enough to place a change. The wide one is what
-# "show unchanged text" switches to: enough to read around a change without
-# turning the panel into a file viewer.
-DIFF_CONTEXT_LINES = 3
-DIFF_WIDE_CONTEXT_LINES = 20
+# Unchanged lines shown around each change when the panel is not showing the
+# whole file. Twice git's own default of three, because three is enough to place
+# a change and not enough to read it in context. Adjustable in the settings,
+# within these bounds: none at all is a valid answer, and past a hundred the
+# switch for the whole file is the better tool.
+DIFF_CONTEXT_LINES = 6
+DIFF_CONTEXT_MIN = 0
+DIFF_CONTEXT_MAX = 100
+
+# What "show unchanged text" asks git for. There is no flag for "all of it", so
+# this is simply a number no real source file reaches. The renderer's own
+# ``DIFF_MAX_LINES`` still caps what ends up on screen.
+DIFF_WHOLE_FILE_CONTEXT = 1_000_000
 
 # Commits loaded per graph page.
 GRAPH_PAGE_SIZE = 400

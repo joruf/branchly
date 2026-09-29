@@ -715,6 +715,37 @@ Der Einstellungsdialog kennt das Feld nicht mehr und gibt `theme` unverändert a
 `self._original` zurück. Ohne das würde ein Besuch im Dialog die Wahl aus dem
 Menü mit dem Stand überschreiben, den der Dialog beim Öffnen gesehen hat.
 
+### Handbücher bauen
+
+`scripts/build_manuals.py` erzeugt jedes Bild in jeder Sprache und prüft danach,
+ob die Handbücher noch dazu passen. Zum Aufrufen:
+
+```
+scripts/build_manuals.py                 alles
+scripts/build_manuals.py --language de   eine Sprache
+scripts/build_manuals.py --check         nur prüfen, nichts erzeugen
+```
+
+Screenshots verrotten leise: nichts stürzt ab, kein Test wird rot, das Handbuch
+beschreibt nur irgendwann ein Programm, das es nicht mehr gibt. Die einzige
+Gegenwehr ist, das Erneuern billig zu machen, und die Arten des Auseinanderdriftens
+für einen Test sichtbar:
+
+- Ein Bild, auf das gezeigt wird und das es nicht gibt.
+- Ein Bild, das erzeugt und nie benutzt wird. Das heißt, eine Funktion wurde
+  fotografiert und nie beschrieben.
+- Ein Bild aus der falschen Sprache.
+- Abschnitte, die es in einer Sprache gibt und in der anderen nicht.
+- Eine Sprache ohne Handbuch.
+
+`tests/test_manuals.py` hält die Prüfungen fest. Die Prüfungen selbst stehen im
+Skript, weil man sie beim Schreiben von Hand laufen lassen können muss.
+
+Der Demo-Datensatz ist erfunden: `Alex Berg`, `example-team`, Projekte wie
+`invoicing` und `sitemap`, Kategorien in der Sprache des Bildes. Ein Handbuch mit
+den echten Projekten seines Autors ist kein Handbuch, sondern ein Blick in
+dessen Rechner.
+
 ### Zurücksetzen
 
 Die einzige Operation, die nichts rückgängig machen kann. Ein Commit liegt im

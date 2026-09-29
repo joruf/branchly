@@ -37,7 +37,13 @@ from PySide6.QtWidgets import (
 import i18n
 from config.app_settings import DIFF_SIDE_BY_SIDE, DIFF_UNIFIED, normalize_diff_mode
 from config.theme import ThemeColors, get_theme_colors
-from constants import DIFF_CONTEXT_LINES, DIFF_MAX_LINE_LENGTH, DIFF_WIDE_CONTEXT_LINES
+from constants import (
+    DIFF_CONTEXT_LINES,
+    DIFF_CONTEXT_MAX,
+    DIFF_CONTEXT_MIN,
+    DIFF_MAX_LINE_LENGTH,
+    DIFF_WHOLE_FILE_CONTEXT,
+)
 from gitops import blobs
 from gitops.blobs import BinaryComparison, BlobFacts
 from gitops.diff import (
@@ -1103,6 +1109,7 @@ class DiffView(QWidget):
         ignore_whitespace: bool,
         word_level: bool,
         full_context: bool = False,
+        context_lines: int = DIFF_CONTEXT_LINES,
         parent: QWidget | None = None,
     ) -> None:
         """
@@ -1110,12 +1117,14 @@ class DiffView(QWidget):
             mode: Initial layout.
             ignore_whitespace: Whether whitespace-only changes start hidden.
             word_level: Whether intra-line highlighting starts on.
-            full_context: Whether the unchanged text around a change is shown.
+            full_context: Whether the whole file is shown around the changes.
+            context_lines: Unchanged lines to show when it is not.
             parent: Parent widget.
         """
 
         super().__init__(parent)
         self._mode = normalize_diff_mode(mode)
+        self._context_lines = max(DIFF_CONTEXT_MIN, min(DIFF_CONTEXT_MAX, int(context_lines)))
         self._diff: FileDiff | None = None
         self._many: list[FileDiff] = []
         self._path = ""
@@ -1307,10 +1316,24 @@ class DiffView(QWidget):
         Returns how many unchanged lines git should put around each change.
 
         Returns:
-            int: The wide value when the option is on, git's default otherwise.
+            int: A number no file reaches when the whole file is wanted, the
+                configured amount otherwise.
         """
 
-        return DIFF_WIDE_CONTEXT_LINES if self.full_context else DIFF_CONTEXT_LINES
+        return DIFF_WHOLE_FILE_CONTEXT if self.full_context else self._context_lines
+
+    def set_context_lines(self, count: int) -> None:
+        """
+        Sets how much unchanged text to show when not showing all of it.
+
+        Args:
+            count: Lines above and below each change.
+
+        Returns:
+            None
+        """
+
+        self._context_lines = max(DIFF_CONTEXT_MIN, min(DIFF_CONTEXT_MAX, int(count)))
 
     @property
     def target(self) -> str:

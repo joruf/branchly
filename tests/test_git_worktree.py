@@ -389,12 +389,17 @@ class StageTests(unittest.TestCase):
             self.assertTrue(stage_mod.restore_committed(repo.root, ["-x"]).failed)
 
     def test_stage_a_single_hunk(self) -> None:
+        # Forty lines, changed at the very top and the very bottom, so the two
+        # stay separate blocks whatever the configured amount of surrounding
+        # text happens to be.
+        original = [f"line {number:02d}" for number in range(1, 41)]
+        edited = list(original)
+        edited[0] = "FIRST"
+        edited[-1] = "LAST"
+
         with temp_repo() as repo:
-            repo.commit_file("a.txt", "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n")
-            repo.write(
-                "a.txt",
-                "ONE\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n",
-            )
+            repo.commit_file("a.txt", "\n".join(original) + "\n")
+            repo.write("a.txt", "\n".join(edited) + "\n")
             parsed = diff_mod.file_diff(repo.root, "a.txt", diff_mod.TARGET_WORKTREE_HEAD)
             self.assertEqual(2, len(parsed.hunks), "expected two separate hunks")
             result = stage_mod.stage_hunk(repo.root, parsed, parsed.hunks[0])
