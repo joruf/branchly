@@ -702,6 +702,10 @@ QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
     background-color: {c.accent};
     border-color: {c.accent};
 }}
+QCheckBox::indicator:indeterminate {{
+    background-color: {c.warning};
+    border-color: {c.warning};
+}}
 QCheckBox:disabled, QRadioButton:disabled {{
     color: {c.disabled_text};
 }}

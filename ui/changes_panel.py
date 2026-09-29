@@ -118,6 +118,33 @@ class StatusGlyphDelegate(QStyledItemDelegate):
         return QSize(size.width() + GLYPH_WIDTH, size.height())
 
 
+class SelectAllBox(QCheckBox):
+    """
+    The one tick that stands for all of them.
+
+    Three states rather than two, because a list where some files are ticked and
+    some are not is a third thing and has to look like one. Qt draws all three
+    and the theme colours them, which is also what makes this match the ticks on
+    the files below it: the same control means the same thing.
+
+    Qt's own tristate box cycles unchecked, partly, checked as you click, which
+    is wrong here. Partly checked is something the file list produces, never
+    something anybody asks for. So a click means "all of it" unless everything
+    is already in, and then it means "none of it".
+    """
+
+    def nextCheckState(self) -> None:  # noqa: N802 - Qt override
+        """
+        Decides what a click does.
+
+        Returns:
+            None
+        """
+
+        everything = self.checkState() == Qt.CheckState.Checked
+        self.setCheckState(Qt.CheckState.Unchecked if everything else Qt.CheckState.Checked)
+
+
 class ChangesPanel(QWidget):
     """
     Lists changed files and collects a commit.
@@ -159,18 +186,14 @@ class ChangesPanel(QWidget):
         layout.setSpacing(0)
 
         self._header = SectionHeader(i18n.t("changes.title"), self)
-        self._selected_label = QLabel("", self._header)
-        self._selected_label.setToolTip(i18n.t("tip.selected_count"))
-        self._selected_label.setObjectName("Muted")
-        self._header.add_widget(self._selected_label)
-        self._select_all = QPushButton(i18n.t("changes.select_all"), self._header)
+        # One tick instead of the two buttons there used to be. It carries the
+        # count as its own label, which makes the whole line a click target and
+        # saves the reader looking in two places for one fact.
+        self._select_all = SelectAllBox("", self._header)
+        self._select_all.setTristate(True)
         self._select_all.setToolTip(i18n.t("tip.select_all"))
-        self._select_all.clicked.connect(lambda: self._set_all_checked(True))
+        self._select_all.clicked.connect(self._on_select_all_clicked)
         self._header.add_widget(self._select_all)
-        self._select_none = QPushButton(i18n.t("changes.select_none"), self._header)
-        self._select_none.setToolTip(i18n.t("tip.select_none"))
-        self._select_none.clicked.connect(lambda: self._set_all_checked(False))
-        self._header.add_widget(self._select_none)
         layout.addWidget(self._header)
 
         self._conflict_notice = InlineMessage(
@@ -525,6 +548,23 @@ class ChangesPanel(QWidget):
 
     # ------------------------------------------------------------------- events
 
+    def _on_select_all_clicked(self) -> None:
+        """
+        Applies what the header tick was just set to.
+
+        Returns:
+            None
+        """
+
+        wanted = self._select_all.checkState() == Qt.CheckState.Checked
+        if wanted:
+            # "All of it" means all of it: a file that was only partly in goes in
+            # whole, or the tick would claim something the commit does not do.
+            for path in list(self._partial):
+                self.partial_cleared.emit(path)
+            self._partial.clear()
+        self._set_all_checked(wanted)
+
     def _set_all_checked(self, checked: bool) -> None:
         """
         Ticks or unticks every tickable row.
@@ -656,12 +696,29 @@ class ChangesPanel(QWidget):
             if (item := self._list.item(index)) is not None
             and bool(item.flags() & Qt.ItemFlag.ItemIsUserCheckable)
         )
+        chosen = len(self.checked_paths())
+        self._select_all.setVisible(bool(total))
         if not total:
-            self._selected_label.setText("")
+            self._select_all.setText("")
             return
-        self._selected_label.setText(
-            i18n.t("changes.selected_count", selected=len(self.checked_paths()), total=total)
+
+        self._select_all.setText(
+            i18n.t("changes.selected_count", selected=chosen, total=total)
         )
+        if chosen == 0:
+            state = Qt.CheckState.Unchecked
+        elif chosen == total and not self._partial:
+            state = Qt.CheckState.Checked
+        else:
+            # Either some files are out, or one is only partly in. Both are the
+            # same answer to "is all of this going into the commit": no, some.
+            state = Qt.CheckState.PartiallyChecked
+
+        # Set, not clicked: this follows the list rather than driving it, and
+        # without the guard it would drive it straight back.
+        self._select_all.blockSignals(True)
+        self._select_all.setCheckState(state)
+        self._select_all.blockSignals(False)
 
     def _update_commit_button(self) -> None:
         """
