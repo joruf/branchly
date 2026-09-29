@@ -322,21 +322,29 @@ class MainWindowSmokeTests(unittest.TestCase):
                 finally:
                     window.close()
 
-    def test_the_bulk_pull_is_offered_in_the_menu(self) -> None:
+    def test_the_bulk_actions_live_under_the_project_list(self) -> None:
+        # They used to be in the menu as well. Two places to keep correct for
+        # two buttons that are always on screen anyway.
         import tempfile
 
-        from PySide6.QtWidgets import QMenu
+        from PySide6.QtWidgets import QMenu, QPushButton
 
         with temp_repo() as repo:
             with tempfile.TemporaryDirectory() as config:
                 window = self._window(repo.root, config)
                 try:
-                    labels = [
+                    menu_labels = [
                         action.text()
                         for menu in window.menuBar().findChildren(QMenu)
                         for action in menu.actions()
                     ]
-                    self.assertIn(i18n.t("sidebar.pull_all"), labels)
+                    button_labels = [
+                        button.text() for button in window._sidebar.findChildren(QPushButton)
+                    ]
+                    for key in ("sidebar.pull_all", "sidebar.check_all"):
+                        with self.subTest(action=key):
+                            self.assertIn(i18n.t(key), button_labels)
+                            self.assertNotIn(i18n.t(key), menu_labels)
                 finally:
                     window.close()
 

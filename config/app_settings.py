@@ -16,6 +16,7 @@ from typing import Any
 
 import paths
 from config.theme import DEFAULT_THEME, normalize_theme_name
+from constants import DIFF_CONTEXT_LINES, DIFF_CONTEXT_MAX, DIFF_CONTEXT_MIN
 from models.sort import DEFAULT_SORT_MODE, normalize_sort_mode
 
 DIFF_SIDE_BY_SIDE = "side_by_side"
@@ -36,6 +37,26 @@ MAX_AUTO_CHECK_MINUTES = 1440
 # hand-edited, with 0 meaning "on every start".
 DEFAULT_UPDATE_CHECK_HOURS = 24
 MAX_UPDATE_CHECK_HOURS = 720
+
+
+def _clamped_context(value: object) -> int:
+    """
+    Keeps the amount of surrounding text inside what is useful.
+
+    Read from a file a person may have edited, so anything at all can arrive
+    here. Nothing at all is a valid answer; past the upper bound the switch for
+    the whole file is the better tool.
+
+    Args:
+        value: The stored value, of any type.
+
+    Returns:
+        int: A usable number of lines.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return DIFF_CONTEXT_LINES
+    return max(DIFF_CONTEXT_MIN, min(DIFF_CONTEXT_MAX, int(value)))
 
 
 def normalize_diff_mode(mode: str | None) -> str:
@@ -176,8 +197,9 @@ class AppSettings:
         diff_mode: Default diff layout.
         diff_ignore_whitespace: Whether diffs ignore whitespace-only changes.
         diff_word_level: Whether changed lines get intra-line word highlighting.
-        diff_full_context: Whether the unchanged text around a change is shown
-            as well, up to twenty lines above and below it.
+        diff_full_context: Whether the whole file is shown around the changes.
+        diff_context_lines: Unchanged lines shown above and below each change
+            while the whole file is not being shown.
         github_enabled: Whether GitHub API features are active.
         show_avatars: Whether author avatars are downloaded and shown.
         confirm_destructive: Whether destructive actions require confirmation.
@@ -205,6 +227,7 @@ class AppSettings:
     diff_ignore_whitespace: bool = False
     diff_word_level: bool = True
     diff_full_context: bool = False
+    diff_context_lines: int = DIFF_CONTEXT_LINES
     github_enabled: bool = True
     show_avatars: bool = True
     confirm_destructive: bool = True
@@ -236,6 +259,7 @@ class AppSettings:
             diff_ignore_whitespace=bool(self.diff_ignore_whitespace),
             diff_word_level=bool(self.diff_word_level),
             diff_full_context=bool(self.diff_full_context),
+            diff_context_lines=_clamped_context(self.diff_context_lines),
             github_enabled=bool(self.github_enabled),
             show_avatars=bool(self.show_avatars),
             confirm_destructive=bool(self.confirm_destructive),

@@ -20,6 +20,8 @@ Links die **Projektliste**, in der Mitte **Änderungen / Graph / Pull Requests**
 rechts die **Gegenüberstellung**. Die Trennlinien lassen sich verschieben; die
 Fenstergröße und -position werden beim Beenden gespeichert.
 
+![Das Hauptfenster](screenshots/de/main-window-dark.png)
+
 ### Fenstergröße
 
 Das Fenster lässt sich auf etwa 930 Pixel Breite ziehen und behält dabei alle
@@ -43,6 +45,8 @@ diesen Fällen, was fehlt.
 ## Projekte
 
 ### Hinzufügen und Klonen
+
+![Das Projekt-Menü](screenshots/de/menu-project-dark.png)
 
 - **Hinzufügen** wählt einen Ordner, in dem schon ein Git-Projekt liegt. Du darfst
   auch einen Unterordner wählen, Branchly findet den obersten Ordner selbst.
@@ -104,7 +108,7 @@ verändert, und ein Ordner ohne Leseberechtigung wird stillschweigend übergange
 Über *Einsortieren unter* landen alle übernommenen Projekte gleich in einer
 Kategorie.
 
-![Repositories suchen](screenshots/discover-dark.png)
+![Repositories suchen](screenshots/de/discover-dark.png)
 
 ### Kategorien
 
@@ -182,7 +186,8 @@ Netzanfragen gegen ein Limit, für Daten, die sich in Minuten statt in Sekunden
 
 Von Hand geht es weiterhin so:
 
-- **Alle Projekte prüfen** unten in der Liste
+- **Alle Projekte prüfen** unten in der Liste, direkt über *Alle Projekte
+  aktualisieren*. Beide stehen nur dort und nicht zusätzlich im Menü
 - **Dieses Projekt jetzt prüfen** im Rechtsklickmenü
 - **Automatisch** in Einstellungen → Automatische Prüfung: aus, 5, 15, 30, 60
   oder 120 Minuten
@@ -194,10 +199,12 @@ angesehen.
 
 ## Alle Projekte auf einmal aktualisieren
 
-**Alle Projekte aktualisieren** unten in der Liste (oder *Projekt → Alle Projekte
-aktualisieren*) holt für jedes Projekt die Änderungen vom Server. Ein Fenster sagt
+**Alle Projekte aktualisieren** unten in der Liste holt für jedes Projekt die
+Änderungen vom Server. Ein Fenster sagt
 vorher, was passiert, zeigt den Fortschritt und danach für **jedes** Projekt
 einzeln, was daraus geworden ist.
+
+![Alle Projekte aktualisieren](screenshots/de/pull-all-dark.png)
 
 Der Vorgang **spult nur vor**. Er führt nichts zusammen, überschreibt nichts und
 kann keinen Konflikt hinterlassen. Was nicht eindeutig vorzuspulen ist, bleibt
@@ -237,6 +244,8 @@ Commit, statt einen neuen anzulegen.
 
 Manchmal stecken in einer Datei zwei Dinge, die nicht in denselben Commit
 gehören. Über jedem Block in der Gegenüberstellung steht deshalb ein Häkchen:
+
+![Ein Block bleibt draußen](screenshots/de/blocks-dark.png)
 
 | Anzeige | Bedeutung |
 |---|---|
@@ -323,16 +332,20 @@ Versionskontrolle genommen wird.
 
 Zwei Einstellungen, unabhängig voneinander:
 
+![Gegenüberstellung, Datei mit Zeilen](screenshots/de/main-window-dark.png)
+
 **Darstellung**: Nebeneinander oder Eine Spalte, „Abstände ignorieren",
 „Geänderte Wörter hervorheben", „Unveränderten Text zeigen".
 
-**Unveränderten Text zeigen** blendet ein, was um eine Änderung herum gleich
-geblieben ist, höchstens 20 Zeilen darüber und 20 darunter. Dieser Text steht in
-einem ruhigen Grau, gut lesbar, aber deutlich zurückgenommen, damit die Änderung
-selbst das Auffällige bleibt. Ohne die Option sind es drei Zeilen, was reicht, um
-eine Änderung einzuordnen, aber nicht, um sie im Zusammenhang zu lesen. Die
-Begrenzung auf 20 Zeilen ist Absicht: bei einer langen Datei hat der Rest mit der
-Änderung nichts zu tun.
+**Unveränderten Text zeigen** blendet die **ganze Datei** ein, nicht nur die
+Umgebung der Änderungen. Dieser Text steht in einem ruhigen Grau, gut lesbar,
+aber deutlich zurückgenommen, damit die Änderung selbst das Auffällige bleibt.
+
+Ohne die Option siehst du sechs Zeilen über und sechs unter jeder Änderung.
+Git selbst zeigt drei, was reicht, um eine Änderung einzuordnen, aber nicht, um
+sie im Zusammenhang zu lesen. Wie viele es sein sollen, stellst du unter
+*Einstellungen → Gegenüberstellung* ein, von null bis hundert Zeilen. Null zeigt
+ausschließlich die geänderten Zeilen.
 
 Bei **Nebeneinander** stehen zwei getrennte Ansichten: links der alte Stand,
 rechts der neue. Über jeder der beiden steht, welche sie ist, nämlich „Alte
@@ -364,6 +377,8 @@ Nicht jede Datei besteht aus Zeilen, die sich vergleichen lassen. Gegenübergest
 werden sie trotzdem, denn eine neue Fassung ist eine Änderung, und „das ist keine
 Textdatei" sagt darüber nichts aus.
 
+![Zwei Fassungen eines Bildes](screenshots/de/binary-comparison-dark.png)
+
 **Bilder** stehen als Vorher und Nachher nebeneinander, beide auf Fenstergröße
 verkleinert, wenn sie zu groß sind.
 
@@ -394,6 +409,8 @@ Vorschau ausgelassen, die Größe und das Datum stehen trotzdem da.
 Jede Linie ist ein Branch, jeder Punkt ein gespeicherter Stand, der neueste oben.
 Der Ring markiert, wo du stehst. In Klammern stehen Branch- und Tag-Namen.
 
+![Der Graph](screenshots/de/graph-dark.png)
+
 Ein Klick zeigt rechts **alle Änderungen dieses Commits**. Rechtsklick:
 
 | Aktion | Wirkung |
@@ -416,6 +433,8 @@ Arbeit endgültig vernichtet. Sie fragt in klaren Worten nach.
 Wenn beim Holen oder Zusammenführen dieselben Stellen von beiden Seiten geändert
 wurden, erscheint oben ein Hinweis mit **„Los geht's"**.
 
+![Der Konflikt-Assistent](screenshots/de/conflict-assistant-dark.png)
+
 Der Assistent geht die Stellen einzeln durch:
 
 - Kopf: „Entscheidung 2 von 5", Dateiname, Grund in Klartext
@@ -435,9 +454,13 @@ eigene gespeicherte Arbeit bleibt dabei unberührt.
 
 ## Branches und Server
 
-Oben rechts: **Neuer Branch**, **Branch wechseln**, **Server prüfen**,
-**Änderungen vom Server holen**, **Änderungen zum Server senden**. Auf den
-letzten beiden steht die Anzahl, sobald etwas anliegt.
+Oben rechts im Projekt steht nur noch **Änderungen zum Server senden**, mit der
+Anzahl, sobald etwas anliegt. Alles Übrige steht im Menü unter *Branch*: neuer
+Branch, Branch wechseln, umbenennen, löschen, Server prüfen, Änderungen vom
+Server holen, und die selteneren Fälle darunter. Auch dort steht die Anzahl am
+Holen-Eintrag, sobald etwas anliegt.
+
+![Das Branch-Menü](screenshots/de/menu-branch-dark.png)
 
 Ein Branchname wird geprüft, bevor Git ihn sieht. Aus „Fix login bug" macht
 Branchly `fix-login-bug`.
@@ -496,9 +519,13 @@ sind. Anlegen heftet den Namen an den Stand, den du gerade ausgecheckt hast.
 Löschen entfernt ihn nur von diesem Rechner: ein Tag, der schon auf einem Server
 liegt, bleibt dort, bis ihn dort jemand entfernt.
 
+![Die Tag-Liste](screenshots/de/tags-dark.png)
+
 ### Änderungen zurücksetzen
 
 Zwei Wege, beide enden im selben Fenster:
+
+![Was zurückgesetzt wird](screenshots/de/revert-dark.png)
 
 - **Rechtsklick auf ein Projekt** in der Liste links, dann *Alle Änderungen
   zurücksetzen*. Betrifft alles, was in diesem Projekt noch nicht gespeichert
@@ -530,9 +557,12 @@ Liegt ein Projekt bisher nur auf deinem Rechner, steht im Rechtsklickmenü der
 Projektliste **Mit Online-Repository verbinden**. Hat es schon eine Adresse,
 heißt der Eintrag stattdessen *Online-Repository ändern*.
 
+![Beide Seiten haben eine eigene Historie](screenshots/de/link-remote-dark.png)
+
 Branchly schlägt eine Adresse vor, abgeleitet aus dem Ordnernamen und dem Konto,
-zu dem deine übrigen Projekte gehören. Für den Ordner `ebay-listing` also
-`https://github.com/joruf/ebay-listing.git`. Du kannst sie überschreiben.
+zu dem deine übrigen Projekte gehören. Für den Ordner `rechnungen` unter dem
+Konto `beispiel-team` also `https://github.com/beispiel-team/rechnungen.git`.
+Du kannst sie überschreiben.
 
 **Server fragen, was dort liegt** sieht nach, bevor irgendetwas geschrieben wird.
 Je nachdem, was gefunden wird, sagt Branchly etwas anderes:
@@ -596,13 +626,15 @@ Zugriffstoken (Einstellungen → GitHub). Ohne Token oder bei GitLab und selbst
 gehosteten Servern sagt das Panel das ausdrücklich, alles andere funktioniert
 normal weiter.
 
+![Der GitHub-Reiter](screenshots/de/github-panel-dark.png)
+
 ### Anmelden
 
 In der Menüleiste unter *Konto* steht **Bei GitHub anmelden**. Darunter steht
 immer, wer gerade angemeldet ist, und **Abmelden** entfernt das Token wieder vom
 Rechner. Auf dem Server ändert sich dabei nichts.
 
-![Anmelden](screenshots/signin-dark.png)
+![Anmelden](screenshots/de/signin-dark.png)
 
 Zwei Wege, beide enden im selben Ergebnis, nämlich einem Token im
 Schlüsselspeicher des Systems:
@@ -794,8 +826,10 @@ abschalten. Wie oft sie höchstens läuft, steht als `update_check_hours` in
 |---|---|
 | Allgemein | Sprache, Standard-Sortierung, Nachfragen vor Verlust |
 | Automatische Prüfung | Intervall, ob dabei die Server gefragt werden, Update-Suche beim Start |
-| Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung |
+| Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung, unveränderter Text und wie viel davon |
 | GitHub | Token, GitHub-Funktionen ein/aus, Autorenbilder |
+
+![Die Einstellungen](screenshots/de/settings-dark.png)
 
 Ein Sprachwechsel greift beim nächsten Start.
 

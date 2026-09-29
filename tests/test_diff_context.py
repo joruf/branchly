@@ -34,16 +34,24 @@ except ImportError:  # pragma: no cover - PySide6 missing is a valid environment
     QT_AVAILABLE = False
 
 from config.theme import THEME_DARK, get_theme_colors
-from constants import DIFF_CONTEXT_LINES, DIFF_WIDE_CONTEXT_LINES
+from constants import (
+    DIFF_CONTEXT_LINES,
+    DIFF_CONTEXT_MAX,
+    DIFF_CONTEXT_MIN,
+    DIFF_WHOLE_FILE_CONTEXT,
+)
 from gitops import diff as diff_mod
 from gitops.diff import LINE_CONTEXT
 from tests.support import requires_git
 
 requires_qt = unittest.skipUnless(QT_AVAILABLE, "PySide6 is not installed")
 
-# Long enough that twenty lines of context is a window into the file, not the
-# whole file: a change in the middle must leave lines outside the window.
+# Long enough that the configured amount of context is a window into the file
+# rather than all of it: a change in the middle must leave lines outside.
 FILE_LINES = 120
+# A deliberately different number from the default, so a test that passes
+# only because both happen to be six would fail here.
+WIDE_CONTEXT = 20
 CHANGED_LINE = 60
 
 
@@ -120,20 +128,32 @@ class ContextWindowTests(unittest.TestCase):
     def test_the_wide_setting_reaches_twenty_lines_either_way(self) -> None:
         with TemporaryDirectory() as base:
             repo = build_repo(Path(base) / "work")
-            diff = diff_mod.file_diff(repo, "notes.txt", context_lines=DIFF_WIDE_CONTEXT_LINES)
+            diff = diff_mod.file_diff(repo, "notes.txt", context_lines=WIDE_CONTEXT)
             numbers = context_line_numbers(diff)
-            self.assertEqual(CHANGED_LINE - DIFF_WIDE_CONTEXT_LINES, min(numbers))
-            self.assertEqual(CHANGED_LINE + DIFF_WIDE_CONTEXT_LINES, max(numbers))
+            self.assertEqual(CHANGED_LINE - WIDE_CONTEXT, min(numbers))
+            self.assertEqual(CHANGED_LINE + WIDE_CONTEXT, max(numbers))
 
     def test_it_is_a_window_not_the_whole_file(self) -> None:
         # Twenty lines above and below, not "everything". The rest of a long file
         # has nothing to do with the change.
         with TemporaryDirectory() as base:
             repo = build_repo(Path(base) / "work")
-            diff = diff_mod.file_diff(repo, "notes.txt", context_lines=DIFF_WIDE_CONTEXT_LINES)
+            diff = diff_mod.file_diff(repo, "notes.txt", context_lines=WIDE_CONTEXT)
             shown = len(context_line_numbers(diff))
-            self.assertEqual(DIFF_WIDE_CONTEXT_LINES * 2, shown)
+            self.assertEqual(WIDE_CONTEXT * 2, shown)
             self.assertLess(shown, FILE_LINES)
+
+    def test_the_whole_file_really_means_the_whole_file(self) -> None:
+        with TemporaryDirectory() as base:
+            repo = build_repo(Path(base) / "work")
+            diff = diff_mod.file_diff(
+                repo, "notes.txt", context_lines=DIFF_WHOLE_FILE_CONTEXT
+            )
+            numbers = context_line_numbers(diff)
+            # Every line of the file except the changed one.
+            self.assertEqual(1, min(numbers))
+            self.assertEqual(FILE_LINES, max(numbers))
+            self.assertEqual(FILE_LINES - 1, len(numbers))
 
     def test_a_change_near_the_top_simply_stops_at_the_top(self) -> None:
         with TemporaryDirectory() as base:
@@ -143,7 +163,7 @@ class ContextWindowTests(unittest.TestCase):
             lines[1] = "line 002 changed"
             (repo / "notes.txt").write_text("\n".join(lines), encoding="utf-8")
 
-            diff = diff_mod.file_diff(repo, "notes.txt", context_lines=DIFF_WIDE_CONTEXT_LINES)
+            diff = diff_mod.file_diff(repo, "notes.txt", context_lines=WIDE_CONTEXT)
             self.assertEqual(1, min(context_line_numbers(diff)))
 
     def test_the_whole_commit_gets_the_same_window(self) -> None:
@@ -166,10 +186,10 @@ class ContextWindowTests(unittest.TestCase):
                 )
 
             diffs = diff_mod.commit_diff(
-                repo, "HEAD", context_lines=DIFF_WIDE_CONTEXT_LINES
+                repo, "HEAD", context_lines=WIDE_CONTEXT
             )
             self.assertEqual(1, len(diffs))
-            self.assertEqual(DIFF_WIDE_CONTEXT_LINES * 2, len(context_line_numbers(diffs[0])))
+            self.assertEqual(WIDE_CONTEXT * 2, len(context_line_numbers(diffs[0])))
 
 
 @requires_qt
@@ -210,7 +230,7 @@ class QuietRenderingTests(unittest.TestCase):
         self.assertEqual(colors.diff_removed_bg, quiet.diff_removed_bg)
         self.assertEqual(colors.text, quiet.text)
 
-    def test_the_panel_asks_git_for_the_wider_window(self) -> None:
+    def test_the_panel_asks_git_for_the_whole_file(self) -> None:
         from config.app_settings import DIFF_SIDE_BY_SIDE
         from ui.diff_view import DiffView
 
@@ -219,8 +239,37 @@ class QuietRenderingTests(unittest.TestCase):
 
         self.assertEqual(DIFF_CONTEXT_LINES, view.context_lines)
         view._context.setChecked(True)
-        self.assertEqual(DIFF_WIDE_CONTEXT_LINES, view.context_lines)
+        # There is no flag for "all of it", so the amount asked for is simply a
+        # number no source file reaches.
+        self.assertEqual(DIFF_WHOLE_FILE_CONTEXT, view.context_lines)
         self.assertTrue(view.full_context)
+
+    def test_the_amount_of_surrounding_text_can_be_set(self) -> None:
+        from config.app_settings import DIFF_SIDE_BY_SIDE
+        from ui.diff_view import DiffView
+
+        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, False, context_lines=12)
+        self.addCleanup(view.deleteLater)
+        self.assertEqual(12, view.context_lines)
+
+        view.set_context_lines(0)
+        self.assertEqual(0, view.context_lines)
+
+    def test_a_nonsense_amount_is_brought_back_into_range(self) -> None:
+        from config.app_settings import DIFF_SIDE_BY_SIDE
+        from ui.diff_view import DiffView
+
+        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, False)
+        self.addCleanup(view.deleteLater)
+
+        view.set_context_lines(-5)
+        self.assertEqual(DIFF_CONTEXT_MIN, view.context_lines)
+        view.set_context_lines(9999)
+        self.assertEqual(DIFF_CONTEXT_MAX, view.context_lines)
+
+    def test_the_default_is_twice_gits_own(self) -> None:
+        # Git shows three, which places a change and does not let you read it.
+        self.assertEqual(6, DIFF_CONTEXT_LINES)
 
     def test_toggling_it_asks_for_a_fresh_diff(self) -> None:
         # The extra lines are not in the diff already in memory, so a redraw
@@ -243,7 +292,7 @@ class QuietRenderingTests(unittest.TestCase):
         view = DiffView(DIFF_SIDE_BY_SIDE, False, True, True)
         self.addCleanup(view.deleteLater)
         self.assertTrue(view.full_context)
-        self.assertEqual(DIFF_WIDE_CONTEXT_LINES, view.context_lines)
+        self.assertEqual(DIFF_WHOLE_FILE_CONTEXT, view.context_lines)
 
     def test_the_rendered_unchanged_lines_carry_the_quiet_colour(self) -> None:
         from gitops.diff import parse_unified
