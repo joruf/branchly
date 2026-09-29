@@ -526,7 +526,6 @@
   "update.archive_broken": "Das geladene Archiv ist unbrauchbar",
   "update.write_failed": "Die neuen Dateien konnten nicht geschrieben werden",
   "about.version": "Version {version}",
-  "about.description": "Ein ruhiger Git-Client: Projekte in Kategorien, ein klares Bild der Änderungen, und Zusammenführungen, die man versteht.",
   "about.credits": "Baut auf Git und Qt auf.",
   "action.delete": "Löschen",
   "action.edit": "Bearbeiten…",

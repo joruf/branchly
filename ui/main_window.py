@@ -16,6 +16,7 @@ Two rules it enforces on behalf of the whole program:
 
 from __future__ import annotations
 
+import html
 import time
 from pathlib import Path
 
@@ -45,9 +46,17 @@ from config.theme import (
     THEME_LIGHT,
     available_themes,
     build_application_stylesheet,
+    get_theme_colors,
     set_current_theme,
 )
-from constants import APP_NAME, APP_VERSION
+from constants import (
+    APP_AUTHOR,
+    APP_AUTHOR_GITHUB,
+    APP_COMPANY,
+    APP_COMPANY_URL,
+    APP_NAME,
+    APP_VERSION,
+)
 from github_api import token as token_store
 from github_api.client import GitHubClient
 from gitops import blobs
@@ -2938,12 +2947,38 @@ class MainWindow(QMainWindow):
             None
         """
 
-        QMessageBox.information(
-            self,
-            i18n.t("menu.about"),
-            f"{APP_NAME}\n{i18n.t('about.version', version=APP_VERSION)}\n\n"
-            f"{i18n.t('about.description')}\n\n{i18n.t('about.credits')}",
+        colors = get_theme_colors()
+
+        def link(url: str) -> str:
+            # Shown without the scheme, because nobody reads "https://" aloud.
+            # Coloured by hand: rich text takes its link colour from the palette,
+            # which is Qt's default dark blue and all but invisible on a dark
+            # theme.
+            label = url.removeprefix("https://").removeprefix("http://")
+            return (
+                f'<a href="{html.escape(url)}" style="color:{colors.link};">'
+                f"{html.escape(label)}</a>"
+            )
+
+        box = QMessageBox(self)
+        # Wide enough that the author line stays one line. Narrower, and the
+        # address breaks in the middle and runs into the line below it.
+        # Only the text label, by the name Qt gives it; the icon is a label too.
+        box.setStyleSheet("QLabel#qt_msgbox_label { min-width: 360px; }")
+        box.setWindowTitle(i18n.t("menu.about"))
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setTextFormat(Qt.TextFormat.RichText)
+        # Rich text, so the two addresses are links a click opens in the browser
+        # rather than text somebody has to copy out by hand.
+        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        box.setText(
+            f"<b>{html.escape(APP_NAME)}</b><br>"
+            f"{html.escape(i18n.t('about.version', version=APP_VERSION))}"
+            f"<br><br>{html.escape(APP_AUTHOR)}, {html.escape(APP_COMPANY)}, "
+            f"{link(APP_COMPANY_URL)}<br>{link(APP_AUTHOR_GITHUB)}"
+            f"<br><br>{html.escape(i18n.t('about.credits'))}"
         )
+        box.exec()
 
     # ------------------------------------------------------------------- updates
 
