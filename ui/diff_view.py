@@ -38,9 +38,8 @@ import i18n
 from config.app_settings import DIFF_SIDE_BY_SIDE, DIFF_UNIFIED, normalize_diff_mode
 from config.theme import ThemeColors, get_theme_colors
 from constants import (
+    DIFF_CONTEXT_CHOICES,
     DIFF_CONTEXT_LINES,
-    DIFF_CONTEXT_MAX,
-    DIFF_CONTEXT_MIN,
     DIFF_MAX_LINE_LENGTH,
     DIFF_WHOLE_FILE_CONTEXT,
 )
@@ -59,6 +58,14 @@ from gitops.diff import (
     DiffLine,
     FileDiff,
     pair_lines,
+)
+from ui.change_map import (
+    BAR_WIDTH,
+    KIND_ADDED,
+    KIND_MIXED,
+    KIND_REMOVED,
+    ChangeMap,
+    ChangeSpan,
 )
 from ui.widgets import EmptyState, FlowLayout, InlineMessage, apply_monospace
 
@@ -85,6 +92,54 @@ SIDE_NEW = "new"
 # Marks a link inside a rendered diff as "this block's tick". A scheme of its
 # own, so it can never be confused with a real address the document might carry.
 HUNK_LINK_PREFIX = "branchly-hunk:"
+
+# Name of the anchor placed at the first line of every run of changed lines, so
+# the change map has somewhere precise to jump to. Per run rather than per
+# block: with the whole file on screen git produces a single block covering
+# everything, and a map whose marks all point at the top of the file is no map.
+CHANGE_ANCHOR = "branchly-change-"
+
+
+def _row_changed(left: DiffLine | None, right: DiffLine | None) -> bool:
+    """
+    Reports whether a display row holds a change.
+
+    The one place that decides it, because the renderer and the change map have
+    to agree on where a run starts. Two copies of this rule drifting apart would
+    point the map's marks at the wrong lines, and nothing would look wrong.
+
+    Args:
+        left: The row's old side, or None.
+        right: The row's new side, or None.
+
+    Returns:
+        bool: True when either side is an addition or a deletion.
+    """
+
+    return any(
+        line is not None and line.kind in {LINE_ADDED, LINE_REMOVED}
+        for line in (left, right)
+    )
+
+
+def _anchor(file_index: int, run: int) -> str:
+    """
+    Builds the anchor name for one run of changed lines.
+
+    Args:
+        file_index: Which file in a multi-file document.
+        run: Which run inside that file.
+
+    Returns:
+        str: The anchor name.
+    """
+
+    return f"{CHANGE_ANCHOR}{file_index}-{run}"
+
+# Position of the one-column view inside the panel's stack. Named, because the
+# view is now a widget holding the browser and its bar rather than the browser
+# itself, and ``setCurrentWidget(self._browser)`` would silently do nothing.
+SINGLE_INDEX = 1
 
 
 def _escape(text: str) -> str:
@@ -263,7 +318,11 @@ def hunk_toggle(hunk: DiffHunk, colors: ThemeColors) -> str:
 
 
 def _hunk_header_row(
-    hunk: DiffHunk, columns: int, colors: ThemeColors | None = None, selectable: bool = False
+    hunk: DiffHunk,
+    columns: int,
+    colors: ThemeColors | None = None,
+    selectable: bool = False,
+    index: int | None = None,
 ) -> str:
     """
     Builds the row that introduces a hunk in the one-column layout.
@@ -331,7 +390,11 @@ def _file_header_row(diff: FileDiff, columns: int, colors: ThemeColors) -> str:
 
 
 def _cell(
-    line: DiffLine | None, colors: ThemeColors, word_level: bool, dim: bool = False
+    line: DiffLine | None,
+    colors: ThemeColors,
+    word_level: bool,
+    dim: bool = False,
+    mark: str = "",
 ) -> str:
     """
     Builds one side of a side-by-side row.
@@ -350,7 +413,7 @@ def _cell(
         # panes would stop lining up with each other while scrolling.
         return (
             f'<td class="gutter" style="background-color:{colors.diff_gutter_bg};"></td>'
-            f"<td>&nbsp;</td>"
+            f"<td>{mark}&nbsp;</td>"
         )
 
     background, gutter, foreground = _line_styles(line.kind, colors)
@@ -372,11 +435,17 @@ def _cell(
         foreground = colors.text_muted
     return (
         f'<td class="gutter" style="background-color:{gutter};">{number if number else ""}</td>'
-        f'<td style="background-color:{background};color:{foreground};">{body}</td>'
+        f'<td style="background-color:{background};color:{foreground};">{mark}{body}</td>'
     )
 
 
-def _pane_rows(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool) -> list[str]:
+def _pane_rows(
+    diff: FileDiff,
+    side: str,
+    colors: ThemeColors,
+    word_level: bool,
+    file_index: int = 0,
+) -> list[str]:
     """
     Builds the rows of one side of a comparison.
 
@@ -395,6 +464,8 @@ def _pane_rows(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool)
     """
 
     rows: list[str] = []
+    run = -1
+    inside = False
     for hunk in diff.hunks:
         label = _hunk_label(hunk)
         if diff.selectable:
@@ -406,8 +477,126 @@ def _pane_rows(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool)
         rows.append(_pane_header_row(label, style))
         for left, right in pair_lines(hunk):
             line = left if side == SIDE_OLD else right
-            rows.append(f"<tr>{_cell(line, colors, word_level, dim=not hunk.selected)}</tr>")
+            changed = _row_changed(left, right)
+            mark = ""
+            if changed and not inside:
+                run += 1
+                # Where the change map jumps to. Walked exactly as
+                # ``change_spans`` walks it, so the two cannot disagree.
+                mark = f'<a name="{_anchor(file_index, run)}"></a>'
+            inside = changed
+            rows.append(
+                f"<tr>{_cell(line, colors, word_level, dim=not hunk.selected, mark=mark)}</tr>"
+            )
+        inside = False
     return rows
+
+
+def change_spans(diff: FileDiff, file_index: int = 0) -> tuple[list[ChangeSpan], int]:
+    """
+    Works out where the changes sit in the rendered document.
+
+    Counted in display rows rather than in file lines, because that is what the
+    reader scrolls through: the heading of each block takes a row of its own,
+    and a side-by-side comparison gives a row to every pair including the blank
+    halves. A map built from file line numbers would drift further from the
+    truth the more blocks a file has.
+
+    Args:
+        diff: Parsed diff.
+
+    Returns:
+        tuple[list[ChangeSpan], int]: The runs of changed rows, and how many
+            rows the document has in total.
+    """
+
+    spans: list[ChangeSpan] = []
+    row = 0
+    run = -1
+    for hunk in diff.hunks:
+        row += 1  # The block's heading.
+        start: int | None = None
+        added = False
+        removed = False
+        for left, right in pair_lines(hunk):
+            changed = _row_changed(left, right)
+            if changed:
+                if start is None:
+                    start = row
+                    run += 1
+                added = added or any(
+                    line is not None and line.kind == LINE_ADDED for line in (left, right)
+                )
+                removed = removed or any(
+                    line is not None and line.kind == LINE_REMOVED for line in (left, right)
+                )
+            elif start is not None:
+                spans.append(_span(start, row - 1, added, removed, file_index, run))
+                start, added, removed = None, False, False
+            row += 1
+        if start is not None:
+            spans.append(_span(start, row - 1, added, removed, file_index, run))
+            start, added, removed = None, False, False
+    return spans, row
+
+
+def _span(
+    first: int, last: int, added: bool, removed: bool, file_index: int, run: int
+) -> ChangeSpan:
+    """
+    Builds one run of changed rows.
+
+    Args:
+        first: First changed row.
+        last: Last changed row.
+        added: Whether the run holds an added line.
+        removed: Whether the run holds a removed line.
+        file_index: Which file in a multi-file document.
+        run: Which run inside that file.
+
+    Returns:
+        ChangeSpan: The run.
+    """
+
+    if added and removed:
+        kind = KIND_MIXED
+    elif added:
+        kind = KIND_ADDED
+    else:
+        kind = KIND_REMOVED
+    return ChangeSpan(first=first, last=last, kind=kind, anchor=_anchor(file_index, run))
+
+
+def many_change_spans(diffs: list[FileDiff]) -> tuple[list[ChangeSpan], int]:
+    """
+    Works out the same thing for a document holding several files.
+
+    Args:
+        diffs: Parsed diffs, in the order they are rendered.
+
+    Returns:
+        tuple[list[ChangeSpan], int]: The runs, and the total number of rows.
+    """
+
+    spans: list[ChangeSpan] = []
+    total = 0
+    for file_index, diff in enumerate(diffs):
+        total += 1  # The file's heading.
+        if diff.binary:
+            total += 1
+            continue
+        found, rows = change_spans(diff, file_index)
+        spans.extend(
+            ChangeSpan(
+                first=span.first + total,
+                last=span.last + total,
+                kind=span.kind,
+                anchor=span.anchor,
+            )
+            for span in found
+        )
+        total += rows
+    return spans, total
 
 
 def render_pane(diff: FileDiff, side: str, colors: ThemeColors, word_level: bool = True) -> str:
@@ -448,7 +637,7 @@ def render_many_panes(
         return _document_head(colors)
 
     blocks: list[str] = []
-    for diff in diffs:
+    for file_index, diff in enumerate(diffs):
         name = diff.path or diff.old_path or "?"
         counts = f"+{diff.added} \u2212{diff.removed}"
         heading = (
@@ -469,12 +658,14 @@ def render_many_panes(
                 f"{_escape(i18n.t('diff.binary'))}</td></tr>"
             )
         else:
-            rows.extend(_pane_rows(diff, side, colors, word_level))
+            rows.extend(_pane_rows(diff, side, colors, word_level, file_index))
         blocks.append(f"<table>{''.join(rows)}</table>")
     return f"{_document_head(colors)}{''.join(blocks)}"
 
 
-def render_unified(diff: FileDiff, colors: ThemeColors, word_level: bool = True) -> str:
+def render_unified(
+    diff: FileDiff, colors: ThemeColors, word_level: bool = True, file_index: int = 0
+) -> str:
     """
     Renders a diff as one column with both line numbers.
 
@@ -488,13 +679,21 @@ def render_unified(diff: FileDiff, colors: ThemeColors, word_level: bool = True)
     """
 
     rows: list[str] = []
-    for hunk in diff.hunks:
-        rows.append(_hunk_header_row(hunk, 4, colors, diff.selectable))
+    run = -1
+    inside = False
+    for index, hunk in enumerate(diff.hunks):
+        rows.append(_hunk_header_row(hunk, 4, colors, diff.selectable, index))
         for line in hunk.lines:
             background, gutter, foreground = _line_styles(line.kind, colors)
             dim = not hunk.selected
             if dim:
                 background, foreground = "transparent", colors.text_muted
+            changed = line.kind in {LINE_ADDED, LINE_REMOVED}
+            mark = ""
+            if changed and not inside:
+                run += 1
+                mark = f'<a name="{_anchor(file_index, run)}"></a>'
+            inside = changed
             marker = {LINE_ADDED: "+", LINE_REMOVED: "−", LINE_NO_NEWLINE: "\\"}.get(line.kind, " ")
             text, cut = _truncate(line.text)
             highlight = (
@@ -508,7 +707,7 @@ def render_unified(diff: FileDiff, colors: ThemeColors, word_level: bool = True)
                 f'<td class="gutter" style="background-color:{gutter};">{line.old_lineno or ""}</td>'
                 f'<td class="gutter" style="background-color:{gutter};">{line.new_lineno or ""}</td>'
                 f'<td style="background-color:{background};color:{foreground};width:1%;">{marker}</td>'
-                f'<td style="background-color:{background};color:{foreground};">{body}</td>'
+                f'<td style="background-color:{background};color:{foreground};">{mark}{body}</td>'
                 "</tr>"
             )
     return f"{_document_head(colors)}<table>{''.join(rows)}</table>"
@@ -539,7 +738,7 @@ def render_many(diffs: list[FileDiff], mode: str, colors: ThemeColors, word_leve
 
     columns = 3
     blocks: list[str] = []
-    for diff in diffs:
+    for file_index, diff in enumerate(diffs):
         rows = [_file_header_row(diff, columns, colors)]
         if diff.binary:
             rows.append(
@@ -548,7 +747,7 @@ def render_many(diffs: list[FileDiff], mode: str, colors: ThemeColors, word_leve
             )
             blocks.append(f"<table>{''.join(rows)}</table>")
             continue
-        body = render_unified(diff, colors, word_level)
+        body = render_unified(diff, colors, word_level, file_index)
         # Reuse the per-file renderer but drop its own head and outer table tags.
         inner = body.split("<table>", 1)[-1].rsplit("</table>", 1)[0]
         blocks.append(f"<table>{''.join(rows)}{inner}</table>")
@@ -609,6 +808,7 @@ class ComparisonPanes(QWidget):
     """
 
     link_clicked = Signal(str)
+    jump_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -630,9 +830,19 @@ class ComparisonPanes(QWidget):
         # The left side's vertical bar is hidden rather than removed: the view
         # still scrolls vertically, it just does not draw a second bar.
         self._old.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # The map sits between the two columns, which is where the user asked
+        # for it and also where it belongs: it is about the file, not about
+        # either version of it. A fixed width inside the splitter, so dragging a
+        # divider moves the panes and leaves the bar alone.
+        self._map = ChangeMap(self)
+        self._map.jump_requested.connect(self.jump_requested)
+
         self._split.addWidget(old_side)
+        self._split.addWidget(self._map)
         self._split.addWidget(new_side)
-        self._split.setSizes([500, 500])
+        self._split.setSizes([500, BAR_WIDTH, 500])
+        for index, stretch in ((0, 1), (1, 0), (2, 1)):
+            self._split.setStretchFactor(index, stretch)
         layout.addWidget(self._split)
 
         self.refresh()
@@ -736,6 +946,9 @@ class ComparisonPanes(QWidget):
         source.verticalScrollBar().valueChanged.connect(
             lambda value: self._mirror(target.verticalScrollBar(), value)
         )
+        source.verticalScrollBar().valueChanged.connect(
+            lambda _value: self._update_map_viewport()
+        )
 
     def _mirror(self, bar: QScrollBar, value: int) -> None:
         """
@@ -784,6 +997,69 @@ class ComparisonPanes(QWidget):
         for pane in (self._old, self._new):
             pane.verticalScrollBar().setValue(0)
             pane.horizontalScrollBar().setValue(0)
+
+    def set_map(self, spans: list[ChangeSpan], rows: int, visible: bool) -> None:
+        """
+        Fills the change map, or takes it away.
+
+        Args:
+            spans: The runs of changed rows.
+            rows: Total rows the document has.
+            visible: Whether the map should be on screen at all.
+
+        Returns:
+            None
+        """
+
+        self._map.setVisible(visible)
+        if visible:
+            self._map.set_spans(spans, rows)
+            self._update_map_viewport()
+
+    def jump_to(self, anchor: str) -> None:
+        """
+        Scrolls both sides to one block.
+
+        Args:
+            anchor: Anchor name inside the rendered documents.
+
+        Returns:
+            None
+        """
+
+        # The new side is the one with the visible scrollbar; the old one
+        # follows through the link between them.
+        self._new.scrollToAnchor(anchor)
+        self._old.scrollToAnchor(anchor)
+        self._update_map_viewport()
+
+    def _update_map_viewport(self) -> None:
+        """
+        Tells the map which part of the file is on screen.
+
+        Returns:
+            None
+        """
+
+        if not self._map.isVisible():
+            return
+        bar = self._new.verticalScrollBar()
+        span = bar.maximum() + bar.pageStep()
+        if span <= 0:
+            self._map.set_viewport(0.0, 1.0)
+            return
+        self._map.set_viewport(bar.value() / span, (bar.value() + bar.pageStep()) / span)
+
+    @property
+    def change_map(self) -> ChangeMap:
+        """
+        Returns the bar between the two columns.
+
+        Returns:
+            ChangeMap: The map.
+        """
+
+        return self._map
 
     @property
     def captions(self) -> tuple[str, str]:
@@ -1124,7 +1400,6 @@ class DiffView(QWidget):
 
         super().__init__(parent)
         self._mode = normalize_diff_mode(mode)
-        self._context_lines = max(DIFF_CONTEXT_MIN, min(DIFF_CONTEXT_MAX, int(context_lines)))
         self._diff: FileDiff | None = None
         self._many: list[FileDiff] = []
         self._path = ""
@@ -1133,7 +1408,9 @@ class DiffView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        layout.addWidget(self._build_toolbar(ignore_whitespace, word_level, full_context))
+        layout.addWidget(
+            self._build_toolbar(ignore_whitespace, word_level, full_context, context_lines)
+        )
 
         self._stack = QStackedWidget(self)
 
@@ -1146,10 +1423,25 @@ class DiffView(QWidget):
         self._browser.anchorClicked.connect(self._on_anchor)
         self._browser.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
         apply_monospace(self._browser, -1)
-        self._stack.addWidget(self._browser)
+        # The one-column view gets the same bar at its right edge. There is no
+        # "between the versions" there, and navigating a long file is the same
+        # problem either way.
+        single = QWidget(self)
+        single_row = QHBoxLayout(single)
+        single_row.setContentsMargins(0, 0, 0, 0)
+        single_row.setSpacing(0)
+        single_row.addWidget(self._browser, 1)
+        self._single_map = ChangeMap(single)
+        self._single_map.jump_requested.connect(self._jump_to_anchor)
+        single_row.addWidget(self._single_map)
+        self._browser.verticalScrollBar().valueChanged.connect(
+            lambda _value: self._update_single_viewport()
+        )
+        self._stack.addWidget(single)
 
         self._panes = ComparisonPanes(self)
         self._panes.link_clicked.connect(self._on_anchor)
+        self._panes.jump_requested.connect(self._panes.jump_to)
         self._stack.addWidget(self._panes)
 
         self._notice_holder = QWidget(self)
@@ -1167,7 +1459,11 @@ class DiffView(QWidget):
         self._stack.setCurrentWidget(self._empty)
 
     def _build_toolbar(
-        self, ignore_whitespace: bool, word_level: bool, full_context: bool = False
+        self,
+        ignore_whitespace: bool,
+        word_level: bool,
+        full_context: bool = False,
+        context_lines: int = DIFF_CONTEXT_LINES,
     ) -> QWidget:
         """
         Builds the option row above the diff.
@@ -1175,7 +1471,8 @@ class DiffView(QWidget):
         Args:
             ignore_whitespace: Initial state of the whitespace toggle.
             word_level: Initial state of the word-highlight toggle.
-            full_context: Initial state of the unchanged-text toggle.
+            full_context: Whether the whole file is shown to begin with.
+            context_lines: Surrounding lines to start on when it is not.
 
         Returns:
             QWidget: The toolbar.
@@ -1238,12 +1535,28 @@ class DiffView(QWidget):
         self._words.toggled.connect(self._on_option_toggled)
         row.addWidget(self._words)
 
-        self._context = QCheckBox(i18n.t("diff.full_context"), left_holder)
+        self._context = QComboBox(left_holder)
         self._context.setToolTip(i18n.t("tip.diff_context"))
-        self._context.setChecked(full_context)
+        for count in DIFF_CONTEXT_CHOICES:
+            self._context.addItem(i18n.t("diff.context_lines", count=count), count)
+        self._context.addItem(i18n.t("diff.context_whole"), DIFF_WHOLE_FILE_CONTEXT)
+        _allow_narrow(self._context, 16)
+        chosen = DIFF_WHOLE_FILE_CONTEXT if full_context else context_lines
+        index = self._context.findData(chosen)
+        if index < 0:
+            # A number typed into the settings file by hand, or one from an older
+            # version. It belongs in the list rather than being silently replaced.
+            self._context.insertItem(
+                len(DIFF_CONTEXT_CHOICES),
+                i18n.t("diff.context_lines", count=chosen),
+                chosen,
+            )
+            index = self._context.findData(chosen)
+        self._context.setCurrentIndex(index)
         # Not ``_on_option_toggled``: this one changes what git is asked for, not
         # only how the answer is drawn, so the diff has to be read again.
-        self._context.toggled.connect(self._on_context_toggled)
+        self._context.currentIndexChanged.connect(self._on_context_toggled)
+        row.addWidget(QLabel(i18n.t("diff.context_label"), left_holder))
         row.addWidget(self._context)
 
         self._counts = QLabel("", right_holder)
@@ -1302,13 +1615,13 @@ class DiffView(QWidget):
     @property
     def full_context(self) -> bool:
         """
-        Reports whether the unchanged text around a change is shown.
+        Reports whether the whole file is being shown.
 
         Returns:
-            bool: True when on.
+            bool: True when the drop-down stands on "whole file".
         """
 
-        return self._context.isChecked()
+        return self.context_lines >= DIFF_WHOLE_FILE_CONTEXT
 
     @property
     def context_lines(self) -> int:
@@ -1316,24 +1629,28 @@ class DiffView(QWidget):
         Returns how many unchanged lines git should put around each change.
 
         Returns:
-            int: A number no file reaches when the whole file is wanted, the
-                configured amount otherwise.
+            int: The chosen amount, or a number no file reaches when the whole
+                file is wanted.
         """
 
-        return DIFF_WHOLE_FILE_CONTEXT if self.full_context else self._context_lines
+        data = self._context.currentData()
+        return int(data) if isinstance(data, int) else DIFF_CONTEXT_LINES
 
     def set_context_lines(self, count: int) -> None:
         """
-        Sets how much unchanged text to show when not showing all of it.
+        Picks how much unchanged text to show.
 
         Args:
-            count: Lines above and below each change.
+            count: Lines above and below each change, or
+                ``DIFF_WHOLE_FILE_CONTEXT`` for all of it.
 
         Returns:
             None
         """
 
-        self._context_lines = max(DIFF_CONTEXT_MIN, min(DIFF_CONTEXT_MAX, int(count)))
+        index = self._context.findData(int(count))
+        if index >= 0:
+            self._context.setCurrentIndex(index)
 
     @property
     def target(self) -> str:
@@ -1439,6 +1756,57 @@ class DiffView(QWidget):
         # there is nothing to redraw from. Git has to be asked again.
         self.options_changed.emit()
         self.reload_requested.emit()
+
+    def _show_single_map(self, spans: list[ChangeSpan], rows: int) -> None:
+        """
+        Fills the bar beside the one-column view, or takes it away.
+
+        Args:
+            spans: The runs of changed rows.
+            rows: Total rows the document has.
+
+        Returns:
+            None
+        """
+
+        visible = self.full_context
+        self._single_map.setVisible(visible)
+        if visible:
+            self._single_map.set_spans(spans, rows)
+            self._update_single_viewport()
+
+    def _update_single_viewport(self) -> None:
+        """
+        Tells the one-column bar which part of the file is on screen.
+
+        Returns:
+            None
+        """
+
+        if not self._single_map.isVisible():
+            return
+        bar = self._browser.verticalScrollBar()
+        span = bar.maximum() + bar.pageStep()
+        if span <= 0:
+            self._single_map.set_viewport(0.0, 1.0)
+            return
+        self._single_map.set_viewport(
+            bar.value() / span, (bar.value() + bar.pageStep()) / span
+        )
+
+    def _jump_to_anchor(self, anchor: str) -> None:
+        """
+        Scrolls the one-column view to one block.
+
+        Args:
+            anchor: Anchor name inside the rendered document.
+
+        Returns:
+            None
+        """
+
+        self._browser.scrollToAnchor(anchor)
+        self._update_single_viewport()
 
     def _on_anchor(self, url: object) -> None:
         """
@@ -1638,11 +2006,15 @@ class DiffView(QWidget):
                     render_many_panes(self._many, SIDE_OLD, colors, self.word_level),
                     render_many_panes(self._many, SIDE_NEW, colors, self.word_level),
                 )
+                spans, rows = many_change_spans(self._many)
+                self._panes.set_map(spans, rows, self.full_context)
                 self._stack.setCurrentWidget(self._panes)
                 return
             self._browser.setHtml(render_many(self._many, self._mode, colors, self.word_level))
             self._browser.verticalScrollBar().setValue(0)
-            self._stack.setCurrentWidget(self._browser)
+            spans, rows = many_change_spans(self._many)
+            self._show_single_map(spans, rows)
+            self._stack.setCurrentWidget(self._stack.widget(SINGLE_INDEX))
             return
 
         if self._diff is None or self._diff.binary or self._diff.error_key:
@@ -1653,12 +2025,16 @@ class DiffView(QWidget):
                 render_pane(self._diff, SIDE_OLD, colors, self.word_level),
                 render_pane(self._diff, SIDE_NEW, colors, self.word_level),
             )
+            spans, rows = change_spans(self._diff)
+            self._panes.set_map(spans, rows, self.full_context)
             self._stack.setCurrentWidget(self._panes)
             return
 
         self._browser.setHtml(render_unified(self._diff, colors, self.word_level))
         self._browser.verticalScrollBar().setValue(0)
-        self._stack.setCurrentWidget(self._browser)
+        spans, rows = change_spans(self._diff)
+        self._show_single_map(spans, rows)
+        self._stack.setCurrentWidget(self._stack.widget(SINGLE_INDEX))
 
     def refresh(self, _theme: str | None = None) -> None:
         """

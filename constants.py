@@ -33,6 +33,11 @@ DIFF_CONTEXT_LINES = 6
 DIFF_CONTEXT_MIN = 0
 DIFF_CONTEXT_MAX = 100
 
+# What the drop-down above the comparison offers. Concrete numbers rather than a
+# switch plus a setting somewhere else: the amount of surrounding text is
+# something people change while reading, not once when they install the program.
+DIFF_CONTEXT_CHOICES = (3, 6, 10, 20, 50)
+
 # What "show unchanged text" asks git for. There is no flag for "all of it", so
 # this is simply a number no real source file reaches. The renderer's own
 # ``DIFF_MAX_LINES`` still caps what ends up on screen.

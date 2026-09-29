@@ -35,9 +35,8 @@ except ImportError:  # pragma: no cover - PySide6 missing is a valid environment
 
 from config.theme import THEME_DARK, get_theme_colors
 from constants import (
+    DIFF_CONTEXT_CHOICES,
     DIFF_CONTEXT_LINES,
-    DIFF_CONTEXT_MAX,
-    DIFF_CONTEXT_MIN,
     DIFF_WHOLE_FILE_CONTEXT,
 )
 from gitops import diff as diff_mod
@@ -231,68 +230,73 @@ class QuietRenderingTests(unittest.TestCase):
         self.assertEqual(colors.text, quiet.text)
 
     def test_the_panel_asks_git_for_the_whole_file(self) -> None:
-        from config.app_settings import DIFF_SIDE_BY_SIDE
-        from ui.diff_view import DiffView
-
-        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, False)
-        self.addCleanup(view.deleteLater)
+        view = self._view()
 
         self.assertEqual(DIFF_CONTEXT_LINES, view.context_lines)
-        view._context.setChecked(True)
+        view.set_context_lines(DIFF_WHOLE_FILE_CONTEXT)
         # There is no flag for "all of it", so the amount asked for is simply a
         # number no source file reaches.
         self.assertEqual(DIFF_WHOLE_FILE_CONTEXT, view.context_lines)
         self.assertTrue(view.full_context)
 
-    def test_the_amount_of_surrounding_text_can_be_set(self) -> None:
-        from config.app_settings import DIFF_SIDE_BY_SIDE
-        from ui.diff_view import DiffView
+    def test_the_drop_down_offers_the_amounts_and_the_whole_file(self) -> None:
+        view = self._view()
+        offered = [view._context.itemData(i) for i in range(view._context.count())]
 
-        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, False, context_lines=12)
-        self.addCleanup(view.deleteLater)
-        self.assertEqual(12, view.context_lines)
+        self.assertEqual([*DIFF_CONTEXT_CHOICES, DIFF_WHOLE_FILE_CONTEXT], offered)
 
-        view.set_context_lines(0)
-        self.assertEqual(0, view.context_lines)
+    def test_every_choice_can_be_picked(self) -> None:
+        view = self._view()
+        for amount in DIFF_CONTEXT_CHOICES:
+            with self.subTest(amount=amount):
+                view.set_context_lines(amount)
+                self.assertEqual(amount, view.context_lines)
+                self.assertFalse(view.full_context)
 
-    def test_a_nonsense_amount_is_brought_back_into_range(self) -> None:
-        from config.app_settings import DIFF_SIDE_BY_SIDE
-        from ui.diff_view import DiffView
-
-        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, False)
-        self.addCleanup(view.deleteLater)
-
-        view.set_context_lines(-5)
-        self.assertEqual(DIFF_CONTEXT_MIN, view.context_lines)
-        view.set_context_lines(9999)
-        self.assertEqual(DIFF_CONTEXT_MAX, view.context_lines)
+    def test_a_stored_amount_that_is_not_offered_joins_the_list(self) -> None:
+        # Typed into the settings file by hand, or left by an older version.
+        # Replacing it silently would change what the reader sees without asking.
+        view = self._view(context_lines=17)
+        self.assertEqual(17, view.context_lines)
+        self.assertIn(17, [view._context.itemData(i) for i in range(view._context.count())])
 
     def test_the_default_is_twice_gits_own(self) -> None:
         # Git shows three, which places a change and does not let you read it.
         self.assertEqual(6, DIFF_CONTEXT_LINES)
 
-    def test_toggling_it_asks_for_a_fresh_diff(self) -> None:
+    def test_changing_it_asks_for_a_fresh_diff(self) -> None:
         # The extra lines are not in the diff already in memory, so a redraw
         # cannot produce them.
-        from config.app_settings import DIFF_SIDE_BY_SIDE
-        from ui.diff_view import DiffView
-
-        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, False)
-        self.addCleanup(view.deleteLater)
+        view = self._view()
         reloads: list[int] = []
         view.reload_requested.connect(lambda: reloads.append(1))
 
-        view._context.setChecked(True)
+        view.set_context_lines(DIFF_WHOLE_FILE_CONTEXT)
         self.assertEqual([1], reloads)
 
     def test_the_setting_starts_the_panel_the_way_it_was_left(self) -> None:
+        view = self._view(full_context=True)
+        self.assertTrue(view.full_context)
+        self.assertEqual(DIFF_WHOLE_FILE_CONTEXT, view.context_lines)
+
+    def _view(self, full_context: bool = False, context_lines: int = DIFF_CONTEXT_LINES):  # noqa: ANN202
+        """
+        Builds a comparison panel.
+
+        Args:
+            full_context: Whether it starts on the whole file.
+            context_lines: Surrounding lines it starts on otherwise.
+
+        Returns:
+            DiffView: The panel.
+        """
+
         from config.app_settings import DIFF_SIDE_BY_SIDE
         from ui.diff_view import DiffView
 
-        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, True)
+        view = DiffView(DIFF_SIDE_BY_SIDE, False, True, full_context, context_lines)
         self.addCleanup(view.deleteLater)
-        self.assertTrue(view.full_context)
-        self.assertEqual(DIFF_WHOLE_FILE_CONTEXT, view.context_lines)
+        return view
 
     def test_the_rendered_unchanged_lines_carry_the_quiet_colour(self) -> None:
         from gitops.diff import parse_unified

@@ -331,6 +331,16 @@ Schlägt eine Anmeldung fehl, entscheidet `_report_sync()` über die Formulierun
 einem GitHub-Projekt und ohne Token, dort gibt es nichts zu prüfen, sondern
 etwas nachzutragen.
 
+## Änderungsbalken (`ui/change_map.py`)
+
+Zwischen den beiden Spalten, als drittes Kind des `QSplitter` mit fester Breite
+und Stretch-Faktor null, damit das Ziehen einer Trennlinie die Spalten bewegt und
+den Balken in Ruhe lässt. Einspaltig sitzt derselbe Balken rechts neben dem
+`QTextBrowser`.
+
+Sichtbar nur, wenn die ganze Datei gezeigt wird: bei sechs Zeilen Umgebung ist
+der Diff kurz genug, um zu scrollen.
+
 ## Unveränderter Text (`ui/diff_view.py`)
 
 Der Schalter „Unveränderten Text zeigen" holt einen neuen Diff mit
