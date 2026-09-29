@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 import i18n
-from constants import APP_NAME, APP_VERSION
+from constants import APP_NAME, APP_VERSION_LABEL
 from services import updater
 from ui.widgets import InlineMessage
 
@@ -148,7 +148,7 @@ class UpdateDialog(QDialog):
         heading.setObjectName("Heading")
         layout.addWidget(heading)
 
-        self._version = QLabel(i18n.t("about.version", version=APP_VERSION), self)
+        self._version = QLabel(i18n.t("about.version", version=APP_VERSION_LABEL), self)
         self._version.setObjectName("Muted")
         layout.addWidget(self._version)
 

@@ -4,9 +4,14 @@ Application-wide constants.
 
 from __future__ import annotations
 
+import version as _version
+
 APP_NAME = "Branchly"
 APP_SLUG = "branchly"
-APP_VERSION = "0.3.0"
+# Derived from the commit history, never typed in. See version.py for how the
+# three numbers come about, and .githooks/post-commit for when they are written.
+APP_VERSION = _version.name()
+APP_VERSION_LABEL = _version.current().label
 APP_URL = "https://github.com/joruf/branchly"
 
 # Who made it, for the About box. Not translated: a name and a company are the

@@ -523,6 +523,14 @@ def _apply_archive(root: Path) -> UpdateOutcome:
                 method=METHOD_ARCHIVE, error_key=ERROR_WRITE_FAILED, detail=str(error)
             )
 
+    # The archive carries no history and no VERSION file, so the one left over
+    # from before now names a version this installation no longer is. An
+    # invented number is worse than none: without it the About box says
+    # "unknown", which is true.
+    try:
+        (root / "VERSION").unlink(missing_ok=True)
+    except OSError:
+        pass
     return UpdateOutcome(ok=True, method=METHOD_ARCHIVE, files=written)
 
 

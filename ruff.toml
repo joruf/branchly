@@ -88,6 +88,10 @@ ignore = [
 # interpreter are both process starts that the modules around them guard.
 "services/open_with.py" = ["S603"]
 "run.py" = ["S603", "S606"]
+# Reads Branchly's own history for its version number. Fixed, read-only
+# arguments against its own folder; outside gitops only because constants
+# needs the version and gitops needs constants.
+"version.py" = ["S603"]
 
 [lint.flake8-annotations]
 suppress-none-returning = false
@@ -104,4 +108,5 @@ known-first-party = [
     "services",
     "tests",
     "ui",
+    "version",
 ]

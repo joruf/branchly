@@ -483,6 +483,55 @@ def needs_install(interpreter: Path | None = None) -> bool:
     return any(not status.ok for status in probe_package_status(target))
 
 
+def activate_hooks(log: LogFn | None = None) -> bool:
+    """
+    Points git at the hooks that ship with Branchly.
+
+    The version number is derived from the history, and the hook is what keeps
+    the VERSION file in step with every commit. Git does not run hooks from a
+    checked-in folder unless told to, so a fresh clone needs this once.
+
+    Only for a checkout, and only when nothing else is configured: somebody who
+    set their own hooks path had a reason, and overwriting it would silently
+    switch their hooks off.
+
+    Args:
+        log: Progress logger.
+
+    Returns:
+        bool: True when the setting is in place afterwards.
+    """
+
+    emit = log or _default_log
+    if not (_ROOT / ".git").exists() or not (_ROOT / ".githooks").is_dir():
+        return False
+    if which("git") is None:
+        return False
+
+    current = subprocess.run(
+        ["git", "-C", str(_ROOT), "config", "--get", "core.hooksPath"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if current == ".githooks":
+        return True
+    if current:
+        emit(f"leaving core.hooksPath as it is ({current}); the version hook is not active")
+        return False
+
+    done = subprocess.run(
+        ["git", "-C", str(_ROOT), "config", "core.hooksPath", ".githooks"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        return False
+    emit("activated the version hook (core.hooksPath = .githooks)")
+    return True
+
+
 def install_desktop_entry(log: LogFn | None = None) -> bool:
     """
     Puts Branchly into the desktop's application menu.
@@ -590,6 +639,7 @@ def run_install(
     emit("")
     if verify(interpreter, log=emit):
         install_desktop_entry(log=emit)
+        activate_hooks(log=emit)
         emit(f"{APP_NAME} is ready. Start it with ./branchly.sh (or .venv/bin/python run.py).")
         return 0
     emit(
