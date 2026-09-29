@@ -917,6 +917,44 @@ def capture_tags(theme: str, base: Path) -> Path:
     return target
 
 
+def capture_gitignore(theme: str, base: Path) -> Path:
+    """
+    Photographs the .gitignore editor with an ordinary file in it.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build a demo project in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtWidgets import QApplication
+
+    from ui.gitignore_dialog import GitignoreDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    repo = base / f"gitignore-{theme}"
+    repo.mkdir(parents=True)
+    comments = {
+        "de": ("# Virtuelle Umgebung", "# Laufzeitdaten"),
+    }.get(i18n.current_language(), ("# Virtual environment", "# Runtime data"))
+    (repo / ".gitignore").write_text(
+        f"{comments[0]}\n.venv/\n__pycache__/\n\n{comments[1]}\nsettings.json\n*.log\n",
+        encoding="utf-8",
+    )
+    dialog = GitignoreDialog(repo)
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    target = _save(dialog, theme, "gitignore")
+    dialog.done(0)
+    return target
+
+
 def capture_blocks(theme: str, base: Path, repositories: list[Path]) -> Path:
     """
     Photographs the comparison with one block taken out of the commit.
@@ -1017,6 +1055,7 @@ def capture_all(language: str) -> list[Path]:
             written.append(capture_revert(theme, base))
             written.append(capture_link_remote(theme, base))
             written.append(capture_tags(theme, base))
+            written.append(capture_gitignore(theme, base))
             written.append(capture_blocks(theme, base, repositories))
             written.extend(capture_menus(theme, base, repositories))
     return written

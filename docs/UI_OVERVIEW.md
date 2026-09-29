@@ -257,6 +257,27 @@ Die Erklärungen sind mitgewandert: die Tooltips hängen jetzt an den
 Menüeinträgen, und die Anzahl wartender Commits steht am Holen-Eintrag, den
 `_refresh_branch_menu()` beim Öffnen beschriftet.
 
+## Menü auf leerer Fläche (`ui/changes_panel.py`, `ui/gitignore_dialog.py`)
+
+Ein Rechtsklick, der auf keine Datei trifft, meint das Projekt als Ganzes:
+*.gitignore bearbeiten*, *Ordner öffnen*, *Aktualisieren*, *Alle Änderungen
+zurücksetzen*. Dasselbe Menü hängt am Hinweis „Keine Änderungen", denn genau
+dann ist keine Liste da, und genau dann bearbeitet man die `.gitignore`.
+
+`project_menu()` baut das Menü, `_show_project_menu()` zeigt es. Getrennt, damit
+sich die Einträge prüfen lassen, ohne dass ein Popup auf einen Klick wartet.
+
+Der Editor ist bewusst ein schlichtes Textfeld: eine `.gitignore` ist eine Liste
+mit Kommentaren und Gruppen, und jedes Formular würde genau das verlieren.
+Zeilenenden werden beim Lesen gemerkt und beim Schreiben wiederhergestellt
+(`ignore.read_file` / `ignore.write_file`). Eine unlesbare Datei erscheint
+gesperrt, und `_save()` verweigert selbst dann, wenn der Knopf es nicht täte,
+denn ein leeres Feld zu speichern löscht die Datei.
+
+`git status` läuft mit `--untracked-files=all`. Ohne das fasst Git einen neuen
+Ordner zu einer Zeile `ordner/` zusammen, die sich weder sinnvoll anhaken noch
+vergleichen noch in Teilen ignorieren lässt.
+
 ## Ein Haken für alle (`ui/changes_panel.py`, `SelectAllBox`)
 
 Statt der beiden Knöpfe *Alle auswählen* und *Auswahl aufheben* ein einziges

@@ -343,6 +343,32 @@ Eine Datei, die bereits unter Versionskontrolle steht, verschwindet dadurch
 Eintrag wird trotzdem geschrieben, damit er greift, sobald die Datei aus der
 Versionskontrolle genommen wird.
 
+### Rechtsklick auf eine leere Fläche
+
+Ein Rechtsklick unterhalb der Dateien, oder auf den Hinweis, wenn ein Projekt
+gar keine Änderungen hat, öffnet ein Menü für das Projekt als Ganzes:
+
+- **.gitignore bearbeiten…** öffnet die Datei in einem eigenen Fenster
+- **Ordner öffnen**
+- **Aktualisieren**
+- **Alle Änderungen zurücksetzen…**, ausgegraut, wenn es nichts zurückzusetzen gibt
+
+Im Fenster steht die `.gitignore` als Text, ein Muster pro Zeile. Kommentare,
+Leerzeilen und die Reihenfolge bleiben genau so, wie du sie schreibst, und eine
+Datei mit Windows-Zeilenenden wird mit Windows-Zeilenenden zurückgeschrieben.
+Gibt es noch keine, legt *Speichern* sie an. Leerst du das Feld ganz, wird die
+Datei entfernt. *Speichern* bleibt grau, bis du etwas geändert hast, und wer mit
+ungespeicherten Änderungen abbricht, wird gefragt.
+
+![.gitignore bearbeiten](screenshots/de/gitignore-dark.png)
+
+Eine `.gitignore`, die sich nicht lesen lässt, wird gesperrt angezeigt und nie
+überschrieben.
+
+Neue Ordner, die Git noch nicht kennt, stehen in der Liste übrigens Datei für
+Datei und nicht als ein einzelner Eintrag. Nur so lässt sich jede davon anhaken,
+vergleichen oder einzeln ignorieren.
+
 ## Gegenüberstellung
 
 Zwei Einstellungen, unabhängig voneinander:

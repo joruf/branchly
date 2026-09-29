@@ -85,6 +85,7 @@ from services import (
 from services import revert as revert_mod
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
+from ui import changes_panel as changes_panel_mod
 from ui.changes_panel import ChangesPanel
 from ui.clone_dialog import CloneDialog
 from ui.conflict_dialog import ConflictDialog
@@ -94,6 +95,7 @@ from ui.github_dialogs import CreateRepositoryDialog
 from ui.github_lists import GitHubContext
 from ui.github_panel import GitHubPanel
 from ui.github_worker import ApiRunner
+from ui.gitignore_dialog import GitignoreDialog
 from ui.graph_view import GraphView
 from ui.link_remote_dialog import AFTER_FETCH, LinkRemoteDialog
 from ui.pull_all_dialog import PullAllDialog
@@ -488,6 +490,7 @@ class MainWindow(QMainWindow):
         self._changes.reveal_file_requested.connect(self._reveal_repo_file)
         self._changes.resolve_requested.connect(self._open_conflict_assistant)
         self._changes.ignore_requested.connect(self._add_to_gitignore)
+        self._changes.project_action_requested.connect(self._on_project_action)
         self._changes.selection_changed.connect(self._remember_selection)
 
         self._diff.options_changed.connect(self._persist_diff_options)
@@ -1131,6 +1134,50 @@ class MainWindow(QMainWindow):
             return
         entry.deselected_paths = chosen
         self._save_registry()
+
+    def _on_project_action(self, action: str) -> None:
+        """
+        Carries out a command from the menu on empty space in the changes list.
+
+        Args:
+            action: One of the ``ACTION_*`` constants of the changes panel.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        if action == changes_panel_mod.ACTION_EDIT_GITIGNORE:
+            self._edit_gitignore()
+        elif action == changes_panel_mod.ACTION_OPEN_FOLDER:
+            self._open_current_folder()
+        elif action == changes_panel_mod.ACTION_REFRESH:
+            self._reload_current()
+            self._start_scan(entry.key)
+        elif action == changes_panel_mod.ACTION_REVERT_ALL:
+            self._revert_all(entry.key)
+
+    def _edit_gitignore(self) -> None:
+        """
+        Opens the project's .gitignore for editing.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None or not entry.exists:
+            return
+        dialog = GitignoreDialog(Path(entry.path), self)
+        dialog.exec()
+        if not dialog.saved:
+            return
+        self.statusBar().showMessage(i18n.t("gitignore.saved"), 4000)
+        # What is ignored changes what the list shows, so it is read again.
+        self._reload_current()
+        self._start_scan(entry.key)
 
     def _add_to_gitignore(self, pattern: str) -> None:
         """

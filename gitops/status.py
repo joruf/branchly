@@ -473,8 +473,12 @@ def read_state(repo: Path | str) -> RepositoryState:
         RepositoryState: Parsed state, carrying ``error_key`` when git failed.
     """
 
+    # Every untracked file on its own line. By default git folds a new folder
+    # into a single "folder/" entry, which leaves nothing to tick, nothing to
+    # compare and nothing to ignore one file of: the files in it are exactly
+    # what the user wants to see.
     result: GitResult = run(
-        ["status", "--porcelain=v2", "--branch", "-z"],
+        ["status", "--porcelain=v2", "--branch", "--untracked-files=all", "-z"],
         cwd=repo,
         read_only=True,
     )

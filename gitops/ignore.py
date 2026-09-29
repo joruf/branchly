@@ -228,6 +228,86 @@ def add_pattern(repository: Path | str, pattern: str) -> IgnoreOutcome:
     return IgnoreOutcome(ok=True, pattern=cleaned, created=not existed)
 
 
+@dataclass(frozen=True, slots=True)
+class IgnoreFile:
+    """
+    The repository's ``.gitignore`` as it stands on disk.
+
+    Attributes:
+        text: The content with ``\n`` line endings, ready for an editor.
+        newline: The line ending the file uses on disk, kept for writing back.
+        exists: Whether the file is there at all.
+        error_key: Translation key when it could not be read.
+    """
+
+    text: str = ""
+    newline: str = "\n"
+    exists: bool = False
+    error_key: str = ""
+
+
+def read_file(repository: Path | str) -> IgnoreFile:
+    """
+    Reads the whole ``.gitignore`` for editing.
+
+    The editor works with ``\n`` throughout; the file's own line ending is
+    remembered separately so that saving writes it back the way it came.
+
+    Args:
+        repository: Working tree root.
+
+    Returns:
+        IgnoreFile: The content, or an empty file that does not exist yet.
+    """
+
+    target = Path(repository) / GITIGNORE_NAME
+    if not target.is_file():
+        return IgnoreFile()
+    try:
+        with target.open("r", encoding="utf-8", newline="") as handle:
+            raw = handle.read()
+    except (OSError, UnicodeDecodeError):
+        return IgnoreFile(exists=True, error_key="ignore.unreadable")
+    newline = "\r\n" if "\r\n" in raw else "\n"
+    return IgnoreFile(text=raw.replace("\r\n", "\n"), newline=newline, exists=True)
+
+
+def write_file(repository: Path | str, text: str, newline: str = "\n") -> IgnoreOutcome:
+    """
+    Replaces the whole ``.gitignore`` with what the editor holds.
+
+    Trailing blank lines are trimmed to one final newline, the rest is written
+    exactly as typed: a comment, an empty line between groups and the order of
+    the patterns are all the user's business. An editor that is emptied removes
+    the file rather than leaving an empty one behind.
+
+    Args:
+        repository: Working tree root.
+        text: The new content, with ``\n`` line endings.
+        newline: The line ending to write, normally the one the file had.
+
+    Returns:
+        IgnoreOutcome: What happened.
+    """
+
+    root = Path(repository)
+    if not root.is_dir():
+        return IgnoreOutcome(ok=False, error_key="repo.missing")
+    target = root / GITIGNORE_NAME
+
+    body = text.replace("\r\n", "\n").rstrip("\n")
+    try:
+        if not body.strip():
+            target.unlink(missing_ok=True)
+            return IgnoreOutcome(ok=True)
+        content = (body + "\n").replace("\n", newline)
+        with target.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+    except OSError:
+        return IgnoreOutcome(ok=False, error_key="ignore.write_failed")
+    return IgnoreOutcome(ok=True)
+
+
 def is_ignored(repository: Path | str, relative_path: str) -> bool:
     """
     Asks git whether a path is already ignored.
