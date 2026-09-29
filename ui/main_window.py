@@ -88,6 +88,7 @@ from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordina
 from ui import changes_panel as changes_panel_mod
 from ui.changes_panel import ChangesPanel
 from ui.clone_dialog import CloneDialog
+from ui.commit_files_dialog import CommitFilesDialog, ViewOptions
 from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
 from ui.discover_dialog import DiscoverDialog
@@ -510,6 +511,7 @@ class MainWindow(QMainWindow):
         self._graph.reset_requested.connect(self._confirm_reset)
         self._graph.tag_requested.connect(self._prompt_tag)
         self._graph.compare_requested.connect(self._show_range_diff)
+        self._graph.files_requested.connect(self._show_commit_files)
         self._graph.reload_requested.connect(self._reload_graph)
 
         self._pull_requests.open_url_requested.connect(self._open_url)
@@ -1017,6 +1019,56 @@ class MainWindow(QMainWindow):
             context_lines=self._diff.context_lines,
         )
         self._diff.show_many(diffs, oid[:7])
+
+    def _show_commit_files(self, oid: str) -> None:
+        """
+        Opens the list of files of one commit, to save or restore old versions.
+
+        Args:
+            oid: Object id.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        commit = self._graph.commit_of(oid)
+        if entry is None or not entry.exists or commit is None:
+            return
+        options = ViewOptions(
+            mode=self._diff.mode,
+            ignore_whitespace=self._diff.ignore_whitespace,
+            word_level=self._diff.word_level,
+            full_context=self._diff.full_context,
+            context_lines=self._diff.context_lines,
+        )
+        dialog = CommitFilesDialog(
+            Path(entry.path), commit, entry.name, options, self._settings.download_folder, self
+        )
+        dialog.exec()
+
+        if dialog.download_folder and dialog.download_folder != self._settings.download_folder:
+            self._settings.download_folder = dialog.download_folder
+            save_settings(self._settings)
+
+        restored = dialog.restored
+        if not restored:
+            return
+        # The restored files are new changes, so an old deselection or block
+        # selection about them no longer means anything.
+        self._changes.forget_selection(restored)
+        entry.forget_selection(restored)
+        self._forget_hunk_selection(restored)
+        self._save_registry()
+        self._tabs.setCurrentIndex(TAB_CHANGES)
+        self._reload_current()
+        self._start_scan(entry.key)
+        self.statusBar().showMessage(
+            i18n.plural(
+                len(restored), "snapshot.restored_one", "snapshot.restored_many", short=commit.short
+            ),
+            8000,
+        )
 
     def _show_range_diff(self, older: str, newer: str) -> None:
         """

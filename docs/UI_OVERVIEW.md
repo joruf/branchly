@@ -278,6 +278,27 @@ denn ein leeres Feld zu speichern löscht die Datei.
 Ordner zu einer Zeile `ordner/` zusammen, die sich weder sinnvoll anhaken noch
 vergleichen noch in Teilen ignorieren lässt.
 
+## Dateien eines Stands (`ui/commit_files_dialog.py`, `gitops/snapshot.py`)
+
+Doppelklick auf eine Zeile im Graph, oder der erste Eintrag im Rechtsklickmenü,
+das ihn auch als Standard fett zeigt. `GraphView.files_requested` trägt die
+Kennung, `MainWindow._show_commit_files()` öffnet das Fenster.
+
+Links die Dateien mit Haken und dem `SelectAllBox` aus der Änderungsliste, rechts
+ein eigener `DiffView`, der nur die gerade gewählte Datei zeigt. Die
+Anzeigeoptionen kommen beim Öffnen aus dem Hauptfenster, Änderungen daran bleiben
+im Fenster. Ein Submodul steht in der Liste, hat aber keinen Haken.
+
+*Herunterladen…* fragt mit `QFileDialog` nach einem Ordner (erst *Downloads*,
+danach `AppSettings.download_folder`) und meldet das Ergebnis im Streifen oben,
+mit *Ordner öffnen*. *Aktuelle Version ersetzen…* ermittelt erst beim Klick, was
+verloren ginge (`snapshot.at_risk`), und zeigt `RestoreConfirmDialog`: gefährdete
+Dateien oben und rot, *Abbrechen* als Standardknopf. Nach dem Ersetzen schließt
+das Fenster, das Hauptfenster wechselt zu *Änderungen* und liest neu.
+
+`confirm_restore()` und `choose_folder()` sind eigene Methoden, damit Tests sie
+ersetzen können, ohne dass ein modales Fenster auf einen Klick wartet.
+
 ## Ein Haken für alle (`ui/changes_panel.py`, `SelectAllBox`)
 
 Statt der beiden Knöpfe *Alle auswählen* und *Auswahl aufheben* ein einziges

@@ -490,6 +490,40 @@ Ein Klick zeigt rechts **alle Änderungen dieses Commits**. Rechtsklick:
 „Branch hierher setzen und meine Arbeit wegwerfen" ist die einzige Aktion, die
 Arbeit endgültig vernichtet. Sie fragt in klaren Worten nach.
 
+### Dateien eines Stands und alte Versionen
+
+Ein **Doppelklick** auf einen Stand (oder Rechtsklick, *Dateien dieses Stands…*)
+öffnet ein Fenster mit allen Dateien, die dieser Stand geändert hat. Links steht
+die Liste mit Haken, rechts die Änderung der Datei, auf der du gerade stehst.
+
+![Die Dateien eines Stands](screenshots/de/commit-files-dark.png)
+
+Alle Dateien sind angehakt. Der Haken über der Liste funktioniert wie unter
+*Änderungen*: ein Klick hakt alles an oder ab, halb angehakt heißt, ein Teil ist
+ausgewählt. Unten stehen zwei Aktionen, beide gelten für die angehakten Dateien:
+
+| Aktion | Wirkung |
+|---|---|
+| **Herunterladen…** | Fragt nach einem Ordner (beim ersten Mal *Downloads*, danach der zuletzt gewählte) und legt dort einen neuen Ordner `<projekt>-<stand>` an, z. B. `invoicing-4dda86e`, mit den Unterordnern des Projekts. Am Projekt ändert sich nichts. Oben erscheint, wohin gespeichert wurde, mit **Ordner öffnen** |
+| **Aktuelle Version ersetzen…** | Setzt die Dateien im Projektordner auf ihre Version aus diesem Stand, nach einer Rückfrage |
+
+Beide nehmen die Datei so, wie sie **in diesem Stand** war, also nach dem
+Commit. Eine Datei, die dieser Stand gelöscht hat, kommt so zurück, wie sie
+direkt davor war. Ein zweites Herunterladen desselben Stands landet in
+`…-2`, das erste bleibt unangetastet.
+
+Vor dem Ersetzen listet Branchly jede betroffene Datei auf:
+
+![Die Rückfrage vor dem Ersetzen](screenshots/de/restore-confirm-dark.png)
+
+Dateien mit **Änderungen, die noch nicht committet sind**, stehen oben und rot:
+deren aktueller Inhalt ist nirgends gesichert und geht verloren. Das gilt auch
+für eine Datei, die auf der Festplatte liegt, aber nicht von Git verfolgt wird.
+
+Ersetzt wird nur im Projektordner, committet wird nichts. Danach wechselt
+Branchly zu *Änderungen*, dort stehen die ersetzten Dateien wie jede andere
+Änderung: ansehen, committen oder wieder verwerfen.
+
 ## Konflikte auflösen
 
 Wenn beim Holen oder Zusammenführen dieselben Stellen von beiden Seiten geändert
