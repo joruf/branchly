@@ -526,7 +526,6 @@
   "update.archive_broken": "The downloaded archive is unusable",
   "update.write_failed": "The new files could not be written",
   "about.version": "Version {version}",
-  "about.description": "A calm Git client: your projects in categories, a clear picture of what changed, and merges you can understand.",
   "about.credits": "Built on Git and Qt.",
   "action.delete": "Delete",
   "action.edit": "Edit…",

@@ -9,6 +9,13 @@ APP_SLUG = "branchly"
 APP_VERSION = "0.3.0"
 APP_URL = "https://github.com/joruf/branchly"
 
+# Who made it, for the About box. Not translated: a name and a company are the
+# same in every language.
+APP_AUTHOR = "Joachim Ruf"
+APP_COMPANY = "Loresoft"
+APP_COMPANY_URL = "https://www.loresoft.de"
+APP_AUTHOR_GITHUB = "https://github.com/joruf"
+
 # Set in the child process of a re-exec or a restart-after-update, so neither can
 # ever turn into a loop. Lives here because both ``run`` and ``services.updater``
 # need the same name.
