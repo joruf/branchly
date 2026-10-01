@@ -1015,5 +1015,6 @@
   "push_all.summary_current": "{count} with nothing to send",
   "push_all.skip_unpublished": "the branch is not on the server yet, send it once from the project",
   "push_all.skip_behind": "the server has newer commits, update first",
-  "tip.push_all_list": "Every project the run covers. Each line says afterwards what was sent, or why not."
+  "tip.push_all_list": "Every project the run covers. Each line says afterwards what was sent, or why not.",
+  "tip.sort_changes_first": "Brings projects that need you to the top: conflicts first, then unsaved work, then commits waiting to be sent or fetched. Inside each of those the chosen order still applies."
 }

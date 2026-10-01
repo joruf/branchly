@@ -225,7 +225,12 @@ class MainWindow(QMainWindow):
 
         self._splitter = QSplitter(Qt.Orientation.Horizontal, self)
 
-        self._sidebar = Sidebar(self._registry, self._settings.sort_mode, self._splitter)
+        self._sidebar = Sidebar(
+            self._registry,
+            self._settings.sort_mode,
+            self._splitter,
+            changes_first=self._settings.sort_changes_first,
+        )
         self._sidebar.setMinimumWidth(260)
         self._splitter.addWidget(self._sidebar)
 
@@ -3178,6 +3183,7 @@ class MainWindow(QMainWindow):
         save_settings(self._settings)
 
         self._sidebar.set_sort_mode(self._settings.sort_mode)
+        self._sidebar.set_sort_changes_first(self._settings.sort_changes_first)
         self._pull_requests.set_show_avatars(self._settings.show_avatars)
         self._github.set_token(token_store.load() if self._settings.github_enabled else "")
         self._viewer_login = ""
@@ -3595,6 +3601,7 @@ class MainWindow(QMainWindow):
 
         self._persist_diff_options()
         self._settings.sort_mode = self._sidebar.sort_mode
+        self._settings.sort_changes_first = self._sidebar.sort_changes_first
         self._settings.window_geometry = bytes(self.saveGeometry().toHex()).decode("ascii")
         self._settings.window_state = bytes(self.saveState().toHex()).decode("ascii")
         return self._settings

@@ -15,6 +15,7 @@ import time
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QBrush, QColor, QFont
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QInputDialog,
@@ -241,17 +242,25 @@ class Sidebar(QWidget):
     rename_requested = Signal(str)
     remove_requested = Signal(str)
 
-    def __init__(self, registry: Registry, sort_mode: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        registry: Registry,
+        sort_mode: str,
+        parent: QWidget | None = None,
+        changes_first: bool = False,
+    ) -> None:
         """
         Args:
             registry: Registry to display.
             sort_mode: Initial sort order.
             parent: Parent widget.
+            changes_first: Whether projects with changes start out on top.
         """
 
         super().__init__(parent)
         self._registry = registry
         self._sort_mode = sort_mode
+        self._changes_first = changes_first
         self._selected_key = ""
         self._rows: dict[str, RepoRow] = {}
         self._suppress_selection = False
@@ -342,6 +351,14 @@ class Sidebar(QWidget):
         self._sort.currentIndexChanged.connect(self._on_sort_changed)
         row.addWidget(self._sort, 1)
         column.addLayout(row)
+
+        # A second criterion rather than a seventh order: the chosen order still
+        # applies, inside the group that needs attention and inside the rest.
+        self._changes_first_box = QCheckBox(i18n.t("sort.changes_first"), holder)
+        self._changes_first_box.setToolTip(i18n.t("tip.sort_changes_first"))
+        self._changes_first_box.setChecked(self._changes_first)
+        self._changes_first_box.toggled.connect(self._on_changes_first_toggled)
+        column.addWidget(self._changes_first_box)
         return holder
 
     def _build_footer(self) -> QWidget:
@@ -391,6 +408,48 @@ class Sidebar(QWidget):
         """
 
         return self._sort_mode
+
+    @property
+    def sort_changes_first(self) -> bool:
+        """
+        Returns whether projects with changes are listed first.
+
+        Returns:
+            bool: True when the box is ticked.
+        """
+
+        return self._changes_first
+
+    def set_sort_changes_first(self, enabled: bool) -> None:
+        """
+        Ticks or unticks "with changes first".
+
+        Args:
+            enabled: Whether projects with changes come first.
+
+        Returns:
+            None
+        """
+
+        self._changes_first = enabled
+        self._changes_first_box.blockSignals(True)
+        self._changes_first_box.setChecked(enabled)
+        self._changes_first_box.blockSignals(False)
+        self.refresh()
+
+    def _on_changes_first_toggled(self, checked: bool) -> None:
+        """
+        Applies a click on "with changes first".
+
+        Args:
+            checked: The new state.
+
+        Returns:
+            None
+        """
+
+        self._changes_first = checked
+        self.refresh()
 
     @property
     def selected_key(self) -> str:
@@ -505,7 +564,7 @@ class Sidebar(QWidget):
         """
 
         query = self._search.text()
-        groups = self._registry.grouped(self._sort_mode, query)
+        groups = self._registry.grouped(self._sort_mode, query, self._changes_first)
 
         self._suppress_selection = True
         self._tree.clear()

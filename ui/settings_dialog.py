@@ -13,6 +13,8 @@ background check.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -177,6 +179,11 @@ class SettingsDialog(QDialog):
         if index >= 0:
             self._sort.setCurrentIndex(index)
         form.addRow(i18n.t("settings.sort_mode"), self._sort)
+
+        self._sort_changes_first = QCheckBox(i18n.t("sort.changes_first"), page)
+        self._sort_changes_first.setToolTip(i18n.t("tip.sort_changes_first"))
+        self._sort_changes_first.setChecked(self._original.sort_changes_first)
+        form.addRow("", self._sort_changes_first)
 
         self._confirm = QCheckBox(i18n.t("settings.confirm_destructive"), page)
         self._confirm.setToolTip(i18n.t("tip.settings_confirm"))
@@ -518,33 +525,23 @@ class SettingsDialog(QDialog):
             AppSettings: A normalized copy of the edited settings.
         """
 
-        edited = AppSettings(
-            # Light and dark live in the menu bar under Appearance, where the
-            # effect is visible the moment it is picked. Carried through here so
-            # a trip into this dialog does not undo that choice.
-            theme=self._original.theme,
+        # A copy of the original with this dialog's fields changed. Building a
+        # new object field by field lost every setting the dialog does not show
+        # the moment one was added elsewhere and forgotten here.
+        edited = replace(
+            self._original,
             language=str(self._language.currentData() or self._original.language),
             sort_mode=str(self._sort.currentData() or self._original.sort_mode),
+            sort_changes_first=self._sort_changes_first.isChecked(),
             auto_check_minutes=int(self._interval.currentData() or 0),
             check_online_automatically=self._check_online.isChecked(),
             check_updates=self._check_updates.isChecked(),
-            # Not offered here, but a hand-edited value and everything the last
-            # check found must survive a trip through this dialog.
-            update_check_hours=self._original.update_check_hours,
-            update_checked_at=self._original.update_checked_at,
-            update_remote_commit=self._original.update_remote_commit,
-            update_remote_summary=self._original.update_remote_summary,
             diff_mode=str(self._diff_mode.currentData() or self._original.diff_mode),
             diff_ignore_whitespace=self._diff_whitespace.isChecked(),
             diff_word_level=self._diff_words.isChecked(),
-            diff_full_context=self._original.diff_full_context,
-            diff_context_lines=self._original.diff_context_lines,
             github_enabled=self._github_enabled.isChecked(),
             show_avatars=self._show_avatars.isChecked(),
             confirm_destructive=self._confirm.isChecked(),
-            last_repo=self._original.last_repo,
-            window_geometry=self._original.window_geometry,
-            window_state=self._original.window_state,
         )
         return edited.normalized()
 

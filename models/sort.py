@@ -1,9 +1,17 @@
 """
 Sidebar sort orders.
 
-Favorites always come first inside their category — that is the point of the
-star and is not something a sort order may override. The chosen order only
-decides the sequence *within* the favorite block and within the rest.
+Favorites always come first inside their category. That is the point of the
+star and is not something a sort order may override. Inside the favorite block
+and inside the rest, two criteria decide:
+
+1. **Projects with changes first**, when that box is ticked: conflicts, then
+   uncommitted work, then commits waiting to be sent or fetched, then the rest.
+2. **The chosen order** (name, newest commit, recently opened, own order) inside
+   each of those groups, and for the whole list when the box is not ticked.
+
+"With changes first" used to be one of the orders itself, which meant choosing
+between "what needs me" and "alphabetical". As a second criterion it is both.
 """
 
 from __future__ import annotations
@@ -18,8 +26,12 @@ SORT_NAME_ASC = "name_asc"
 SORT_NAME_DESC = "name_desc"
 SORT_NEWEST_COMMIT = "newest_commit"
 SORT_RECENT_OPENED = "recent_opened"
-SORT_CHANGES_FIRST = "changes_first"
 SORT_MANUAL = "manual"
+
+# The value "with changes first" had while it was an order of its own. A
+# settings file may still carry it, and it maps onto the default order with
+# the box ticked rather than being dropped.
+LEGACY_CHANGES_FIRST = "changes_first"
 
 DEFAULT_SORT_MODE = SORT_NAME_ASC
 
@@ -28,7 +40,6 @@ VALID_SORT_MODES: tuple[str, ...] = (
     SORT_NAME_DESC,
     SORT_NEWEST_COMMIT,
     SORT_RECENT_OPENED,
-    SORT_CHANGES_FIRST,
     SORT_MANUAL,
 )
 
@@ -39,7 +50,6 @@ SORT_MODE_LABEL_KEYS: dict[str, str] = {
     SORT_NAME_DESC: "sort.name_desc",
     SORT_NEWEST_COMMIT: "sort.newest_commit",
     SORT_RECENT_OPENED: "sort.recent_opened",
-    SORT_CHANGES_FIRST: "sort.changes_first",
     SORT_MANUAL: "sort.manual",
 }
 
@@ -103,33 +113,47 @@ def _sort_key(entry: RepoEntry, mode: str) -> tuple:
     if mode == SORT_RECENT_OPENED:
         stamp = entry.last_opened
         return (0 if stamp is not None else 1, -(stamp or 0.0), name)
-    if mode == SORT_CHANGES_FIRST:
-        status = entry.status
-        # Conflicts first, then dirty trees, then unpushed work, then the rest.
-        rank = 3
-        if status.has_conflicts:
-            rank = 0
-        elif status.is_dirty:
-            rank = 1
-        elif status.ahead or status.incoming or status.behind:
-            rank = 2
-        pending = status.changed_files + status.staged_files + status.conflicted_files
-        return (rank, -pending, name)
     if mode == SORT_MANUAL:
         return (entry.order, name)
     return (name,)
 
 
-def sort_entries(entries: Iterable[RepoEntry], mode: str | None = None) -> list[RepoEntry]:
+def changes_rank(entry: RepoEntry) -> int:
+    """
+    Says how urgently a project needs attention, for "with changes first".
+
+    Args:
+        entry: Repository entry.
+
+    Returns:
+        int: 0 for a conflict, 1 for uncommitted work, 2 for commits waiting to
+            be sent or fetched, 3 for nothing to do.
+    """
+
+    status = entry.status
+    if status.has_conflicts:
+        return 0
+    if status.is_dirty:
+        return 1
+    if status.ahead or status.incoming or status.behind:
+        return 2
+    return 3
+
+
+def sort_entries(
+    entries: Iterable[RepoEntry], mode: str | None = None, changes_first: bool = False
+) -> list[RepoEntry]:
     """
     Sorts repository entries for display inside a single category.
 
     Args:
         entries: Entries belonging to one category.
         mode: Sort mode to apply. Invalid values fall back to the default.
+        changes_first: Whether projects that need attention come first, with
+            ``mode`` deciding the order inside each group.
 
     Returns:
-        list[RepoEntry]: Favorites first, each block ordered by ``mode``.
+        list[RepoEntry]: Favorites first, each block ordered as described.
     """
 
     normalized = normalize_sort_mode(mode)
@@ -140,6 +164,12 @@ def sort_entries(entries: Iterable[RepoEntry], mode: str | None = None) -> list[
         (favorites if entry.favorite else others).append(entry)
 
     def _ordered(items: list[RepoEntry]) -> list[RepoEntry]:
-        return sorted(items, key=lambda item: _sort_key(item, normalized), reverse=reverse)
+        ordered = sorted(items, key=lambda item: _sort_key(item, normalized), reverse=reverse)
+        if changes_first:
+            # Python's sort is stable, so sorting by the first criterion last
+            # keeps the chosen order inside each group, descending names
+            # included, which a single combined key could not.
+            ordered.sort(key=changes_rank)
+        return ordered
 
     return _ordered(favorites) + _ordered(others)

@@ -130,7 +130,15 @@ Das Sternchen links neben dem Namen heftet ein Projekt **innerhalb seiner
 Kategorie** nach oben. Das gilt in jeder Sortierung, dafür ist es da.
 
 Sortierungen: Name A–Z, Name Z–A, neueste Änderung zuerst, zuletzt geöffnet
-zuerst, Projekte mit Änderungen zuerst, eigene Reihenfolge.
+zuerst, eigene Reihenfolge.
+
+Darunter steht der Haken **Projekte mit Änderungen zuerst**. Er kommt zur
+gewählten Sortierung hinzu, statt sie zu ersetzen: oben stehen Projekte mit
+Konflikten, dann mit ungespeicherter Arbeit, dann mit Commits, die gesendet oder
+geholt werden wollen, danach der Rest. Innerhalb jeder dieser Gruppen gilt die
+Sortierung aus der Auswahlliste. Mit *Name A–Z* und Haken stehen also alle
+Projekte mit Änderungen alphabetisch oben, die übrigen alphabetisch darunter.
+Favoriten bleiben auch hier zuerst.
 
 ### Die Badges
 
