@@ -26,7 +26,6 @@ git's own credential helper does that job.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import time
@@ -34,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import paths
 from constants import GIT_TIMEOUT_LOCAL
 
 # Options that no Branchly command ever needs. Their presence means user input
@@ -245,7 +245,9 @@ def build_environment(extra: dict[str, str] | None = None) -> dict[str, str]:
         dict[str, str]: Environment for the child process.
     """
 
-    env = dict(os.environ)
+    # Without the executable's library paths, which would make git and ssh
+    # load Branchly's bundled libraries instead of their own.
+    env = paths.child_environment()
     env.update(
         {
             # Never wait for input nobody can give.

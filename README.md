@@ -187,6 +187,50 @@ For a desktop entry on Linux:
 cp resources/branchly.desktop ~/.local/share/applications/
 ```
 
+## Single-file executable (no Python needed)
+
+Branchly can also be built as one executable file that carries Python, Qt and
+every package it needs. One script does the whole build:
+
+```bash
+./build-exe.py          # Linux   -> dist/branchly-linux-x86_64-<version>-build<build>
+py build-exe.py         # Windows -> dist/branchly-windows-x86_64-<version>-build<build>.exe
+```
+
+The file name carries the version, for example `branchly-linux-x86_64-0.10.2-build31`.
+
+- **Build on the system the file is for.** PyInstaller cannot build for another
+  system: the Linux file runs on Linux only, the `.exe` on Windows only. Both
+  come from the same code.
+- **Build from a checkout with its full history.** The version is derived from
+  the commits, so the script writes `VERSION` first and the file carries it.
+- **Linux: the file runs on systems with the same or a newer glibc as the build
+  machine.** Build on the oldest system you want to support; the release
+  workflow uses Ubuntu 22.04.
+- `--clean` rebuilds the build environment in `build/exe/`, `--keep-env` reuses
+  it without updating.
+
+What stays outside the file, on purpose:
+
+| Component | Where it comes from |
+|---|---|
+| Git | the system's `git`, exactly as for a checkout. Branchly refuses to start without it |
+| Graphics libraries (Linux) | the system's X11/Wayland and OpenGL libraries, the ones `install_dependencies.py` offers for a checkout (`libxcb-cursor0`, `libxkbcommon-x11-0`, `libegl1`, `libgl1`) |
+| Keychain | the system's Secret Service (Linux) or Credential Manager (Windows), as before |
+
+The executable has nothing to install, so Settings → General shows *Repair
+dependencies* greyed out with a note saying so. On its first start under Linux it
+adds itself to the application menu, as the installer does for a checkout.
+
+Every push to `main` runs `.github/workflows/release-exe.yml`. It builds both
+files on GitHub (Ubuntu 22.04 and Windows) and publishes them as the release
+`v<version>-build<build>`. The executable updates itself from these releases:
+the newer file is saved next to the running one under its own name, the new
+program then removes the old file and points the menu entry at itself. A
+checkout keeps updating through git as before. The Linux file has to be made
+executable once after downloading (`chmod +x`). Windows SmartScreen warns about
+the unsigned `.exe`.
+
 ## Version number
 
 Nobody types it. It is derived from the commit history, the same way as in the
@@ -235,7 +279,8 @@ where most of its safety comes from. On top of that:
   merge commit, cannot leave a conflict behind, and cannot move a branch that has
   unsaved work in its tree. Skipped projects are fetched, which touches no file.
 - **The update check is anonymous and never installs by itself.** It asks the
-  public commits endpoint without your token, so it cannot spend your rate limit
+  public commits endpoint (the single-file executable: the releases endpoint)
+  without your token, so it cannot spend your rate limit
   or leak the token to a redirect. Installing needs a click, refuses to run over
   uncommitted work, and the archive fallback never overwrites `.git`, `.venv`,
   `settings.json` or `repos.json`.

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 import i18n
+import paths
 from config.app_settings import (
     AUTO_CHECK_PRESETS,
     DIFF_SIDE_BY_SIDE,
@@ -192,7 +193,14 @@ class SettingsDialog(QDialog):
         repair.clicked.connect(self._open_repair_installer)
         form.addRow("", repair)
 
-        repair_hint = QLabel(i18n.t("settings.repair_deps_hint"), page)
+        hint = i18n.t("settings.repair_deps_hint")
+        if paths.IS_FROZEN:
+            # The single-file executable carries its packages and has no .venv to
+            # repair. The button stays, greyed out, so the feature is explained
+            # rather than missing.
+            repair.setEnabled(False)
+            hint = i18n.t("settings.repair_deps_frozen")
+        repair_hint = QLabel(hint, page)
         repair_hint.setObjectName("Muted")
         repair_hint.setWordWrap(True)
         form.addRow("", repair_hint)

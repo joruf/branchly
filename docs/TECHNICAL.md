@@ -177,8 +177,9 @@ Worker in einem Projekt steckt, darf niemand daneben einen Push starten.
 
 ### Selbst-Update
 
-`services/updater.py`. Branchly veröffentlicht keine Releases und keine Tags,
-also ist „neuer" der Head-Commit von `main`: `GET /repos/joruf/branchly/commits/main`
+`services/updater.py`. Für einen Checkout ist „neuer" der Head-Commit von
+`main` (Releases gibt es nur für das Einzeldatei-Programm, siehe
+[Single-file executable](#single-file-executable-frozen-mode)): `GET /repos/joruf/branchly/commits/main`
 liefert ihn, `git rev-parse HEAD` liefert den eigenen. Kein Versionsvergleich, keine
 Semantik, nichts, was falsch sortieren kann.
 
@@ -885,6 +886,68 @@ längere Zeile.
 `StartupWMClass` muss die **Klasse** aus `WM_CLASS` treffen, also `Branchly` und
 nicht `branchly`. Sonst ordnet die Taskleiste das Fenster dem Starter nicht zu
 und zeigt zwei Einträge für dasselbe Programm.
+
+### Single-file executable (frozen mode)
+
+`build-exe.py` builds a PyInstaller one-file executable for the system it runs
+on. It writes `VERSION` from the history, sets up a build venv in `build/exe/`
+without the system's packages, stages the read-only files, writes a spec file
+and checks the result with `--version`. Inside the executable `paths.IS_FROZEN`
+is set, and a few things work differently:
+
+- **Read-only files as data.** `VERSION`, `locales/`, `resources/` and the
+  manuals with their screenshots are staged in the layout of a checkout and
+  unpacked to `sys._MEIPASS`. `paths.project_root()` returns that directory,
+  so every path built on it stays the same. Nothing is ever written there: the
+  directory is deleted when the program ends.
+- **Version from the file only.** `version._resolve` reads the bundled
+  `VERSION` and never runs git or rewrites the file. `--version` prints the
+  full label before any Qt module is imported, which is what the build's smoke
+  test needs on a runner without a display.
+- **No venv, no installer.** `sys.executable` is the program itself; running it
+  with `-m venv` or a script path would start another Branchly. The re-exec into
+  `.venv` is skipped, a missing package is reported as a broken build instead of
+  opening the installer, `run_install` and `launch_installer_subprocess` refuse,
+  and Settings → General shows *Repair dependencies* greyed out with a note.
+  tkinter and `installer_ui` are left out of the build.
+- **The executable is its own askpass helper.** There is no Python to run
+  `resources/branchly-askpass.py` with, so `GIT_ASKPASS` names the executable
+  and `BRANCHLY_ASKPASS_HELPER=1` is set for git only. `run.py` checks it right
+  after its first imports and runs the bundled script through `runpy`, so the
+  protocol is the same file in both forms. Each prompt unpacks the executable
+  once more, which costs a moment.
+- **Child processes get the system's libraries.** PyInstaller points
+  `LD_LIBRARY_PATH` at the unpacked files, and its Qt hooks add more variables.
+  Inherited, they would make git, ssh or the file manager load Branchly's
+  libraries. `paths.use_system_environment_for_children()` wraps
+  `subprocess.Popen` once at startup (`run.start_frozen`), and
+  `runner.build_environment` and `updater.restart` start from
+  `paths.child_environment()`: every entry pointing into `sys._MEIPASS` is
+  dropped, and `LD_LIBRARY_PATH` gets its original value back.
+- **Manual.** `_open_manual` copies the manual and its screenshots into the
+  cache directory before handing it to the desktop, because the unpacked copy
+  disappears with the program.
+- **Menu entry.** On the first start under Linux, `start_frozen` writes the same
+  `branchly.desktop` the installer writes, with `Exec` naming the executable;
+  the icon goes to `~/.local/share/icons` as before.
+- **Updates from releases.** `updater.check`/`apply` read `releases/latest`
+  instead of the branch head. They compare the build number in the tag
+  `v<version>-build<build>` with `APP_BUILD`, list the commits in between
+  through `/compare` from the commit in `VERSION` to the release's
+  `target_commitish`, and download the asset `paths.executable_name(version,
+  build)` next to the running file. The name carries the version, so nothing is
+  overwritten, and Windows would refuse to overwrite a running `.exe` anyway.
+  The old path is kept in `update.json` in the configuration directory, not in
+  `settings.json`, which the window writes back when it closes.
+  `finish_executable_update()` in the new program points a menu entry that
+  named the old file at itself and deletes the old file; while the old file is
+  still running, the deletion waits for the next start, and a file never
+  deletes itself. `restart()` starts the new file with
+  `PYINSTALLER_RESET_ENVIRONMENT=1`, so it unpacks itself afresh.
+
+`.github/workflows/release-exe.yml` runs the same script on Ubuntu 22.04 (the
+oldest glibc) and Windows on every push to `main`, with the full history,
+because every commit is a new build number. It then publishes the release.
 
 ## Versionsnummer
 

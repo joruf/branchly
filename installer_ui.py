@@ -587,5 +587,9 @@ def launch_installer_subprocess() -> None:
         None
     """
 
+    if paths.IS_FROZEN:
+        # sys.executable is Branchly itself in the single-file executable, which
+        # has no installer to start; the settings dialog says so instead.
+        return
     script = _ROOT / "install_dependencies.py"
     subprocess.Popen([sys.executable, str(script), "--gui"], cwd=str(_ROOT))

@@ -17,6 +17,7 @@ Two rules it enforces on behalf of the whole program:
 from __future__ import annotations
 
 import html
+import shutil
 import time
 from pathlib import Path
 
@@ -1882,7 +1883,35 @@ class MainWindow(QMainWindow):
         if manual is None:
             self._show_notice("manual.missing", "manual.missing_hint", "warning")
             return
+        if paths.IS_FROZEN:
+            manual = self._lasting_manual(manual)
         open_with.open_path(manual)
+
+    @staticmethod
+    def _lasting_manual(manual: Path) -> Path:
+        """
+        Copies the manual and its pictures out of the executable's unpacked files.
+
+        Those are deleted when Branchly ends, which would pull the file away from
+        under the program showing it. The copy lives in the cache directory.
+
+        Args:
+            manual: The manual inside the unpacked files.
+
+        Returns:
+            Path: The copy, or the original when it could not be made.
+        """
+
+        target = paths.user_cache_dir() / "docs"
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(manual, target / manual.name)
+            pictures = manual.parent / "screenshots"
+            if pictures.is_dir():
+                shutil.copytree(pictures, target / "screenshots", dirs_exist_ok=True)
+        except OSError:
+            return manual
+        return target / manual.name
 
     def _checkout_branch(self, name: str) -> None:
         """
@@ -3205,7 +3234,7 @@ class MainWindow(QMainWindow):
         pending = self._settings.update_remote_commit
         if not pending:
             return
-        local = updater.local_commit()
+        local = updater.installed_revision()
         if not local or local.startswith(pending):
             # Already installed, or no longer comparable: nothing to announce.
             self._forget_pending_update()
@@ -3215,7 +3244,7 @@ class MainWindow(QMainWindow):
         self._show_update_banner(
             updater.UpdateInfo(
                 available=True,
-                local=local[:10],
+                local=local,
                 remote=pending,
                 summary=self._settings.update_remote_summary,
             )

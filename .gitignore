@@ -6,6 +6,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Output of build-exe.py
+/build/
+/dist/
+
 # Local state written at runtime
 # Derived from the history after every commit; a checked-in copy would be
 # stale one commit later.

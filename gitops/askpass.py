@@ -15,6 +15,10 @@ answer with is not a git question and lives in ``services.git_credentials``.
 The secret travels in the environment, never in an argument list: process
 arguments are world-readable through ``ps``, the environment of a process is
 readable only by its owner.
+
+The single-file executable has no Python to run the script with, so there the
+executable itself is the helper: git starts it with :data:`HELPER_MODE_VARIABLE`
+set, and ``run.py`` runs the very same script before anything else happens.
 """
 
 from __future__ import annotations
@@ -30,6 +34,10 @@ HELPER_NAME = "branchly-askpass.py"
 
 USERNAME_VARIABLE = "BRANCHLY_GIT_USERNAME"
 PASSWORD_VARIABLE = "BRANCHLY_GIT_PASSWORD"
+
+# Set for git only, and only by the executable: tells the program git starts to
+# answer the prompt instead of opening a window.
+HELPER_MODE_VARIABLE = "BRANCHLY_ASKPASS_HELPER"
 
 
 def _shipped_helper() -> Path:
@@ -66,8 +74,11 @@ def helper_path() -> Path | None:
 
     Returns:
         Path | None: An executable script, or None when none could be prepared.
+            In the single-file executable, the executable itself.
     """
 
+    if paths.IS_FROZEN:
+        return paths.executable()
     shipped = _shipped_helper()
     if shipped.is_file():
         if os.access(shipped, os.X_OK):
@@ -111,7 +122,9 @@ def environment(username: str, secret: str) -> dict[str, str]:
     helper = helper_path()
     if helper is None:
         return {}
+    mode = {HELPER_MODE_VARIABLE: "1"} if paths.IS_FROZEN else {}
     return {
+        **mode,
         "GIT_ASKPASS": str(helper),
         # SSH has its own prompt and its own variable. Setting it as well means
         # a passphrase prompt cannot hang the process either; the helper simply
@@ -121,3 +134,20 @@ def environment(username: str, secret: str) -> dict[str, str]:
         USERNAME_VARIABLE: username,
         PASSWORD_VARIABLE: secret,
     }
+
+
+def answer_as_helper() -> None:
+    """
+    Answers git's prompt the way the shipped script does, then ends the process.
+
+    What the executable does when git starts it as ``GIT_ASKPASS``. It runs the
+    bundled script itself, so the protocol cannot drift between the two forms.
+
+    Returns:
+        None: Never returns; the script's exit code ends the process.
+    """
+
+    import runpy
+
+    runpy.run_path(str(_shipped_helper()), run_name="__main__")
+    raise SystemExit(1)

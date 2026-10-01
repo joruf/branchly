@@ -384,6 +384,7 @@
   "settings.show_avatars": "Autorenbilder anzeigen",
   "settings.repair_deps": "Abhängigkeiten reparieren…",
   "settings.repair_deps_hint": "Öffnet den Installer und installiert die festgelegten Paketversionen neu in .venv. Schließe Branchly, bevor PySide6 ersetzt wird.",
+  "settings.repair_deps_frozen": "Das einzelne Branchly-Programm bringt seine Pakete selbst mit, es gibt also nichts zu reparieren. Eine beschädigte Datei ersetzt man, indem man sie neu herunterlädt oder über Hilfe → Nach Updates suchen.",
   "settings.repair_deps_confirm_title": "Abhängigkeiten reparieren",
   "settings.repair_deps_confirm": "Branchly öffnet den Installer in einem eigenen Fenster. Beende diese App, bevor der Installer Pakete ersetzt, die gerade in Benutzung sind.",
   "github.pull_requests": "Pull Requests",
