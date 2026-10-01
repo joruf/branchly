@@ -241,7 +241,7 @@ schlechtere Variante. Sobald alles durch ist, schließt er das Fenster.
 
 ## Alle Projekte auf einmal senden
 
-Das Gegenstück steht im Menü **Projekt → Alle Änderungen zum Server senden…**. Es
+Das Gegenstück steht im Menü **Branch → Alle Änderungen zum Server senden…**, direkt unter dem Eintrag für das einzelne Projekt. Es
 sendet in jedem Projekt die Commits, die noch nicht auf dem Server sind, im selben
 Fenster und ebenfalls ohne zweite Bestätigung.
 

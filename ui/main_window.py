@@ -395,11 +395,7 @@ class MainWindow(QMainWindow):
         repo_menu.addAction(refresh_action)
         # Checking and updating every project are the two buttons at the bottom
         # of the project list, where they are always on screen. A second copy in
-        # a menu is a second place to keep correct for no gain. Sending every
-        # project is rarer, and the menu is enough for it.
-        repo_menu.setToolTipsVisible(True)
-        push_all = repo_menu.addAction(i18n.t("push_all.menu"), self._push_all)
-        push_all.setToolTip(i18n.t("tip.push_all_menu"))
+        # a menu is a second place to keep correct for no gain.
         repo_menu.addSeparator()
         repo_menu.addAction(i18n.t("repo.open_folder"), self._open_current_folder)
         repo_menu.addAction(i18n.t("repo.open_remote"), self._open_current_remote)
@@ -440,6 +436,10 @@ class MainWindow(QMainWindow):
         )
         self._pull_action.setToolTip(i18n.t("tip.pull"))
         branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
+        # Sending every project sits right under sending this one, where
+        # somebody looking for "send" finds both.
+        push_all = branch_menu.addAction(i18n.t("push_all.menu"), self._push_all)
+        push_all.setToolTip(i18n.t("tip.push_all_menu"))
         force_action = QAction(i18n.t("sync.force_push"), self)
         force_action.setToolTip(i18n.t("tip.force_push"))
         force_action.triggered.connect(self._do_force_push)
