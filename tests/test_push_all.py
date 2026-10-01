@@ -219,7 +219,7 @@ class WindowTests(unittest.TestCase):
         self.addCleanup(dialog.close)
         self.assertEqual(i18n.t("push_all.title"), dialog.windowTitle())
 
-    def test_the_menu_offers_it(self) -> None:
+    def test_the_branch_menu_offers_it_under_the_single_push(self) -> None:
         import tempfile
         from pathlib import Path
 
@@ -230,13 +230,20 @@ class WindowTests(unittest.TestCase):
             os.environ["XDG_CONFIG_HOME"] = str(Path(base) / "config")
             window = MainWindow(AppSettings(auto_check_minutes=0, github_enabled=False, language="en"))
             self.addCleanup(window.close)
-            texts = [
-                action.text()
+            menus = {
+                menu.text(): [action.text() for action in menu.menu().actions()]
                 for menu in window.menuBar().actions()
                 if menu.menu() is not None
-                for action in menu.menu().actions()
+            }
+            branch = menus[i18n.t("menu.branch")]
+            # Right under sending the one project, and nowhere else.
+            single = branch.index(i18n.t("sync.push_generic"))
+            self.assertEqual(i18n.t("push_all.menu"), branch[single + 1])
+            elsewhere = [
+                name for name, texts in menus.items()
+                if name != i18n.t("menu.branch") and i18n.t("push_all.menu") in texts
             ]
-            self.assertIn(i18n.t("push_all.menu"), texts)
+            self.assertEqual([], elsewhere)
 
 
 if __name__ == "__main__":

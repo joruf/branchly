@@ -234,7 +234,7 @@ option. Once everything is through, it closes the window.
 
 ## Sending every project at once
 
-The counterpart is in the menu **Repository → Send all changes to the server…**.
+The counterpart is in the menu **Branch → Send all changes to the server…**, right under the entry for the single project.
 It sends the commits in every project that are not on the server yet, in the same
 window and also without a second confirmation.
 
