@@ -219,6 +219,43 @@ class Registry:
         self._entries.append(entry)
         return ADD_OK, entry
 
+    def relocate(self, entry: RepoEntry, path: Path | str) -> tuple[str, RepoEntry | None]:
+        """
+        Points an entry at the folder its project moved to.
+
+        Everything the user arranged stays: category, star, manual position, the
+        files left out of the next commit. A display name that was only the old
+        folder's name follows the new folder; one the user chose stays. The last
+        scan is dropped, since it described a folder that is gone.
+
+        Args:
+            entry: Entry whose folder can no longer be found.
+            path: Any directory inside the project's new location.
+
+        Returns:
+            tuple[str, RepoEntry | None]: One of the ``ADD_*`` constants and the
+                entry: the moved one, or for ``ADD_DUPLICATE`` the entry that
+                already holds that folder.
+        """
+
+        candidate = Path(path).expanduser()
+        if not candidate.is_dir():
+            return ADD_UNREADABLE, None
+        root = repository_root(candidate)
+        if root is None:
+            return ADD_NOT_A_REPOSITORY, None
+        existing = self.find(root)
+        if existing is not None and existing is not entry:
+            return ADD_DUPLICATE, existing
+
+        if entry.name == (entry.path.name or str(entry.path)):
+            entry.name = root.name or str(root)
+        entry.path = root
+        git_dir = resolve_git_dir(root)
+        entry.remote_url = read_origin_url(git_dir) if git_dir is not None else ""
+        entry.status = RepoStatus()
+        return ADD_OK, entry
+
     def remove(self, entry: RepoEntry) -> bool:
         """
         Forgets a repository. Nothing on disk is touched.
