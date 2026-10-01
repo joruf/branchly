@@ -1155,7 +1155,10 @@ def capture_menus(theme: str, base: Path, repositories: list[Path]) -> list[Path
         for menu in window.menuBar().findChildren(QMenu):
             if menu.title() != i18n.t(title_key):
                 continue
+            # A menu is photographed without being opened, so whatever it
+            # would refresh on opening has to be done here.
             window._refresh_branch_menu()
+            window._refresh_project_menu()
             menu.adjustSize()
             for _round in range(4):
                 app.processEvents()

@@ -272,6 +272,10 @@ Ein Rechtsklick, der auf keine Datei trifft, meint das Projekt als Ganzes:
 zurücksetzen*. Dasselbe Menü hängt am Hinweis „Keine Änderungen", denn genau
 dann ist keine Liste da, und genau dann bearbeitet man die `.gitignore`.
 
+Im Menü *Projekt* steht derselbe Eintrag noch einmal, für das ausgewählte
+Projekt. `_refresh_project_menu()` schaltet ihn bei jedem Öffnen des Menüs frei
+oder grau, je nachdem, ob ein Projekt ausgewählt ist und sein Ordner existiert.
+
 `project_menu()` baut das Menü, `_show_project_menu()` zeigt es. Getrennt, damit
 sich die Einträge prüfen lassen, ohne dass ein Popup auf einen Klick wartet.
 

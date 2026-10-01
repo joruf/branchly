@@ -374,6 +374,10 @@ all, opens a menu for the project as a whole:
 - **Refresh**
 - **Revert all changes…**, greyed out when there is nothing to revert
 
+The same window also opens from the menu **Repository → Edit .gitignore…**, always
+for the project selected on the left. With none selected, the entry is greyed
+out.
+
 The window shows `.gitignore` as text, one pattern per line. Comments, blank
 lines and the order stay exactly as you type them, and a file written with
 Windows line endings goes back with Windows line endings. If there is none yet,
