@@ -490,7 +490,9 @@ class Registry:
 
     # ------------------------------------------------------------- grouping
 
-    def grouped(self, sort_mode: str, query: str = "") -> list[tuple[Category, list[RepoEntry]]]:
+    def grouped(
+        self, sort_mode: str, query: str = "", changes_first: bool = False
+    ) -> list[tuple[Category, list[RepoEntry]]]:
         """
         Arranges entries into the groups the sidebar renders.
 
@@ -499,6 +501,8 @@ class Registry:
             query: Case-insensitive filter on the display name and path. A search
                 looks through every group, including folded ones — hiding a match
                 because its category happens to be shut would be baffling.
+            changes_first: Whether projects that need attention come first
+                inside each group, ahead of ``sort_mode``.
 
         Returns:
             list[tuple[Category, list[RepoEntry]]]: Groups in display order.
@@ -523,8 +527,10 @@ class Registry:
 
         groups: list[tuple[Category, list[RepoEntry]]] = []
         for category in self.categories:
-            groups.append((category, sort_entries(buckets.get(category.name, []), sort_mode)))
-        catch_all = sort_entries(buckets.get("", []), sort_mode)
+            groups.append(
+                (category, sort_entries(buckets.get(category.name, []), sort_mode, changes_first))
+            )
+        catch_all = sort_entries(buckets.get("", []), sort_mode, changes_first)
         if catch_all:
             groups.append((Category(name=UNCATEGORIZED), catch_all))
         return groups

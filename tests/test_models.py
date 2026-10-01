@@ -11,7 +11,7 @@ from models.category import Category, normalize_category_name
 from models.repository import RepoEntry, RepoStatus
 from models.sort import (
     DEFAULT_SORT_MODE,
-    SORT_CHANGES_FIRST,
+    LEGACY_CHANGES_FIRST,
     SORT_MANUAL,
     SORT_NAME_ASC,
     SORT_NAME_DESC,
@@ -189,9 +189,39 @@ class SortTests(unittest.TestCase):
         unpushed.status.ahead = 3
         ordered = [
             item.name
-            for item in sort_entries([clean, unpushed, dirty, conflicted], SORT_CHANGES_FIRST)
+            for item in sort_entries(
+                [clean, unpushed, dirty, conflicted], SORT_NAME_ASC, changes_first=True
+            )
         ]
         self.assertEqual(["conflicted", "dirty", "unpushed", "clean"], ordered)
+
+    def test_changes_first_keeps_the_chosen_order_inside_each_group(self) -> None:
+        # Two criteria: changes first, then the order picked in the dropdown.
+        names = ("alpha", "bravo", "charlie", "delta")
+        entries = [_entry(name) for name in names]
+        entries[0].status.changed_files = 1
+        entries[2].status.changed_files = 1
+        ascending = [e.name for e in sort_entries(entries, SORT_NAME_ASC, changes_first=True)]
+        self.assertEqual(["alpha", "charlie", "bravo", "delta"], ascending)
+        descending = [e.name for e in sort_entries(entries, SORT_NAME_DESC, changes_first=True)]
+        self.assertEqual(["charlie", "alpha", "delta", "bravo"], descending)
+
+    def test_without_the_tick_changes_do_not_move_anything(self) -> None:
+        entries = [_entry("alpha"), _entry("bravo")]
+        entries[1].status.changed_files = 4
+        self.assertEqual(
+            ["alpha", "bravo"], [e.name for e in sort_entries(entries, SORT_NAME_ASC)]
+        )
+
+    def test_favorites_still_come_before_changes(self) -> None:
+        starred = _entry("starred", favorite=True)
+        busy = _entry("busy")
+        busy.status.changed_files = 1
+        ordered = [e.name for e in sort_entries([busy, starred], SORT_NAME_ASC, changes_first=True)]
+        self.assertEqual(["starred", "busy"], ordered)
+
+    def test_changes_first_is_no_longer_an_order_of_its_own(self) -> None:
+        self.assertNotIn(LEGACY_CHANGES_FIRST, VALID_SORT_MODES)
 
     def test_manual_order(self) -> None:
         entries = [_entry("third", order=3), _entry("first", order=1), _entry("second", order=2)]

@@ -1015,5 +1015,6 @@
   "push_all.summary_current": "{count} ohne Ungesendetes",
   "push_all.skip_unpublished": "der Branch ist noch nicht auf dem Server, einmal im Projekt senden",
   "push_all.skip_behind": "der Server hat neuere Commits, erst aktualisieren",
-  "tip.push_all_list": "Alle Projekte, die der Lauf abdeckt. Jede Zeile sagt hinterher, was gesendet wurde oder warum nicht."
+  "tip.push_all_list": "Alle Projekte, die der Lauf abdeckt. Jede Zeile sagt hinterher, was gesendet wurde oder warum nicht.",
+  "tip.sort_changes_first": "Holt Projekte, die dich brauchen, nach oben: erst Konflikte, dann ungespeicherte Arbeit, dann Commits, die gesendet oder geholt werden wollen. Innerhalb davon gilt die gewählte Sortierung weiter."
 }

@@ -31,7 +31,8 @@
 |---|---|
 | Hinzufügen / Klonen | Projekt aufnehmen. Kurze Labels, volle Beschriftung im Tooltip |
 | Suchfeld | Filtert Name und Pfad, auch in zugeklappten Kategorien |
-| Sortierung | Sechs Ordnungen; Favoriten stehen immer oben |
+| Sortierung | Fünf Ordnungen; Favoriten stehen immer oben |
+| Projekte mit Änderungen zuerst | Zweites Kriterium vor der gewählten Ordnung: Konflikte, ungespeicherte Arbeit, wartende Commits, dann der Rest, jede Gruppe in der gewählten Ordnung |
 | Kategorie-Kopf | Name und Anzahl, auf- und zuklappbar, Zustand wird gespeichert |
 | Projektzeile | Sternchen, Name, Badges. Fehlender Ordner wird rot mit `!` markiert |
 | Tooltip der Zeile | `repo_tooltip()`: Name, Serveradresse, lokaler Pfad, Prüfzeitpunkt |

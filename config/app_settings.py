@@ -17,7 +17,7 @@ from typing import Any
 import paths
 from config.theme import DEFAULT_THEME, normalize_theme_name
 from constants import DIFF_CONTEXT_LINES, DIFF_CONTEXT_MAX, DIFF_CONTEXT_MIN
-from models.sort import DEFAULT_SORT_MODE, normalize_sort_mode
+from models.sort import DEFAULT_SORT_MODE, LEGACY_CHANGES_FIRST, normalize_sort_mode
 
 DIFF_SIDE_BY_SIDE = "side_by_side"
 DIFF_UNIFIED = "unified"
@@ -180,6 +180,8 @@ class AppSettings:
         theme: Active theme name.
         language: Active language code.
         sort_mode: Sidebar sort order.
+        sort_changes_first: Whether projects that need attention come first in
+            the sidebar, with ``sort_mode`` deciding the order inside each group.
         auto_check_minutes: Automatic check interval, 0 to disable.
         check_online_automatically: Whether the automatic check also contacts
             remotes. When False it only inspects the working trees, which needs
@@ -218,6 +220,7 @@ class AppSettings:
     theme: str = DEFAULT_THEME
     language: str = DEFAULT_LANGUAGE
     sort_mode: str = DEFAULT_SORT_MODE
+    sort_changes_first: bool = False
     auto_check_minutes: int = DEFAULT_AUTO_CHECK_MINUTES
     check_online_automatically: bool = True
     check_updates: bool = True
@@ -251,6 +254,10 @@ class AppSettings:
             theme=normalize_theme_name(self.theme),
             language=self.language if isinstance(self.language, str) and self.language else DEFAULT_LANGUAGE,
             sort_mode=normalize_sort_mode(self.sort_mode),
+            # "With changes first" used to be an order of its own. A file that
+            # still says so keeps meaning it, now as the tick next to the order.
+            sort_changes_first=bool(self.sort_changes_first)
+            or self.sort_mode == LEGACY_CHANGES_FIRST,
             auto_check_minutes=normalize_auto_check_minutes(self.auto_check_minutes),
             check_online_automatically=bool(self.check_online_automatically),
             check_updates=bool(self.check_updates),

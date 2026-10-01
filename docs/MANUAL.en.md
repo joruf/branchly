@@ -127,7 +127,14 @@ The star to the left of the name pins a project to the top **within its
 category**. That holds in every sort order, which is the point of it.
 
 Sort orders: name A–Z, name Z–A, newest change first, recently opened first,
-projects with changes first, your own order.
+your own order.
+
+Below it is the tick **Projects with changes first**. It adds to the chosen
+order instead of replacing it: projects with conflicts come first, then those
+with unsaved work, then those with commits waiting to be sent or fetched, then
+the rest. Inside each of those groups the order from the dropdown applies. With
+*Name A–Z* and the tick, every project with changes is listed alphabetically on
+top and the others alphabetically below. Favourites still come first.
 
 ### The badges
 
