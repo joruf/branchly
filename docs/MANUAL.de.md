@@ -200,9 +200,9 @@ angesehen.
 ## Alle Projekte auf einmal aktualisieren
 
 **Alle Projekte aktualisieren** unten in der Liste holt für jedes Projekt die
-Änderungen vom Server. Ein Fenster sagt
-vorher, was passiert, zeigt den Fortschritt und danach für **jedes** Projekt
-einzeln, was daraus geworden ist.
+Änderungen vom Server. Das Fenster beginnt sofort, eine zweite Bestätigung gibt
+es nicht. Es zeigt den Fortschritt und danach für **jedes** Projekt einzeln, was
+daraus geworden ist.
 
 ![Alle Projekte aktualisieren](screenshots/de/pull-all-dark.png)
 
@@ -227,9 +227,30 @@ eines veralteten Badges. Ein solches Projekt aktualisierst du danach einzeln üb
 **Änderungen vom Server holen**: dort führt Branchly bei Bedarf zusammen und
 öffnet den Konflikt-Assistenten.
 
-Während der Lauf arbeitet, lässt sich das Fenster nicht schließen: es schreibt in
+Während der Lauf arbeitet, wartet der Knopf **Schließen**: der Lauf schreibt in
 die Ordner, und ein halb fertiges Projekt ohne jemanden, der zusieht, wäre die
-schlechtere Variante.
+schlechtere Variante. Sobald alles durch ist, schließt er das Fenster.
+
+## Alle Projekte auf einmal senden
+
+Das Gegenstück steht im Menü **Projekt → Alle Änderungen zum Server senden…**. Es
+sendet in jedem Projekt die Commits, die noch nicht auf dem Server sind, im selben
+Fenster und ebenfalls ohne zweite Bestätigung.
+
+![Alle Änderungen zum Server senden](screenshots/de/push-all-dark.png)
+
+Gesendet wird nur, was sich einfach senden lässt. Nichts wird erzwungen:
+
+| Steht da | Heißt |
+|---|---|
+| *2 Commits gesendet* | Der Server hat jetzt alles |
+| *nichts zu senden* | Es lag nichts Ungesendetes vor |
+| *der Server hat neuere Commits, erst aktualisieren* | Jemand anderes hat gesendet. Erst holen, dann senden |
+| *der Branch ist noch nicht auf dem Server, einmal im Projekt senden* | Ein neuer Branch wird nicht nebenbei veröffentlicht |
+| *Konflikte warten auf eine Entscheidung*, *kein Branch ausgewählt*, *kein Server* | Wie beim Aktualisieren |
+
+Ungespeicherte Änderungen im Ordner stören nicht, denn gesendet werden Commits,
+keine Dateien.
 
 ## Änderungen speichern
 

@@ -633,13 +633,16 @@ class PullAllWordingTests(unittest.TestCase):
         self.assertIn(i18n.t(SKIP_DIRTY), text)
         self.assertIn(i18n.t("pull_all.waiting", count=2), text)
 
-    def test_an_empty_run_cannot_be_started(self) -> None:
+    def test_an_empty_run_does_nothing_and_can_be_closed(self) -> None:
         from ui.pull_all_dialog import PullAllDialog
 
         dialog = PullAllDialog([])
         try:
-            self.assertFalse(dialog._start.isEnabled())
+            dialog.show()
+            self.app.processEvents()
+            self.assertFalse(dialog._running)
             self.assertEqual([], dialog.results)
+            self.assertTrue(dialog._close.isEnabled())
         finally:
             dialog.close()
 
@@ -701,7 +704,6 @@ class PullAllRunTests(unittest.TestCase):
                     # The report is on screen, and the window can be left again.
                     self.assertEqual(2, dialog._list.count())
                     self.assertTrue(dialog._close.isEnabled())
-                    self.assertFalse(dialog._start.isVisibleTo(dialog))
                     self.assertEqual(first.head(), second.head())
                 finally:
                     dialog.close()

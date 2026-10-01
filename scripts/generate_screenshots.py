@@ -748,30 +748,102 @@ def capture_pull_all(theme: str, base: Path) -> Path:
         Path: The written file.
     """
 
+    return _capture_bulk(theme, base, push=False)
+
+
+def capture_push_all(theme: str, base: Path) -> Path:
+    """
+    Photographs the window that sends every project.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo projects in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    return _capture_bulk(theme, base, push=True)
+
+
+def _capture_bulk(theme: str, base: Path, push: bool) -> Path:
+    """
+    Photographs a finished run over the demo projects.
+
+    The run starts on its own once the window is shown, so a picture of the
+    window before it is a state nobody sees. What is worth showing is the report,
+    so the outcomes are fed in rather than produced against projects that do not
+    exist.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo projects in.
+        push: Whether to show sending instead of updating.
+
+    Returns:
+        Path: The written file.
+    """
+
     from PySide6.QtWidgets import QApplication
 
-    from models.repository import RepoEntry, RepoStatus
-    from ui.pull_all_dialog import PullAllDialog
+    from services import pusher
+    from services.puller import (
+        RESULT_CURRENT,
+        RESULT_PULLED,
+        RESULT_PUSHED,
+        RESULT_SKIPPED,
+        SKIP_DIRTY,
+        SKIP_OWN_COMMITS,
+        PullJob,
+        PullResult,
+    )
+    from ui.pull_all_dialog import MODE_PULL, MODE_PUSH, PullAllDialog
 
     set_current_theme(theme)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyleSheet(build_application_stylesheet(theme))
 
     names = ("invoicing", "sitemap", "cookiecheck", "backupd", "reminders", "planner")
-    jobs = [
-        RepoEntry(
-            path=base / "demo" / name,
-            name=name,
-            remote_url=f"https://github.com/{DEMO_OWNER}/{name}.git",
-            status=RepoStatus(branch="main", behind=2),
-        )
-        for name in names
-    ]
-    dialog = PullAllDialog(jobs)
+    jobs = [PullJob(path=base / "demo" / name, key=name, name=name) for name in names]
+    if push:
+        outcomes = [
+            PullResult(key="invoicing", name="invoicing", state=RESULT_PUSHED, commits=2),
+            PullResult(key="sitemap", name="sitemap", state=RESULT_CURRENT),
+            PullResult(key="cookiecheck", name="cookiecheck", state=RESULT_PUSHED, commits=1),
+            PullResult(
+                key="backupd", name="backupd", state=RESULT_SKIPPED,
+                reason_key=pusher.SKIP_BEHIND, waiting=3,
+            ),
+            PullResult(
+                key="reminders", name="reminders", state=RESULT_SKIPPED,
+                reason_key=pusher.SKIP_UNPUBLISHED,
+            ),
+            PullResult(key="planner", name="planner", state=RESULT_CURRENT),
+        ]
+    else:
+        outcomes = [
+            PullResult(key="invoicing", name="invoicing", state=RESULT_PULLED, commits=3),
+            PullResult(key="sitemap", name="sitemap", state=RESULT_CURRENT),
+            PullResult(
+                key="cookiecheck", name="cookiecheck", state=RESULT_SKIPPED,
+                reason_key=SKIP_DIRTY, waiting=2,
+            ),
+            PullResult(key="backupd", name="backupd", state=RESULT_PULLED, commits=1),
+            PullResult(
+                key="reminders", name="reminders", state=RESULT_SKIPPED,
+                reason_key=SKIP_OWN_COMMITS,
+            ),
+            PullResult(key="planner", name="planner", state=RESULT_CURRENT),
+        ]
+
+    dialog = PullAllDialog(jobs, mode=MODE_PUSH if push else MODE_PULL, autostart=False)
+    for outcome in outcomes:
+        dialog._on_result(outcome)
+    dialog._on_finished()
     dialog.show()
     for _round in range(6):
         app.processEvents()
-    target = _save(dialog, theme, "pull-all")
+    target = _save(dialog, theme, "push-all" if push else "pull-all")
     dialog.done(0)
     return target
 
@@ -1122,6 +1194,7 @@ def capture_all(language: str) -> list[Path]:
             written.append(capture_signin(theme))
             written.append(capture_settings(theme))
             written.append(capture_pull_all(theme, base))
+            written.append(capture_push_all(theme, base))
             written.append(capture_revert(theme, base))
             written.append(capture_link_remote(theme, base))
             written.append(capture_tags(theme, base))

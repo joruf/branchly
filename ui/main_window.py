@@ -101,7 +101,7 @@ from ui.github_worker import ApiRunner
 from ui.gitignore_dialog import GitignoreDialog
 from ui.graph_view import GraphView
 from ui.link_remote_dialog import AFTER_FETCH, LinkRemoteDialog
-from ui.pull_all_dialog import PullAllDialog
+from ui.pull_all_dialog import MODE_PULL, MODE_PUSH, BulkMode, PullAllDialog
 from ui.revert_dialog import RevertDialog
 from ui.settings_dialog import SettingsDialog
 from ui.sidebar import Sidebar
@@ -390,7 +390,11 @@ class MainWindow(QMainWindow):
         repo_menu.addAction(refresh_action)
         # Checking and updating every project are the two buttons at the bottom
         # of the project list, where they are always on screen. A second copy in
-        # a menu is a second place to keep correct for no gain.
+        # a menu is a second place to keep correct for no gain. Sending every
+        # project is rarer, and the menu is enough for it.
+        repo_menu.setToolTipsVisible(True)
+        push_all = repo_menu.addAction(i18n.t("push_all.menu"), self._push_all)
+        push_all.setToolTip(i18n.t("tip.push_all_menu"))
         repo_menu.addSeparator()
         repo_menu.addAction(i18n.t("repo.open_folder"), self._open_current_folder)
         repo_menu.addAction(i18n.t("repo.open_remote"), self._open_current_remote)
@@ -2160,15 +2164,41 @@ class MainWindow(QMainWindow):
             None
         """
 
+        self._run_bulk(MODE_PULL)
+
+    def _push_all(self) -> None:
+        """
+        Sends every project's unsent commits to the server in one run.
+
+        Never forced and never publishing a branch the server has not seen:
+        whatever cannot simply be sent is reported by name.
+
+        Returns:
+            None
+        """
+
+        self._run_bulk(MODE_PUSH)
+
+    def _run_bulk(self, mode: BulkMode) -> None:
+        """
+        Runs a pull or a push over every project and reloads what changed.
+
+        Args:
+            mode: Which of the two.
+
+        Returns:
+            None
+        """
+
         if self._scans.is_running:
             self.statusBar().showMessage(i18n.t("pull_all.busy"), 4000)
             return
         entries = self._registry.entries
         if not entries:
-            self._show_notice("pull_all.heading", "pull_all.nothing", "info")
+            self._show_notice(mode.heading, mode.nothing, "info")
             return
 
-        dialog = PullAllDialog(puller.build_jobs(entries), self)
+        dialog = PullAllDialog(puller.build_jobs(entries), self, mode)
         dialog.exec()
         if not dialog.results:
             return
