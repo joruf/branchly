@@ -237,6 +237,11 @@ schlechtere Variante.
 2. Kurzfassung schreiben (Pflicht), Beschreibung optional
 3. **„n Datei(en) in <branch> speichern"**
 
+Kurzfassung, Beschreibung und der Haken *Stattdessen zum letzten Commit hinzufügen* gehören zum
+Projekt. Wer zwischendurch ein anderes Projekt anklickt, findet beim Zurückkommen
+alles wieder so vor, wie es war, und im anderen Projekt steht nichts davon. Das
+hält Branchly nur, solange es läuft. Nach dem Commit ist das Feld wieder leer.
+
 Über der Liste steht ein einzelner Haken, der für alle steht. Er trägt die Zahl
 als eigene Beschriftung, du kannst also die ganze Zeile anklicken, und er zeigt
 mit seinem Aussehen, woran du gerade bist:

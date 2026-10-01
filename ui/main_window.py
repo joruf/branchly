@@ -160,6 +160,10 @@ class MainWindow(QMainWindow):
         self._settings = settings
         self._registry = load_registry()
         self._entry: RepoEntry | None = None
+        # What was typed into the commit box, per project, while switching
+        # between projects. Memory only: a half written message is worth keeping
+        # for the session, not across a restart.
+        self._drafts: dict[str, CommitDraft] = {}
         self._state: RepositoryState | None = None
         self._github = GitHubClient(token_store.load() if settings.github_enabled else "")
         # The sidebar badge is fetched here rather than in the panel: it has to
@@ -601,6 +605,11 @@ class MainWindow(QMainWindow):
             None
         """
 
+        previous = self._entry
+        if previous is None or previous.key != entry.key:
+            if previous is not None:
+                self._stash_draft(previous.key)
+            self._changes.set_draft(self._drafts.get(entry.key, CommitDraft(summary="")))
         self._entry = entry
         self._registry.touch(entry)
         self._settings.last_repo = str(entry.path)
@@ -619,6 +628,23 @@ class MainWindow(QMainWindow):
         # server's answer up to date as well.
         self._schedule_current_scan()
 
+    def _stash_draft(self, key: str) -> None:
+        """
+        Keeps what the commit box holds for a project being left.
+
+        Args:
+            key: Registry key of the project.
+
+        Returns:
+            None
+        """
+
+        draft = self._changes.commit_draft()
+        if draft.summary or draft.description or draft.amend:
+            self._drafts[key] = draft
+        else:
+            self._drafts.pop(key, None)
+
     def _show_empty_state(self) -> None:
         """
         Puts the window into its "no projects yet" state.
@@ -627,6 +653,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._entry is not None:
+            self._stash_draft(self._entry.key)
+        self._changes.clear_draft()
         self._entry = None
         self._state = None
         self._repo_label.setText(i18n.t("sidebar.empty_title"))
@@ -2409,6 +2438,7 @@ class MainWindow(QMainWindow):
         ):
             return
         self._registry.remove(entry)
+        self._drafts.pop(entry.key, None)
         self._save_registry()
         self._sidebar.refresh()
         if self._entry is entry:
