@@ -357,5 +357,64 @@ class MenuTests(unittest.TestCase):
             self.assertEqual(1, len(opened))
 
 
+    def _menu_action(self, window):  # noqa: ANN001, ANN202 - Qt at import time
+        """
+        Finds the entry in the project menu, as the menu shows it.
+
+        Args:
+            window: The main window.
+
+        Returns:
+            QAction: The entry, after the menu refreshed itself.
+        """
+
+        # The menu bar's actions are held on to: PySide lets go of a submenu
+        # whose action wrapper was only a temporary.
+        entries = window.menuBar().actions()
+        holder = next(item for item in entries if item.text() == i18n.t("menu.repository"))
+        menu = holder.menu()
+        menu.aboutToShow.emit()
+        return next(a for a in menu.actions() if a.text() == i18n.t("gitignore.menu"))
+
+    def test_the_project_menu_offers_it_for_the_selected_project(self) -> None:
+        import ui.main_window as module
+
+        with TemporaryDirectory() as base:
+            window = self._window(Path(base))
+            action = self._menu_action(window)
+            self.assertTrue(action.isEnabled())
+
+            opened: list[Path] = []
+
+            class Stub:
+                """Stands in for the editor, so nothing modal opens."""
+
+                def __init__(self, repo: Path, *_args: object) -> None:
+                    opened.append(repo)
+                    self.saved = False
+
+                def exec(self) -> int:
+                    return 0
+
+            real = module.GitignoreDialog
+            module.GitignoreDialog = Stub
+            self.addCleanup(setattr, module, "GitignoreDialog", real)
+            action.trigger()
+            self.assertEqual([Path(window._entry.path)], opened)
+
+    def test_without_a_project_it_is_greyed_out(self) -> None:
+        from config.app_settings import AppSettings
+        from ui.main_window import MainWindow
+
+        with TemporaryDirectory() as base:
+            os.environ["XDG_CONFIG_HOME"] = str(Path(base) / "config")
+            window = MainWindow(
+                AppSettings(auto_check_minutes=0, github_enabled=False, language="en")
+            )
+            self.addCleanup(window.close)
+            self.assertIsNone(window._entry)
+            self.assertFalse(self._menu_action(window).isEnabled())
+
+
 if __name__ == "__main__":
     unittest.main()

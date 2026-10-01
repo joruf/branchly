@@ -387,6 +387,10 @@ gar keine Änderungen hat, öffnet ein Menü für das Projekt als Ganzes:
 - **Aktualisieren**
 - **Alle Änderungen zurücksetzen…**, ausgegraut, wenn es nichts zurückzusetzen gibt
 
+Dasselbe Fenster öffnet auch das Menü **Projekt → .gitignore bearbeiten…**, immer
+für das links ausgewählte Projekt. Ist keines ausgewählt, ist der Eintrag
+ausgegraut.
+
 Im Fenster steht die `.gitignore` als Text, ein Muster pro Zeile. Kommentare,
 Leerzeilen und die Reihenfolge bleiben genau so, wie du sie schreibst, und eine
 Datei mit Windows-Zeilenenden wird mit Windows-Zeilenenden zurückgeschrieben.

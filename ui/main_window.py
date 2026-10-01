@@ -399,6 +399,13 @@ class MainWindow(QMainWindow):
         repo_menu.addSeparator()
         repo_menu.addAction(i18n.t("repo.open_folder"), self._open_current_folder)
         repo_menu.addAction(i18n.t("repo.open_remote"), self._open_current_remote)
+        repo_menu.setToolTipsVisible(True)
+        self._gitignore_action = QAction(i18n.t("gitignore.menu"), self)
+        self._gitignore_action.setToolTip(i18n.t("tip.gitignore_menu"))
+        self._gitignore_action.triggered.connect(self._edit_gitignore)
+        repo_menu.addAction(self._gitignore_action)
+        repo_menu.aboutToShow.connect(self._refresh_project_menu)
+        self._refresh_project_menu()
 
         branch_menu = bar.addMenu(i18n.t("menu.branch"))
         branch_menu.setToolTipsVisible(True)
@@ -1462,6 +1469,20 @@ class MainWindow(QMainWindow):
         if not accepted or not chosen:
             return
         self._checkout_branch(chosen)
+
+    def _refresh_project_menu(self) -> None:
+        """
+        Matches the project menu to whether a project is selected.
+
+        Asked each time the menu opens, so it cannot fall out of step with the
+        selection, whichever way that changed.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        self._gitignore_action.setEnabled(entry is not None and entry.exists)
 
     def _refresh_branch_menu(self) -> None:
         """
