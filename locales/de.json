@@ -85,7 +85,7 @@
   "repo.remove_title": "Aus Branchly entfernen",
   "repo.remove_prompt": "„{name}“ aus der Liste entfernen? Auf der Festplatte wird nichts gelöscht: Ordner und Historie bleiben genau da, wo sie sind.",
   "repo.missing": "Ordner nicht mehr gefunden",
-  "repo.missing_hint": "„{path}“ gibt es nicht mehr oder es ist kein Git-Projekt mehr.",
+  "repo.missing_hint": "„{path}“ gibt es nicht mehr oder es ist kein Git-Projekt mehr. Wurde der Ordner verschoben, lässt sich der neue Ort mit einem Rechtsklick auf das Projekt links und „Pfad anpassen…“ angeben.",
   "repo.add_title": "Projekt hinzufügen",
   "repo.add_not_git_hint": "In „{path}“ liegen keine Git-Daten. Wähle den obersten Ordner eines Projekts, oder klone ein Projekt von einem Server.",
   "repo.setup_title": "Noch kein Git-Projekt",
@@ -1016,5 +1016,14 @@
   "push_all.skip_unpublished": "der Branch ist noch nicht auf dem Server, einmal im Projekt senden",
   "push_all.skip_behind": "der Server hat neuere Commits, erst aktualisieren",
   "tip.push_all_list": "Alle Projekte, die der Lauf abdeckt. Jede Zeile sagt hinterher, was gesendet wurde oder warum nicht.",
-  "tip.sort_changes_first": "Holt Projekte, die dich brauchen, nach oben: erst Konflikte, dann ungespeicherte Arbeit, dann Commits, die gesendet oder geholt werden wollen. Innerhalb davon gilt die gewählte Sortierung weiter."
+  "tip.sort_changes_first": "Holt Projekte, die dich brauchen, nach oben: erst Konflikte, dann ungespeicherte Arbeit, dann Commits, die gesendet oder geholt werden wollen. Innerhalb davon gilt die gewählte Sortierung weiter.",
+  "repo.relocate": "Pfad anpassen…",
+  "tip.repo_relocate": "Der Ordner dieses Projekts ist nicht mehr da. Hier lässt sich angeben, wohin er verschoben wurde. Name, Kategorie, Sternchen und Reihenfolge bleiben.",
+  "repo.relocate_title": "Neuer Ort für „{name}“",
+  "repo.relocate_not_repo": "Dort liegt kein Git-Projekt",
+  "repo.relocate_not_repo_hint": "„{path}“ steht nicht unter Versionsverwaltung. Bitte den Ordner wählen, in den das Projekt verschoben wurde.",
+  "repo.relocate_duplicate": "Dieser Ordner steht schon in der Liste",
+  "repo.relocate_duplicate_hint": "Er gehört bereits zum Projekt „{name}“. Wird das fehlende Projekt nicht mehr gebraucht, lässt es sich mit einem Rechtsklick entfernen.",
+  "repo.relocate_other_remote": "Das gewählte Projekt hat eine andere Server-Adresse als bisher:\n\nBisher: {old}\nGewählt: {new}\n\nVielleicht ist es ein anderes Projekt. Trotzdem diesen Ordner nehmen?",
+  "repo.relocated": "„{name}“ liegt jetzt unter {path}."
 }

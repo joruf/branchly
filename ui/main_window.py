@@ -72,7 +72,7 @@ from gitops.commit import commit as do_commit
 from gitops.history import read_history
 from gitops.refname import suggest_branch_name
 from gitops.remote_url import github_slug
-from gitops.runner import GitResult
+from gitops.runner import GitResult, repository_root
 from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
 from services import (
@@ -85,6 +85,7 @@ from services import (
     updater,
 )
 from services import revert as revert_mod
+from services.discovery import read_origin_url, resolve_git_dir
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui import changes_panel as changes_panel_mod
@@ -505,6 +506,7 @@ class MainWindow(QMainWindow):
         self._sidebar.revert_all_requested.connect(self._revert_all)
         self._sidebar.rename_requested.connect(self._prompt_rename_repo)
         self._sidebar.remove_requested.connect(self._prompt_remove_repo)
+        self._sidebar.relocate_requested.connect(self._prompt_relocate_repo)
 
         self._changes.file_selected.connect(self._show_file_diff)
         self._changes.commit_requested.connect(self._do_commit)
@@ -2501,6 +2503,92 @@ class MainWindow(QMainWindow):
             self._sidebar.refresh()
             if self._entry is entry:
                 self._repo_label.setText(entry.name)
+
+    def choose_relocation(self, entry: RepoEntry) -> str:
+        """
+        Asks where a project whose folder is gone went.
+
+        The picker opens in the closest folder that still exists, which is
+        usually where the project was moved within or renamed in.
+
+        Args:
+            entry: The project.
+
+        Returns:
+            str: The chosen folder, empty when the user cancelled.
+        """
+
+        start = entry.path
+        while not start.is_dir() and start.parent != start:
+            start = start.parent
+        return QFileDialog.getExistingDirectory(
+            self, i18n.t("repo.relocate_title", name=entry.name), str(start)
+        )
+
+    def _prompt_relocate_repo(self, key: str) -> None:
+        """
+        Points a project at the folder it moved to.
+
+        Args:
+            key: Registry key.
+
+        Returns:
+            None
+        """
+
+        entry = self._find(key)
+        if entry is None:
+            return
+        chosen = self.choose_relocation(entry)
+        if not chosen:
+            return
+
+        root = repository_root(Path(chosen))
+        if root is None:
+            self._show_notice(
+                "repo.relocate_not_repo", "repo.relocate_not_repo_hint", "warning", path=chosen
+            )
+            return
+
+        # A different server is the one sign that the folder picked is another
+        # project altogether, so that is asked about rather than taken.
+        git_dir = resolve_git_dir(root)
+        new_remote = read_origin_url(git_dir) if git_dir is not None else ""
+        other_project = bool(entry.remote_url and new_remote and new_remote != entry.remote_url)
+        if other_project and not self._confirm(
+            i18n.t("repo.relocate_title", name=entry.name),
+            i18n.t("repo.relocate_other_remote", old=entry.remote_url, new=new_remote),
+            i18n.t("repo.relocate"),
+        ):
+            return
+
+        old_key = entry.key
+        outcome, found = self._registry.relocate(entry, root)
+        if outcome == ADD_DUPLICATE and found is not None:
+            self._show_notice(
+                "repo.relocate_duplicate",
+                "repo.relocate_duplicate_hint",
+                "warning",
+                name=found.name,
+            )
+            return
+        if outcome != ADD_OK:
+            self._show_notice(
+                "repo.relocate_not_repo", "repo.relocate_not_repo_hint", "warning", path=chosen
+            )
+            return
+
+        if old_key in self._drafts:
+            self._drafts[entry.key] = self._drafts.pop(old_key)
+        self._save_registry()
+        self._sidebar.refresh()
+        self._sidebar.select_key(entry.key)
+        self._activate(entry)
+        self._notice.setVisible(False)
+        self.statusBar().showMessage(
+            i18n.t("repo.relocated", name=entry.name, path=str(entry.path)), 6000
+        )
+        self._start_scan(entry.key)
 
     def _prompt_remove_repo(self, key: str) -> None:
         """

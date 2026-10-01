@@ -121,6 +121,24 @@ Each category remembers whether it was open. A **search also shows hits inside
 collapsed categories**, otherwise there would be no way to tell why a project
 seems to be missing.
 
+### Finding a moved project again
+
+When a project's folder was moved or renamed, the project's name shows in red in
+the list and "Folder no longer found" appears at the top. Right-click the
+project and the first entry is **Change path…**. The picker opens in the nearest
+folder that still exists, and you point at the new location. A subfolder is
+fine, Branchly finds the top of the project itself.
+
+Category, star, your own order, the unticked files and a name you chose all
+stay. If the project was only called like its old folder, it takes the new
+folder's name. Branchly checks the choice:
+
+| Case | What happens |
+|---|---|
+| There is no Git project there | A note, nothing changes |
+| The folder is already in the list | A note naming the other entry |
+| The chosen project has a different server address | A question, since it may be a different project |
+
 ### Stars and sorting
 
 The star to the left of the name pins a project to the top **within its

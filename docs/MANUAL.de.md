@@ -124,6 +124,24 @@ Der Zustand jeder Kategorie wird gespeichert. Eine **Suche zeigt auch Treffer in
 zugeklappten Kategorien**, sonst wäre nicht nachvollziehbar, warum ein Projekt
 fehlt.
 
+### Ein verschobenes Projekt wiederfinden
+
+Wurde der Ordner eines Projekts verschoben oder umbenannt, steht sein Name rot in der
+Liste und oben erscheint „Ordner nicht mehr gefunden". Ein Rechtsklick auf das
+Projekt bietet dann als ersten Eintrag **Pfad anpassen…** an. Die Auswahl öffnet
+im nächsten Ordner, den es noch gibt, und du zeigst auf den neuen Ort. Ein
+Unterordner genügt, Branchly findet den obersten Ordner selbst.
+
+Erhalten bleiben Kategorie, Sternchen, eigene Reihenfolge, die abgewählten Dateien
+und ein selbst vergebener Name. Hieß das Projekt nur wie sein alter Ordner,
+bekommt es den Namen des neuen. Branchly prüft die Wahl:
+
+| Fall | Was passiert |
+|---|---|
+| Dort liegt kein Git-Projekt | Hinweis, nichts ändert sich |
+| Der Ordner steht schon in der Liste | Hinweis mit dem Namen des anderen Eintrags |
+| Das gewählte Projekt hat eine andere Server-Adresse | Rückfrage, denn es ist vielleicht ein anderes Projekt |
+
 ### Sternchen und Sortierung
 
 Das Sternchen links neben dem Namen heftet ein Projekt **innerhalb seiner

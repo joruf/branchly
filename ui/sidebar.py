@@ -227,6 +227,8 @@ class Sidebar(QWidget):
         open_remote_requested: Emitted with a registry key.
         rename_requested: Emitted with a registry key.
         remove_requested: Emitted with a registry key.
+        relocate_requested: Emitted with the registry key of a project whose
+            folder is gone, to point it at where it went.
     """
 
     repo_selected = Signal(str)
@@ -241,6 +243,7 @@ class Sidebar(QWidget):
     revert_all_requested = Signal(str)
     rename_requested = Signal(str)
     remove_requested = Signal(str)
+    relocate_requested = Signal(str)
 
     def __init__(
         self,
@@ -840,13 +843,41 @@ class Sidebar(QWidget):
             None
         """
 
-        entry = self._find(key)
-        if entry is None:
+        menu = self.repo_menu(key)
+        if menu is None:
             return
         self._tree.setCurrentItem(item)
+        menu.exec(self._tree.viewport().mapToGlobal(position))
+
+    def repo_menu(self, key: str) -> QMenu | None:
+        """
+        Builds the menu for one project, without showing it.
+
+        Kept apart from showing so the entries can be checked without a popup
+        waiting for a click.
+
+        Args:
+            key: Registry key.
+
+        Returns:
+            QMenu | None: The menu, or None for an unknown key.
+        """
+
+        entry = self._find(key)
+        if entry is None:
+            return None
 
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
+        if not entry.exists:
+            # The one thing a project whose folder is gone needs, so it comes
+            # first and only shows up then.
+            relocate = menu.addAction(
+                i18n.t("repo.relocate"), lambda: self.relocate_requested.emit(key)
+            )
+            relocate.setToolTip(i18n.t("tip.repo_relocate"))
+            menu.setDefaultAction(relocate)
+            menu.addSeparator()
         favorite = menu.addAction(
             i18n.t("repo.favorite_off" if entry.favorite else "repo.favorite_on")
         )
@@ -893,7 +924,7 @@ class Sidebar(QWidget):
         remove = QAction(i18n.t("action.remove"), menu)
         remove.triggered.connect(lambda: self.remove_requested.emit(key))
         menu.addAction(remove)
-        menu.exec(self._tree.viewport().mapToGlobal(position))
+        return menu
 
     def _show_category_menu(self, name: str, position) -> None:  # noqa: ANN001
         """

@@ -85,7 +85,7 @@
   "repo.remove_title": "Remove from Branchly",
   "repo.remove_prompt": "Remove “{name}” from the list? Nothing is deleted on disk: the folder and all its history stay exactly where they are.",
   "repo.missing": "Folder no longer found",
-  "repo.missing_hint": "“{path}” does not exist any more, or is no longer a Git project.",
+  "repo.missing_hint": "“{path}” no longer exists or is no longer a Git project. If the folder was moved, right-click the project on the left and use “Change path…” to give its new location.",
   "repo.add_title": "Add project",
   "repo.add_not_git_hint": "“{path}” contains no Git data. Pick the top folder of a project, or clone a project from a server instead.",
   "repo.setup_title": "Not a Git project yet",
@@ -1016,5 +1016,14 @@
   "push_all.skip_unpublished": "the branch is not on the server yet, send it once from the project",
   "push_all.skip_behind": "the server has newer commits, update first",
   "tip.push_all_list": "Every project the run covers. Each line says afterwards what was sent, or why not.",
-  "tip.sort_changes_first": "Brings projects that need you to the top: conflicts first, then unsaved work, then commits waiting to be sent or fetched. Inside each of those the chosen order still applies."
+  "tip.sort_changes_first": "Brings projects that need you to the top: conflicts first, then unsaved work, then commits waiting to be sent or fetched. Inside each of those the chosen order still applies.",
+  "repo.relocate": "Change path…",
+  "tip.repo_relocate": "This project's folder is no longer there. Say here where it was moved to. Name, category, star and order stay.",
+  "repo.relocate_title": "New location for “{name}”",
+  "repo.relocate_not_repo": "There is no Git project there",
+  "repo.relocate_not_repo_hint": "“{path}” is not under version control. Please pick the folder the project was moved to.",
+  "repo.relocate_duplicate": "This folder is already in the list",
+  "repo.relocate_duplicate_hint": "It already belongs to the project “{name}”. If the missing project is not needed any more, right-click it to remove it.",
+  "repo.relocate_other_remote": "The chosen project has a different server address than before:\n\nBefore: {old}\nChosen: {new}\n\nIt may be a different project. Use this folder anyway?",
+  "repo.relocated": "“{name}” is now at {path}."
 }
