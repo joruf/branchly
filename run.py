@@ -18,11 +18,19 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import i18n  # noqa: E402
 import paths  # noqa: E402
+from gitops import askpass  # noqa: E402
+
+# The single-file executable is also git's GIT_ASKPASS helper (see
+# gitops/askpass.py). Started that way it answers and ends here, before any
+# window or toolkit is involved.
+if paths.IS_FROZEN and os.environ.get(askpass.HELPER_MODE_VARIABLE):
+    askpass.answer_as_helper()
+
+import i18n  # noqa: E402
 from config.app_settings import AppSettings, load_settings, save_settings  # noqa: E402
 from config.theme import available_themes, build_application_stylesheet, set_current_theme  # noqa: E402
-from constants import APP_NAME, APP_SLUG, APP_VERSION, REEXEC_MARKER  # noqa: E402
+from constants import APP_NAME, APP_SLUG, APP_VERSION, APP_VERSION_LABEL, REEXEC_MARKER  # noqa: E402
 
 # Set in the child process so a re-exec can never turn into a loop. The restart
 # after an update clears the same variable, for the same reason.
@@ -44,7 +52,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog=APP_SLUG,
         description=f"{APP_NAME} — manage your Git projects without the command line.",
     )
-    parser.add_argument("--version", action="version", version=f"{APP_NAME} {APP_VERSION}")
+    parser.add_argument("--version", action="version", version=f"{APP_NAME} {APP_VERSION_LABEL}")
     parser.add_argument(
         "--language",
         metavar="CODE",
@@ -102,7 +110,8 @@ def reexec_into_venv_if_available() -> None:
         None
     """
 
-    if os.environ.get(_REEXEC_MARKER):
+    # The single-file executable is its own interpreter: nothing to hand over to.
+    if paths.IS_FROZEN or os.environ.get(_REEXEC_MARKER):
         return
     interpreter = paths.venv_python_path(_ROOT)
     if not interpreter.exists():
@@ -140,6 +149,12 @@ def _report_missing_dependencies(error: ImportError) -> int:
     Returns:
         int: Process exit code.
     """
+
+    if paths.IS_FROZEN:
+        # The executable carries its packages and has nothing to install into, so
+        # a missing one is a broken build; the installer would only start itself.
+        print(f"{APP_NAME} cannot start: {error.name or error} is missing from this build.", file=sys.stderr)
+        return 3
 
     interpreter = paths.venv_python_path(_ROOT)
     launcher = "branchly.bat" if paths.is_windows() else "./branchly.sh"
@@ -220,6 +235,28 @@ def _report_missing_git() -> int:
     return 2
 
 
+def start_frozen() -> None:
+    """
+    Prepares the single-file executable, before anything starts a process.
+
+    Child processes get the system's environment instead of the unpacked
+    libraries, an update the previous program downloaded is completed, and on
+    Linux the application menu gets an entry the first time, as the installer
+    gives a checkout one.
+
+    Returns:
+        None
+    """
+
+    paths.use_system_environment_for_children()
+    from install_dependencies import desktop_entry_path, install_desktop_entry
+    from services import updater
+
+    updater.finish_executable_update()
+    if not desktop_entry_path().exists():
+        install_desktop_entry()
+
+
 def main(argv: list[str] | None = None) -> int:
     """
     Starts the application.
@@ -232,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
     """
 
     args = parse_args(argv)
+    if paths.IS_FROZEN:
+        start_frozen()
     settings = apply_preferences(load_settings(), args)
 
     if not git_is_available():

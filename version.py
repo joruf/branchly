@@ -26,7 +26,8 @@ One source, three routes to it, tried in this order:
 
     BRANCHLY_VERSION    a fixed value, for tests and for a one-off run
     git history         a checkout, which is every development machine
-    VERSION file        an installation without .git
+    VERSION file        an installation without .git, and the single-file
+                        executable, which carries the file build-exe.py wrote
 
 The VERSION file is written whenever the history is read, and after every
 commit by ``.githooks/post-commit``. It is not checked in: it is derived, and a
@@ -47,6 +48,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -211,8 +213,10 @@ def _resolve(root: Path) -> Version:
         return fixed
 
     stored = from_file(root)
-    if not (root / ".git").exists():
-        # No history here, so the file is the only answer there can be.
+    if getattr(sys, "frozen", False) or not (root / ".git").exists():
+        # No history here, so the file is the only answer there can be. The
+        # single-file executable carries the file build-exe.py wrote; its
+        # unpacked copy is deleted on exit, so it is never written either.
         return stored or Version(UNKNOWN)
 
     marker = history_marker(root)
@@ -402,8 +406,6 @@ def _day_first(date: str) -> str:
 
 if __name__ == "__main__":
     # Lets the commit hook, and anybody curious, ask without starting the app.
-    import sys
-
     if len(sys.argv) > 1 and sys.argv[1] == "--write":
         written = write_file()
         print(written.label if written else UNKNOWN)

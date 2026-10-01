@@ -1,0 +1,91 @@
+name: Executables
+
+# Builds the single-file executables with build-exe.py - one per system, each on
+# that system, because PyInstaller cannot build for another one - and publishes
+# them as a GitHub release.  The updater inside the executable looks for exactly
+# these releases: tag v<version>-build<build>, one asset per platform.
+#
+# The version is derived from the commit history (version.py), so every commit
+# is a new build number: this runs on every push to main, and by hand to rebuild
+# the current one.  The full history is fetched, or the numbers would be wrong.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        # The oldest supported Ubuntu: the Linux file runs on every system with
+        # the same or a newer glibc, never on an older one.
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # What Qt needs to load its platform plugin, for the --version check and
+      # for PyInstaller's look at the Qt libraries.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libglib2.0-0 libxcb-cursor0 libxkbcommon-x11-0
+
+      # Not the system Python: Ubuntu 22.04 ships 3.10, Branchly needs 3.11.
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python build-exe.py
+
+      - name: Keep the executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-${{ matrix.os }}
+          path: dist/branchly-*
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect the executables
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or refresh the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 version.py --write
+          read -r VERSION BUILD _ < VERSION
+          TAG="v${VERSION}-build${BUILD}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/branchly-* --clobber
+          else
+            gh release create "$TAG" dist/branchly-* \
+              --target "$GITHUB_SHA" \
+              --title "Branchly ${VERSION} (${BUILD})" \
+              --notes "Single-file executables built by build-exe.py. Linux: make the file executable (chmod +x) and start it. Windows: start the .exe. Both need Git installed on the system."
+          fi

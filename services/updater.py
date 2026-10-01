@@ -1,9 +1,8 @@
 """
 Asking GitHub whether a newer Branchly exists, fetching it, restarting.
 
-The project publishes neither releases nor tags, so "newer" means the head commit
-of the default branch: the API reports it, and it is compared with the commit this
-installation sits on.
+For a checkout, "newer" means the head commit of the default branch: the API
+reports it, and it is compared with the commit this installation sits on.
 
 Two ways to apply an update, picked automatically:
 
@@ -14,6 +13,13 @@ Two ways to apply an update, picked automatically:
 * **archive** — otherwise the branch ZIP is unpacked over the installation. Only
   files the archive contains are replaced; the virtualenv, the settings and the
   repository registry live elsewhere and are never touched.
+
+The single-file executable (``build-exe.py``) has neither sources to pull nor a
+commit to compare, so it asks for the latest GitHub *release* instead: the
+workflow ``release-exe.yml`` publishes one per build number, tagged
+``v<version>-build<build>``, with one executable per platform. A higher build
+number is an update; the matching file is saved next to the running one under
+its own, versioned name and takes its place after the restart.
 
 Nothing here runs by itself: :func:`check` only looks, :func:`apply` only acts
 when the caller says so, and :func:`restart` only when the window is already gone.
@@ -26,7 +32,9 @@ the user's rate limit or see their token.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,8 +47,11 @@ from pathlib import Path
 import requests
 
 import paths
+import version as _version
 from constants import (
+    APP_BUILD,
     APP_URL,
+    APP_VERSION,
     GIT_TIMEOUT_LOCAL,
     GIT_TIMEOUT_NETWORK,
     GITHUB_API_ROOT,
@@ -50,6 +61,7 @@ from constants import (
     UPDATE_DOWNLOAD_TIMEOUT,
     UPDATE_MAX_ARCHIVE_BYTES,
     UPDATE_MAX_CHANGES,
+    UPDATE_MAX_EXECUTABLE_BYTES,
     UPDATE_TIMEOUT,
 )
 from gitops import runner
@@ -65,6 +77,17 @@ ERROR_WRITE_FAILED = "update.write_failed"
 
 METHOD_GIT = "git"
 METHOD_ARCHIVE = "archive"
+METHOD_EXECUTABLE = "executable"
+
+#: Release tags of the executables, as ``release-exe.yml`` writes them.
+RELEASE_TAG = re.compile(r"^v(?P<version>[0-9][0-9.]*)-build(?P<build>[0-9]+)$")
+# Key in the update state naming the executable an update replaced, until it is
+# removed by the program that replaced it.
+_REPLACED_KEY = "replaced_executable"
+# Anything smaller than this is an error page, not the program.
+_MIN_EXECUTABLE_BYTES = 1024 * 1024
+# The executable :func:`apply` just downloaded; the restart starts it.
+_updated_executable: Path | None = None
 
 # Never overwritten by an archive update: git's own data, the virtualenv, and the
 # runtime state a portable installation may keep next to the code.
@@ -222,6 +245,20 @@ def local_commit(root: Path | None = None) -> str:
     return result.stdout.strip() if result.ok else ""
 
 
+def installed_revision() -> str:
+    """
+    Names what this installation is, in the form a check reports it.
+
+    Returns:
+        str: The short commit of a checkout, or ``version (build)`` of the
+            single-file executable; empty when it cannot be determined.
+    """
+
+    if paths.IS_FROZEN:
+        return f"{APP_VERSION} ({APP_BUILD})"
+    return local_commit()[:_SHORT_HASH]
+
+
 def check(root: Path | None = None) -> UpdateInfo:
     """
     Asks GitHub whether the branch is ahead of this installation.
@@ -234,6 +271,8 @@ def check(root: Path | None = None) -> UpdateInfo:
             not an exception, because it happens on every offline start.
     """
 
+    if paths.IS_FROZEN:
+        return _check_release()
     slug = repository_slug()
     if not slug:
         return UpdateInfo(error_key=ERROR_NOT_GITHUB, detail=APP_URL)
@@ -405,6 +444,126 @@ def _summary_of(payload: dict) -> str:
     return message.strip().splitlines()[0]
 
 
+def _fetch_release() -> tuple[dict, str, str]:
+    """
+    Asks GitHub for the newest executable release.
+
+    Returns:
+        tuple[dict, str, str]: The release, plus a translation key and detail
+            when it could not be fetched; the release is empty then.
+    """
+
+    slug = repository_slug()
+    if not slug:
+        return {}, ERROR_NOT_GITHUB, APP_URL
+    url = f"{GITHUB_API_ROOT}/repos/{slug}/releases/latest"
+    try:
+        response = requests.get(url, headers=_HEADERS, timeout=UPDATE_TIMEOUT)
+    except requests.RequestException as error:
+        return {}, ERROR_OFFLINE, str(error)
+    if response.status_code != 200:
+        return {}, ERROR_CHECK_FAILED, f"HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError as error:
+        return {}, ERROR_CHECK_FAILED, str(error)
+    if not isinstance(payload, dict):
+        return {}, ERROR_CHECK_FAILED, "unexpected answer"
+    return payload, "", ""
+
+
+def release_build(tag: str) -> int | None:
+    """
+    Reads the build number from a release tag.
+
+    Args:
+        tag: For example ``v0.10.2-build31``.
+
+    Returns:
+        int | None: For example ``31``; None for a tag that is not an executable build.
+    """
+
+    match = RELEASE_TAG.match(tag.strip())
+    return int(match.group("build")) if match else None
+
+
+def release_asset_name(release: dict) -> str:
+    """
+    Returns the file name this platform's executable has in a release.
+
+    Args:
+        release: The release as the GitHub API returns it.
+
+    Returns:
+        str: For example ``branchly-linux-x86_64-0.10.2-build31``; empty for a
+            release that is not an executable build.
+    """
+
+    match = RELEASE_TAG.match(str(release.get("tag_name") or "").strip())
+    if not match:
+        return ""
+    return paths.executable_name(match.group("version"), int(match.group("build")))
+
+
+def release_asset_url(release: dict) -> str:
+    """
+    Returns the download URL of this platform's executable in a release.
+
+    Args:
+        release: The release as the GitHub API returns it.
+
+    Returns:
+        str: The URL, or an empty string when the release has none for this platform.
+    """
+
+    wanted = release_asset_name(release)
+    if not wanted:
+        return ""
+    for asset in release.get("assets") or []:
+        if isinstance(asset, dict) and asset.get("name") == wanted:
+            return str(asset.get("browser_download_url") or "")
+    return ""
+
+
+def _check_release() -> UpdateInfo:
+    """
+    Compares the newest release with the build of this executable.
+
+    Returns:
+        UpdateInfo: What was found; never raises.
+    """
+
+    release, error_key, detail = _fetch_release()
+    if error_key:
+        return UpdateInfo(error_key=error_key, detail=detail)
+    tag = str(release.get("tag_name") or "").strip()
+    match = RELEASE_TAG.match(tag)
+    if match is None:
+        return UpdateInfo(
+            error_key=ERROR_CHECK_FAILED, detail=f"the latest release {tag!r} is not an executable build"
+        )
+    if not release_asset_url(release):
+        return UpdateInfo(
+            error_key=ERROR_CHECK_FAILED, detail=f"the release {tag} has no {release_asset_name(release)}"
+        )
+    build = int(match.group("build"))
+    available = build > APP_BUILD
+    # The commits in between, for "what is new": the release names the commit it
+    # was built from, and the bundled VERSION file the one this file was.
+    local = _version.current().commit
+    remote = str(release.get("target_commitish") or "")
+    known = available and local and remote
+    comparison = _changes_between(repository_slug(), local, remote) if known else _Comparison()
+    return UpdateInfo(
+        available=available,
+        local=installed_revision(),
+        remote=f"{match.group('version')} ({build})",
+        summary=comparison.subjects[0] if comparison.subjects else str(release.get("name") or ""),
+        count=comparison.count,
+        changes=comparison.subjects,
+    )
+
+
 def due(hours: int, last_checked: float, now: float | None = None) -> bool:
     """
     Decides whether the startup check should contact GitHub again.
@@ -442,6 +601,8 @@ def apply(root: Path | None = None) -> UpdateOutcome:
         UpdateOutcome: What happened, with a translation key when it failed.
     """
 
+    if paths.IS_FROZEN:
+        return _apply_release()
     target = root or installation_root()
     if is_git_checkout(target):
         return _apply_git(target)
@@ -534,25 +695,30 @@ def _apply_archive(root: Path) -> UpdateOutcome:
     return UpdateOutcome(ok=True, method=METHOD_ARCHIVE, files=written)
 
 
-def _download(url: str, destination: Path) -> UpdateOutcome | None:
+def _download(
+    url: str, destination: Path, method: str = METHOD_ARCHIVE, limit: int | None = None
+) -> UpdateOutcome | None:
     """
     Streams the archive to disk, with a ceiling on its size.
 
     Args:
         url: Archive URL.
         destination: File to write.
+        method: Reported in a failed outcome.
+        limit: Largest size accepted, in bytes; the archive ceiling when None.
 
     Returns:
         UpdateOutcome | None: A failed outcome, or None when the file is there.
     """
 
+    ceiling = UPDATE_MAX_ARCHIVE_BYTES if limit is None else limit
     try:
         with requests.get(
             url, headers={"User-Agent": GITHUB_USER_AGENT}, timeout=UPDATE_DOWNLOAD_TIMEOUT, stream=True
         ) as response:
             if response.status_code != 200:
                 return UpdateOutcome(
-                    method=METHOD_ARCHIVE,
+                    method=method,
                     error_key=ERROR_DOWNLOAD_FAILED,
                     detail=f"HTTP {response.status_code}",
                 )
@@ -562,17 +728,17 @@ def _download(url: str, destination: Path) -> UpdateOutcome | None:
                     if not chunk:
                         continue
                     size += len(chunk)
-                    if size > UPDATE_MAX_ARCHIVE_BYTES:
+                    if size > ceiling:
                         return UpdateOutcome(
-                            method=METHOD_ARCHIVE,
+                            method=method,
                             error_key=ERROR_DOWNLOAD_FAILED,
                             detail="the download exceeded the size limit",
                         )
                     handle.write(chunk)
     except requests.RequestException as error:
-        return UpdateOutcome(method=METHOD_ARCHIVE, error_key=ERROR_OFFLINE, detail=str(error))
+        return UpdateOutcome(method=method, error_key=ERROR_OFFLINE, detail=str(error))
     except OSError as error:
-        return UpdateOutcome(method=METHOD_ARCHIVE, error_key=ERROR_WRITE_FAILED, detail=str(error))
+        return UpdateOutcome(method=method, error_key=ERROR_WRITE_FAILED, detail=str(error))
     return None
 
 
@@ -615,14 +781,153 @@ def _copy_tree(source: Path, target: Path) -> int:
     return written
 
 
+def _apply_release() -> UpdateOutcome:
+    """
+    Downloads the newest executable next to the running one.
+
+    The file name carries the version, so the new one gets its own name instead
+    of overwriting this one, which Windows would refuse for a running ``.exe``
+    anyway. The old file is removed, and the menu entry pointed at the new one,
+    by :func:`finish_executable_update` in the new program.
+
+    Returns:
+        UpdateOutcome: What happened.
+    """
+
+    global _updated_executable
+    release, error_key, detail = _fetch_release()
+    if error_key:
+        return UpdateOutcome(method=METHOD_EXECUTABLE, error_key=error_key, detail=detail)
+    url = release_asset_url(release)
+    if not url:
+        missing = release_asset_name(release) or "executable"
+        return UpdateOutcome(
+            method=METHOD_EXECUTABLE,
+            error_key=ERROR_DOWNLOAD_FAILED,
+            detail=f"the latest release has no {missing}",
+        )
+
+    current = paths.executable()
+    target = current.with_name(release_asset_name(release))
+    if target == current:
+        return UpdateOutcome(
+            method=METHOD_EXECUTABLE,
+            error_key=ERROR_DOWNLOAD_FAILED,
+            detail=f"{current.name} is already this version",
+        )
+    partial = target.with_name(target.name + ".part")
+    failure = _download(url, partial, METHOD_EXECUTABLE, UPDATE_MAX_EXECUTABLE_BYTES)
+    if failure is None:
+        try:
+            if partial.stat().st_size < _MIN_EXECUTABLE_BYTES:
+                failure = UpdateOutcome(
+                    method=METHOD_EXECUTABLE,
+                    error_key=ERROR_DOWNLOAD_FAILED,
+                    detail="the downloaded file is too small to be the program",
+                )
+            else:
+                if not paths.is_windows():
+                    partial.chmod(0o755)
+                os.replace(partial, target)
+        except OSError as error:
+            failure = UpdateOutcome(method=METHOD_EXECUTABLE, error_key=ERROR_WRITE_FAILED, detail=str(error))
+    if failure is not None:
+        try:
+            partial.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return failure
+
+    state = _load_update_state()
+    state[_REPLACED_KEY] = str(current)
+    _save_update_state(state)
+    _updated_executable = target
+    return UpdateOutcome(ok=True, method=METHOD_EXECUTABLE, detail=target.name, files=1)
+
+
+def finish_executable_update() -> None:
+    """
+    Completes an update in the program it installed.
+
+    Points the application menu entry at this file when it named the previous
+    one, then removes the previous file. While that one is still running (the
+    Windows restart overlaps for a moment), its removal waits for the next start.
+
+    Returns:
+        None
+    """
+
+    state = _load_update_state()
+    previous = state.get(_REPLACED_KEY)
+    if not isinstance(previous, str) or not previous:
+        return
+    old = Path(previous)
+    if old == paths.executable():
+        # The old file was started again; it must never delete itself.
+        return
+
+    from install_dependencies import desktop_entry_path, install_desktop_entry
+
+    try:
+        entry = desktop_entry_path().read_text(encoding="utf-8")
+    except OSError:
+        entry = ""
+    if str(old) in entry:
+        install_desktop_entry()
+
+    try:
+        old.unlink(missing_ok=True)
+    except OSError:
+        return
+    state.pop(_REPLACED_KEY, None)
+    _save_update_state(state)
+
+
+def _load_update_state() -> dict:
+    """
+    Reads what the executable's updater remembers between two starts.
+
+    Returns:
+        dict: The stored values, empty when there are none.
+    """
+
+    try:
+        stored = json.loads(paths.update_state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return stored if isinstance(stored, dict) else {}
+
+
+def _save_update_state(state: dict) -> None:
+    """
+    Stores what the executable's updater remembers, never failing the caller.
+
+    Args:
+        state: The values to keep.
+
+    Returns:
+        None
+    """
+
+    target = paths.update_state_path()
+    if not paths.ensure_dir(target.parent):
+        return
+    try:
+        target.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 def restart_command() -> list[str]:
     """
     Builds the command that starts Branchly again.
 
     Returns:
-        list[str]: Interpreter and entry point.
+        list[str]: Interpreter and entry point, or the executable on its own.
     """
 
+    if paths.IS_FROZEN:
+        return [str(_updated_executable or paths.executable())]
     interpreter = paths.venv_python_path(gui=True)
     if not interpreter.exists():
         interpreter = Path(sys.executable)
@@ -641,10 +946,16 @@ def restart() -> None:
     """
 
     command = restart_command()
-    environment = dict(os.environ)
+    # Without the executable's library paths: execve bypasses the cleaning every
+    # subprocess gets (see paths.use_system_environment_for_children).
+    environment = paths.child_environment()
     # The child must not inherit "already re-executed" from this process, or it
     # would stay on whatever interpreter this one happens to be running.
     environment.pop(REEXEC_MARKER, None)
+    if paths.IS_FROZEN:
+        # Without it the new executable would reuse this one's unpacked files,
+        # which are deleted the moment this process ends, and run the old code.
+        environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     if paths.is_windows():
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.Popen(

@@ -384,6 +384,7 @@
   "settings.show_avatars": "Show author pictures",
   "settings.repair_deps": "Repair dependencies…",
   "settings.repair_deps_hint": "Opens the installer to reinstall the pinned packages into .venv. Close Branchly before repairing PySide6.",
+  "settings.repair_deps_frozen": "The single-file Branchly carries its packages, so there is nothing to repair. A broken file is replaced by downloading it again or through Help → Check for updates.",
   "settings.repair_deps_confirm_title": "Repair dependencies",
   "settings.repair_deps_confirm": "Branchly will open the installer in a separate window. Close this app before the installer replaces packages that are currently in use.",
   "github.pull_requests": "Pull requests",

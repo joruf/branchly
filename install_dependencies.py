@@ -532,6 +532,17 @@ def activate_hooks(log: LogFn | None = None) -> bool:
     return True
 
 
+def desktop_entry_path() -> Path:
+    """
+    Returns where the application menu entry is written.
+
+    Returns:
+        Path: ``branchly.desktop`` in the user's own applications directory.
+    """
+
+    return Path.home() / ".local" / "share" / "applications" / "branchly.desktop"
+
+
 def install_desktop_entry(log: LogFn | None = None) -> bool:
     """
     Puts Branchly into the desktop's application menu.
@@ -543,6 +554,10 @@ def install_desktop_entry(log: LogFn | None = None) -> bool:
     shipped file works out its own location from ``%k``, which every desktop
     fills in, except the ones that do not, and a launcher that silently does
     nothing on one desktop in five is worse than a longer line.
+
+    The single-file executable writes the same entry for itself, with ``Exec``
+    naming the executable. The icon is copied out in both cases, so the entry
+    never points into the executable's temporary unpacked files.
 
     Args:
         log: Progress logger.
@@ -560,13 +575,13 @@ def install_desktop_entry(log: LogFn | None = None) -> bool:
     if not source.is_file():
         return False
 
-    applications = Path.home() / ".local" / "share" / "applications"
+    applications = desktop_entry_path().parent
     icons = Path.home() / ".local" / "share" / "icons" / "hicolor" / "256x256" / "apps"
     try:
         applications.mkdir(parents=True, exist_ok=True)
         icons.mkdir(parents=True, exist_ok=True)
 
-        launcher = _ROOT / "branchly.sh"
+        launcher = paths.executable() if paths.IS_FROZEN else _ROOT / "branchly.sh"
         lines = []
         for line in source.read_text(encoding="utf-8").splitlines():
             if line.startswith("Exec="):
@@ -575,7 +590,7 @@ def install_desktop_entry(log: LogFn | None = None) -> bool:
                 continue
             else:
                 lines.append(line)
-        target = applications / "branchly.desktop"
+        target = desktop_entry_path()
         target.write_text("\n".join(lines) + "\n", encoding="utf-8")
         target.chmod(0o755)
 
@@ -622,6 +637,11 @@ def run_install(
 
     opts = options or InstallOptions()
     emit = log or _default_log
+
+    if paths.IS_FROZEN:
+        # sys.executable is Branchly itself here: "-m venv" would start it again.
+        emit(f"the single-file {APP_NAME} carries its packages; there is nothing to install.")
+        return 1
 
     if which("git") is None:
         emit("git is not installed. Branchly needs it — install git first.")

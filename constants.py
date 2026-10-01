@@ -12,6 +12,9 @@ APP_SLUG = "branchly"
 # three numbers come about, and .githooks/post-commit for when they are written.
 APP_VERSION = _version.name()
 APP_VERSION_LABEL = _version.current().label
+# The build number alone: the single-file executable's updater compares it with
+# the build number in the tag of the newest release.
+APP_BUILD = int(_version.current().build) if _version.current().build.isdigit() else 0
 APP_URL = "https://github.com/joruf/branchly"
 
 # Who made it, for the About box. Not translated: a name and a company are the
@@ -85,8 +88,8 @@ GITHUB_TOKEN_PAGE = (
 )
 GITHUB_OAUTH_TIMEOUT = 20
 
-# Branchly publishes neither releases nor tags, so "newer" means the head commit
-# of this branch rather than a version number.
+# A checkout compares with the head commit of this branch. Releases exist only for
+# the single-file executable, which compares build numbers instead.
 UPDATE_BRANCH = "main"
 UPDATE_TIMEOUT = 20
 UPDATE_DOWNLOAD_TIMEOUT = 180
@@ -99,3 +102,6 @@ UPDATE_MAX_CHANGES = 10
 # disk space but about never streaming an unbounded body into a temporary file
 # because a redirect landed somewhere unexpected.
 UPDATE_MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
+# The same ceiling for the single-file executable, which carries Qt and is far
+# bigger than the sources.
+UPDATE_MAX_EXECUTABLE_BYTES = 600 * 1024 * 1024
