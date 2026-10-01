@@ -1,19 +1,25 @@
 """
-The "update every project" dialog.
+The window for a run over every project: updating all of them, or sending all.
 
-Three states in one window: what is about to happen, how far it has got, and what
-came of it. Keeping them together means the report cannot be missed — with twenty
-projects, "3 pulled, 2 skipped, 1 failed" is the whole point of the action, and a
-status-bar line would scroll past unread.
+Two states in one window: how far the run has got, and what came of it. Keeping
+them together means the report cannot be missed. With twenty projects, "3
+updated, 2 skipped, 1 failed" is the whole point of the action, and a status bar
+line would scroll past unread.
 
-It is modal on purpose. This is the one bulk action in Branchly that writes to
-working trees, and while it runs, the user must not be able to start a push or a
-branch switch in a project a worker is halfway through.
+The run starts as soon as the window is on screen. Choosing the action in the
+project list or the menu already was the decision, so a second button asking
+the same question again only stood in the way.
+
+It is modal on purpose. While a run is in progress, the user must not be able to
+start a push or a branch switch in a project a worker is halfway through.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
@@ -28,7 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 import i18n
-from services import puller
+from services import puller, pusher
 from services.puller import PullJob, PullResult
 from services.scheduler import PullCoordinator
 from ui.widgets import InlineMessage, token_color
@@ -36,66 +42,153 @@ from ui.widgets import InlineMessage, token_color
 #: Theme token used for each outcome, so the list reads at a glance.
 _TOKENS: dict[str, str] = {
     puller.RESULT_PULLED: "success",
+    puller.RESULT_PUSHED: "success",
     puller.RESULT_CURRENT: "text_muted",
     puller.RESULT_SKIPPED: "warning",
     puller.RESULT_FAILED: "danger",
 }
 
 
-def describe_result(result: PullResult) -> str:
+@dataclass(frozen=True, slots=True)
+class BulkMode:
+    """
+    What a run does, and the words it uses for it.
+
+    The texts are spelled out key by key rather than built from a prefix, so
+    every one of them can be found where it is used.
+
+    Attributes:
+        work: What each worker does with its project.
+        title: Window title.
+        heading: Headline of the strip at the top.
+        explain_one: What the run does, for one project.
+        explain_many: What the run does, for several.
+        running: Strip text while the run works.
+        nothing: Text when there is no project at all.
+        moved_one: Outcome of a project that moved by one commit.
+        moved_many: Outcome of a project that moved by several.
+        already_current: Outcome of a project with nothing to do.
+        summary_moved: Count of projects that moved, for the report.
+        summary_current: Count of projects with nothing to do.
+        list_tip: Tooltip of the project list.
+    """
+
+    work: Callable[[PullJob], PullResult]
+    title: str
+    heading: str
+    explain_one: str
+    explain_many: str
+    running: str
+    nothing: str
+    moved_one: str
+    moved_many: str
+    already_current: str
+    summary_moved: str
+    summary_current: str
+    list_tip: str
+
+
+#: Bringing every project up to the server's version.
+MODE_PULL = BulkMode(
+    work=puller.pull_one,
+    title="pull_all.title",
+    heading="pull_all.heading",
+    explain_one="pull_all.explain_one",
+    explain_many="pull_all.explain_many",
+    running="pull_all.running",
+    nothing="pull_all.nothing",
+    moved_one="pull_all.moved_one",
+    moved_many="pull_all.moved_many",
+    already_current="pull_all.already_current",
+    summary_moved="pull_all.summary_moved",
+    summary_current="pull_all.summary_current",
+    list_tip="tip.pull_all_list",
+)
+
+#: Sending every project's unsent commits to the server.
+MODE_PUSH = BulkMode(
+    work=pusher.push_one,
+    title="push_all.title",
+    heading="push_all.heading",
+    explain_one="push_all.explain_one",
+    explain_many="push_all.explain_many",
+    running="push_all.running",
+    nothing="push_all.nothing",
+    moved_one="push_all.moved_one",
+    moved_many="push_all.moved_many",
+    already_current="push_all.already_current",
+    summary_moved="push_all.summary_moved",
+    summary_current="push_all.summary_current",
+    list_tip="tip.push_all_list",
+)
+
+
+def describe_result(result: PullResult, mode: BulkMode = MODE_PULL) -> str:
     """
     Puts one project's outcome into a single line.
 
     Args:
         result: The outcome to describe.
+        mode: The run it came from, which decides the words.
 
     Returns:
         str: Project name followed by what happened to it.
     """
 
-    if result.state == puller.RESULT_PULLED:
-        detail = i18n.plural(
-            result.commits, "pull_all.arrived_one", "pull_all.arrived_many"
-        )
+    if result.changed:
+        detail = i18n.plural(result.commits, mode.moved_one, mode.moved_many)
     elif result.state == puller.RESULT_CURRENT:
-        detail = i18n.t("pull_all.already_current")
+        detail = i18n.t(mode.already_current)
     else:
         detail = i18n.t(result.reason_key) if result.reason_key else i18n.t("error.title")
         if result.waiting:
             detail = f"{detail} · {i18n.t('pull_all.waiting', count=result.waiting)}"
-    return f"{result.name or result.key} — {detail}"
+    return f"{result.name or result.key}: {detail}"
 
 
 class PullAllDialog(QDialog):
     """
-    Asks, runs, and reports on a bulk pull.
+    Runs and reports on a pull or a push over many projects.
 
     Attributes:
         results: Every outcome of the run, in the order they arrived.
     """
 
-    def __init__(self, jobs: list[PullJob], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        jobs: list[PullJob],
+        parent: QWidget | None = None,
+        mode: BulkMode = MODE_PULL,
+        autostart: bool = True,
+    ) -> None:
         """
         Args:
             jobs: Projects the run should cover.
             parent: Parent widget.
+            mode: Pulling or pushing.
+            autostart: Whether the run begins as soon as the window is shown.
+                Off only for tests and screenshots that drive it themselves.
         """
 
         super().__init__(parent)
-        self.setWindowTitle(i18n.t("pull_all.title"))
+        self._mode = mode
+        self.setWindowTitle(i18n.t(mode.title))
         self.setMinimumWidth(560)
 
         self._jobs = jobs
         self.results: list[PullResult] = []
         self._running = False
+        self._autostart = autostart
+        self._scheduled = False
+        self._started = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
         self._notice = InlineMessage(
-            i18n.t("pull_all.heading"),
-            i18n.plural(len(jobs), "pull_all.explain_one", "pull_all.explain_many"),
+            i18n.t(mode.heading),
+            i18n.plural(len(jobs), mode.explain_one, mode.explain_many),
             "info",
             self,
         )
@@ -112,12 +205,11 @@ class PullAllDialog(QDialog):
         self._list = QListWidget(self)
         self._list.setAlternatingRowColors(False)
         self._list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        self._list.setToolTip(i18n.t("tip.pull_all_list"))
+        self._list.setToolTip(i18n.t(mode.list_tip))
         # Filled before the run rather than during it. A hidden list contributes
         # nothing to the window's size hint, so the window opened at the height
         # of the explanation and had no room left once the entries appeared.
-        # Showing what is about to be touched is also the more useful thing to
-        # put in front of somebody who has not pressed Start yet.
+        # It also shows at once which projects the run is about to touch.
         self._rows: dict[str, QListWidgetItem] = {}
         for job in jobs:
             item = QListWidgetItem(i18n.t("pull_all.pending", name=job.name), self._list)
@@ -129,18 +221,13 @@ class PullAllDialog(QDialog):
         row = QHBoxLayout()
         row.setSpacing(8)
         row.addStretch(1)
-        self._start = QPushButton(i18n.t("pull_all.start"), self)
-        self._start.setToolTip(i18n.t("tip.pull_all_start"))
-        self._start.setObjectName("Primary")
-        self._start.setDefault(True)
-        self._start.clicked.connect(self._begin)
-        row.addWidget(self._start)
-        self._close = QPushButton(i18n.t("action.cancel"), self)
+        self._close = QPushButton(i18n.t("action.close"), self)
+        self._close.setToolTip(i18n.t("tip.bulk_close"))
         self._close.clicked.connect(self.reject)
         row.addWidget(self._close)
         layout.addLayout(row)
 
-        self._pulls = PullCoordinator(self)
+        self._pulls = PullCoordinator(self, mode.work)
         self._pulls.result_ready.connect(self._on_result)
         self._pulls.progress.connect(self._on_progress)
         self._pulls.batch_finished.connect(self._on_finished)
@@ -148,9 +235,8 @@ class PullAllDialog(QDialog):
 
         if not jobs:
             self._notice.set_message(
-                i18n.t("pull_all.heading"), i18n.t("pull_all.nothing"), "info"
+                i18n.t(mode.heading), i18n.t(mode.nothing), "info"
             )
-            self._start.setEnabled(False)
 
         self.resize(620, self._preferred_height(len(jobs)))
 
@@ -160,7 +246,7 @@ class PullAllDialog(QDialog):
 
         Tall enough for the list it holds, and never taller than the screen it
         is opening on. A window that does not fit has its bottom edge, and with
-        it the Start button, somewhere below the desktop.
+        it the Close button, somewhere below the desktop.
 
         Args:
             count: Number of projects in the run.
@@ -169,7 +255,7 @@ class PullAllDialog(QDialog):
             int: Height in pixels.
         """
 
-        # The explanation, the progress bar, the buttons and the margins.
+        # The explanation, the progress bar, the button and the margins.
         chrome = 190
         row = max(20, self._list.sizeHintForRow(0) if count else 24)
         wanted = chrome + row * min(max(count, 4), 14)
@@ -180,6 +266,25 @@ class PullAllDialog(QDialog):
         return max(360, wanted)
 
     # -------------------------------------------------------------------- running
+
+    def showEvent(self, event) -> None:  # noqa: ANN001, N802 - Qt override
+        """
+        Begins the run the first time the window is on screen.
+
+        Started from the event loop rather than right here, so the window has
+        painted its list before the first result replaces a row of it.
+
+        Args:
+            event: Show event.
+
+        Returns:
+            None
+        """
+
+        super().showEvent(event)
+        if self._autostart and not self._scheduled:
+            self._scheduled = True
+            QTimer.singleShot(0, self._begin)
 
     def _begin(self) -> None:
         """
@@ -193,15 +298,16 @@ class PullAllDialog(QDialog):
             return
         if not self._pulls.start(self._jobs):
             return
+        self._started = True
         self._running = True
         self.results = []
         self._progress.setVisible(True)
-        self._start.setEnabled(False)
-        # Nothing to cancel into: a worker mid-pull would keep writing into a
-        # project nobody is watching, so the way out is to let the batch finish.
+        # Nothing to cancel into: a worker halfway through would keep writing
+        # into a project nobody is watching, so the way out is to let the batch
+        # finish. The button stays where it is and comes back once it has.
         self._close.setEnabled(False)
         self._notice.set_message(
-            i18n.t("pull_all.heading"), i18n.t("pull_all.running"), "info"
+            i18n.t(self._mode.heading), i18n.t(self._mode.running), "info"
         )
 
     def _on_progress(self, done: int, total: int) -> None:
@@ -239,7 +345,7 @@ class PullAllDialog(QDialog):
             item = QListWidgetItem(self._list)
             item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             self._rows[result.key] = item
-        item.setText(describe_result(result))
+        item.setText(describe_result(result, self._mode))
         item.setForeground(QColor(token_color(_TOKENS.get(result.state, "text"))))
         item.setToolTip(result.detail or "")
         self._list.scrollToItem(item)
@@ -271,19 +377,18 @@ class PullAllDialog(QDialog):
         self._running = False
         self._progress.setVisible(False)
         self._close.setEnabled(True)
-        self._close.setText(i18n.t("action.close"))
         self._close.setDefault(True)
-        self._start.setVisible(False)
 
         summary = puller.summarize(self.results)
         parts = []
+        mode = self._mode
         if summary.pulled:
-            parts.append(i18n.t("pull_all.summary_pulled", count=summary.pulled))
+            parts.append(i18n.t(mode.summary_moved, count=summary.pulled))
             parts.append(
-                i18n.plural(summary.commits, "pull_all.arrived_one", "pull_all.arrived_many")
+                i18n.plural(summary.commits, mode.moved_one, mode.moved_many)
             )
         if summary.current:
-            parts.append(i18n.t("pull_all.summary_current", count=summary.current))
+            parts.append(i18n.t(mode.summary_current, count=summary.current))
         if summary.skipped:
             parts.append(i18n.t("pull_all.summary_skipped", count=summary.skipped))
         if summary.failed:
@@ -296,7 +401,7 @@ class PullAllDialog(QDialog):
             token = "warning"
         self._notice.set_message(
             i18n.t("pull_all.done"),
-            " · ".join(parts) if parts else i18n.t("pull_all.nothing"),
+            " · ".join(parts) if parts else i18n.t(mode.nothing),
             token,
         )
 

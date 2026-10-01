@@ -32,6 +32,8 @@ from gitops.status import read_state
 
 #: Fast-forwarded onto new commits.
 RESULT_PULLED = "pulled"
+#: Sent unsent commits to the server, the outcome of ``services.pusher``.
+RESULT_PUSHED = "pushed"
 #: Contacted the server and there was nothing new.
 RESULT_CURRENT = "current"
 #: Left alone on purpose; ``reason_key`` says why.
@@ -102,7 +104,7 @@ class PullResult:
             bool: True when commits were fast-forwarded in.
         """
 
-        return self.state == RESULT_PULLED
+        return self.state in (RESULT_PULLED, RESULT_PUSHED)
 
     @property
     def needs_attention(self) -> bool:
@@ -265,8 +267,8 @@ class PullSummary:
     The whole run in numbers.
 
     Attributes:
-        pulled: Projects that moved forward.
-        commits: Commits that arrived in total.
+        pulled: Projects that moved, forward from the server or out to it.
+        commits: Commits that arrived or were sent in total.
         current: Projects that were already up to date.
         skipped: Projects deliberately left alone.
         failed: Projects whose update did not work.
@@ -302,7 +304,7 @@ def summarize(results: list[PullResult]) -> PullSummary:
     """
 
     return PullSummary(
-        pulled=sum(1 for item in results if item.state == RESULT_PULLED),
+        pulled=sum(1 for item in results if item.changed),
         commits=sum(item.commits for item in results),
         current=sum(1 for item in results if item.state == RESULT_CURRENT),
         skipped=sum(1 for item in results if item.state == RESULT_SKIPPED),

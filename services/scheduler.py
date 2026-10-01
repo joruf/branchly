@@ -14,6 +14,7 @@ at a time, and how results get back to the UI thread.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Slot
 
@@ -205,14 +206,16 @@ class _PullWorker(QRunnable):
     Brings one project up to date, off the UI thread.
     """
 
-    def __init__(self, job: PullJob) -> None:
+    def __init__(self, job: PullJob, work: Callable[[PullJob], PullResult] = pull_one) -> None:
         """
         Args:
             job: Project to update.
+            work: What to do with it, ``pull_one`` or ``pusher.push_one``.
         """
 
         super().__init__()
         self.job = job
+        self.work = work
         self.signals = _WorkerSignals()
 
     @Slot()
@@ -225,7 +228,7 @@ class _PullWorker(QRunnable):
         """
 
         try:
-            result = pull_one(self.job)
+            result = self.work(self.job)
         except Exception as error:  # noqa: BLE001 - a worker must never take the app down
             self.signals.failed.emit(self.job.key, str(error))
             return
@@ -248,13 +251,20 @@ class PullCoordinator(QObject):
     batch_finished = Signal()
     pull_failed = Signal(str, str)
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        parent: QObject | None = None,
+        work: Callable[[PullJob], PullResult] = pull_one,
+    ) -> None:
         """
         Args:
             parent: Parent object.
+            work: What each worker does with its project. Pulling by default;
+                sending every project uses the same batch with a push instead.
         """
 
         super().__init__(parent)
+        self._work = work
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(MAX_CONCURRENT_PULLS)
         self._total = 0
@@ -294,7 +304,7 @@ class PullCoordinator(QObject):
         self._done = 0
         self.progress.emit(0, self._total)
         for job in jobs:
-            worker = _PullWorker(job)
+            worker = _PullWorker(job, self._work)
             worker.signals.finished.connect(self._on_finished)
             worker.signals.failed.connect(self._on_failed)
             self._pool.start(worker)

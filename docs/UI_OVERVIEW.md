@@ -213,10 +213,17 @@ gegen die API geprüft.
 └────────────────────────────────────────────────────────┘
 ```
 
-Drei Zustände in einem Fenster: Ankündigung, Fortschritt, Bericht. Zeilenfarbe nach
-Ausgang: `success` vorgespult, `text_muted` schon aktuell, `warning` übersprungen,
-`danger` fehlgeschlagen. Modal, und während des Laufs ist *Schließen* gesperrt: es
-wird in Arbeitsbäume geschrieben.
+Zwei Zustände in einem Fenster: Fortschritt und Bericht. Der Lauf beginnt in
+`showEvent`, sobald das Fenster steht. Die Aktion zu wählen war schon die
+Entscheidung, ein *Start*-Knopf hat dieselbe Frage nur ein zweites Mal gestellt.
+Zeilenfarbe nach Ausgang: `success` vorgespult oder gesendet, `text_muted` schon
+aktuell, `warning` übersprungen, `danger` fehlgeschlagen. Modal, und während des
+Laufs wartet *Schließen*: es wird in Arbeitsbäume geschrieben.
+
+Dasselbe Fenster sendet auch alle Projekte (*Projekt → Alle Änderungen zum Server
+senden…*). `BulkMode` trägt die Arbeit (`puller.pull_one` oder `pusher.push_one`)
+und jeden Textschlüssel ausgeschrieben (`pull_all.*` oder `push_all.*`), damit jeder sich dort finden lässt, wo er gebraucht wird. `autostart=False`
+gibt es nur für Tests und Screenshots, die den Lauf selbst steuern.
 
 ## Updates (`ui/update_dialog.py`)
 

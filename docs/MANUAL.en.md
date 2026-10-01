@@ -195,8 +195,8 @@ and changes nothing in your project. To work entirely without a network, switch
 ## Updating every project at once
 
 **Update all projects** at the bottom of the list fetches each project's changes
-from the server. A window says beforehand what will happen, shows the progress,
-and afterwards what became of **each** project separately.
+from the server. The window starts at once, there is no second confirmation. It
+shows the progress, and afterwards what became of **each** project separately.
 
 ![Updating every project](screenshots/en/pull-all-dark.png)
 
@@ -221,8 +221,30 @@ something stale. You then update such a project on its own through **Get changes
 from the server**: there Branchly merges where needed and opens the conflict
 assistant.
 
-While the run is working the window cannot be closed: it writes into the folders,
-and a half-finished project with nobody watching would be the worse option.
+While the run is working the **Close** button waits: the run writes into the
+folders, and a half-finished project with nobody watching would be the worse
+option. Once everything is through, it closes the window.
+
+## Sending every project at once
+
+The counterpart is in the menu **Repository → Send all changes to the server…**.
+It sends the commits in every project that are not on the server yet, in the same
+window and also without a second confirmation.
+
+![Sending every project](screenshots/en/push-all-dark.png)
+
+Only what can simply be sent is sent. Nothing is forced:
+
+| It says | It means |
+|---|---|
+| *2 commits sent* | The server now has everything |
+| *nothing to send* | There was nothing unsent |
+| *the server has newer commits, update first* | Someone else sent something. Get it first, then send |
+| *the branch is not on the server yet, send it once from the project* | A new branch is not published on the side |
+| *conflicts waiting for a decision*, *no branch selected*, *no server* | As when updating |
+
+Uncommitted changes in the folder are no obstacle, since commits are sent, not
+files.
 
 ## Saving changes
 
