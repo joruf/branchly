@@ -230,6 +230,11 @@ and a half-finished project with nobody watching would be the worse option.
 2. Write a summary (required), a description is optional
 3. **"Save n file(s) to \<branch\>"**
 
+Summary, description and the *Add to the previous commit instead* tick belong to the project. Click
+another project in between and everything is as you left it when you come back,
+while the other project shows none of it. Branchly keeps this only while it runs.
+After the commit the box is empty again.
+
 Above the list is a single tick standing for all of them. It carries the count as
 its own label, so the whole line is a click target, and its appearance says where
 you are:
