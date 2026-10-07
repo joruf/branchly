@@ -147,18 +147,24 @@ def prepare(url: str, parent: Path | str, directory_name: str = "") -> CloneRequ
     return CloneRequest(url=clean_url, target=target)
 
 
-def default_remote_branch(url: str) -> str:
+def default_remote_branch(url: str, credentials: dict[str, str] | None = None) -> str:
     """
     Asks the server which branch it considers the main one.
 
     Args:
         url: Remote URL, already validated.
+        credentials: Login for the server, None for git's own helper.
 
     Returns:
         str: Branch name, empty when the server did not say.
     """
 
-    result = run(["ls-remote", "--symref", "--", url, "HEAD"], timeout=GIT_TIMEOUT_NETWORK, read_only=True)
+    result = run(
+        ["ls-remote", "--symref", "--", url, "HEAD"],
+        timeout=GIT_TIMEOUT_NETWORK,
+        read_only=True,
+        env_extra=credentials or None,
+    )
     if result.failed:
         return ""
     for line in result.out_lines:
@@ -173,6 +179,7 @@ def clone(
     request: CloneRequest,
     on_progress: Callable[[str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    credentials: dict[str, str] | None = None,
 ) -> GitResult:
     """
     Clones a repository, reporting progress as it goes.
@@ -186,6 +193,8 @@ def clone(
         request: Validated clone job.
         on_progress: Called with each progress line git prints.
         should_cancel: Polled between progress lines; True terminates the clone.
+        credentials: Login for the server, as ``services.git_credentials``
+            builds it. Empty or None leaves it to git's own credential helper.
 
     Returns:
         GitResult: Outcome.
@@ -202,7 +211,7 @@ def clone(
 
     sink = on_progress if on_progress is not None else (lambda _line: None)
     if inspection.state == TARGET_NON_EMPTY:
-        return _clone_into_existing(request, sink, should_cancel)
+        return _clone_into_existing(request, sink, should_cancel, credentials)
 
     parent = request.target.parent
     try:
@@ -225,6 +234,7 @@ def clone(
         cwd=parent,
         timeout=GIT_TIMEOUT_CLONE,
         should_cancel=should_cancel,
+        env_extra=credentials or None,
     )
 
 
@@ -232,6 +242,7 @@ def _clone_into_existing(
     request: CloneRequest,
     on_progress: Callable[[str], None],
     should_cancel: Callable[[], bool] | None,
+    credentials: dict[str, str] | None = None,
 ) -> GitResult:
     """
     Sets a repository up inside a directory that already holds files.
@@ -244,13 +255,14 @@ def _clone_into_existing(
         request: Validated clone job.
         on_progress: Called with each progress line.
         should_cancel: Polled between progress lines.
+        credentials: Login for the server, None for git's own helper.
 
     Returns:
         GitResult: Outcome of the step that failed, or of the final checkout.
     """
 
     target = request.target
-    branch = default_remote_branch(request.url) or "main"
+    branch = default_remote_branch(request.url, credentials) or "main"
     if not is_valid_branch_name(branch):
         return GitResult(returncode=-1, stdout="", stderr="unusable default branch", args=("clone",))
 
@@ -277,6 +289,7 @@ def _clone_into_existing(
         cwd=target,
         timeout=GIT_TIMEOUT_CLONE,
         should_cancel=should_cancel,
+        env_extra=credentials or None,
     )
     if fetched.failed:
         _cleanup()

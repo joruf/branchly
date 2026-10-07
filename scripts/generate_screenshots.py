@@ -736,6 +736,73 @@ def capture_settings(theme: str) -> Path:
     return target
 
 
+def capture_github_discover(theme: str, base: Path) -> Path:
+    """
+    Photographs the search for new repositories on GitHub.
+
+    The list is handed in rather than fetched: no token, no network, and only the
+    demo account's names on the picture.
+
+    Args:
+        theme: Theme to render.
+        base: Directory to build the demo folder in.
+
+    Returns:
+        Path: The written file.
+    """
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from github_api.client import GitHubClient
+    from services import github_discovery
+    from services.github_discovery import RemoteRepository
+    from ui.github_discover_dialog import GitHubDiscoverDialog
+
+    set_current_theme(theme)
+    app = QApplication.instance() or QApplication(sys.argv)
+    app.setStyleSheet(build_application_stylesheet(theme))
+
+    folder = base / f"github-discover-{theme}" / "Applications"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    def demo(name: str, private: bool, pushed: str, description: str) -> RemoteRepository:
+        return RemoteRepository(
+            name=name,
+            full_name=f"{DEMO_OWNER}/{name}",
+            clone_url=f"https://github.com/{DEMO_OWNER}/{name}.git",
+            description=description,
+            private=private,
+            pushed_at=f"{pushed}T09:00:00Z",
+        )
+
+    repositories = [
+        demo("invoicing", True, "2026-09-30", "Invoices and reminders"),
+        demo("sitemap", False, "2026-09-12", "Sitemap generator"),
+        demo("reminders", True, "2026-08-21", "Purchasing reminders"),
+        demo("planner", True, "2026-07-02", "Shift planning"),
+        demo("cookiecheck", False, "2026-06-18", "Consent scanner"),
+    ]
+    known = {
+        github_discovery.slug_key(f"https://github.com/{DEMO_OWNER}/invoicing.git"): "invoicing",
+        github_discovery.slug_key(f"https://github.com/{DEMO_OWNER}/sitemap.git"): "sitemap",
+    }
+    dialog = GitHubDiscoverDialog(GitHubClient(""), known, [], folder, load=False)
+    dialog.set_repositories(repositories)
+    # One row left out, so the box above the list shows its third state.
+    dialog._list.item(2).setCheckState(Qt.CheckState.Unchecked)
+    # The plan is made, so the field can show a plausible home instead of the
+    # temporary folder this picture was built in.
+    dialog._folder.setText("/home/alex/Applications")
+    dialog.resize(760, 520)
+    dialog.show()
+    for _round in range(6):
+        app.processEvents()
+    target = _save(dialog, theme, "github-discover")
+    dialog.done(0)
+    return target
+
+
 def capture_pull_all(theme: str, base: Path) -> Path:
     """
     Photographs the bulk update window.
@@ -1193,6 +1260,7 @@ def capture_all(language: str) -> list[Path]:
             written.append(capture_github(theme, config_dir))
             written.append(capture_binary(theme, base))
             written.append(capture_discover(theme, base))
+            written.append(capture_github_discover(theme, base))
             written.append(capture_conflict(theme, base))
             written.append(capture_signin(theme))
             written.append(capture_settings(theme))

@@ -107,6 +107,33 @@ it may not read is passed over silently.
 
 ![Searching for repositories](screenshots/en/discover-dark.png)
 
+The tick above the list stands for every row, as under *Changes*: a click ticks
+everything or nothing, half ticked means some are chosen.
+
+### Finding new repositories on GitHub
+
+*Repository → Find new repositories on GitHub…* lists the repositories of your
+GitHub account that Branchly does not know yet. Archived repositories and forks
+are left out. Without a sign-in, Branchly first asks whether you want to sign in.
+
+![New repositories on GitHub](screenshots/en/github-discover-dark.png)
+
+At the top is the target folder. Suggested is the folder most of your projects
+live in, after that the one chosen last. Each repository goes into a folder of
+its own, named after it. What the list says:
+
+| It says | It means |
+|---|---|
+| *private* or *public*, *last changed …* | New, ticked: is cloned and added |
+| *already at …, only added* | The folder already is a clone of it, Branchly just did not know it |
+| *already in Branchly as “…”* | Grey, nothing to do. A renamed repository is recognised too |
+| *… exists and is something else* | Grey: another project or a plain folder is there |
+
+**Clone and add** works through the ticked rows one after the other, and each row
+reports how it went. Private repositories are cloned with your GitHub sign-in.
+*File under* puts all of them into one category. **Cancel** stops the clone in
+progress, projects already finished stay.
+
 ### Categories
 
 Right-click the list or a category:

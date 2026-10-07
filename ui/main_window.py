@@ -77,6 +77,7 @@ from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
 from services import (
     git_credentials,
+    github_discovery,
     github_rename,
     open_with,
     puller,
@@ -96,6 +97,7 @@ from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
 from ui.discover_dialog import DiscoverDialog
 from ui.github_dialogs import CreateRepositoryDialog
+from ui.github_discover_dialog import GitHubDiscoverDialog
 from ui.github_lists import GitHubContext
 from ui.github_panel import GitHubPanel
 from ui.github_worker import ApiRunner
@@ -389,6 +391,8 @@ class MainWindow(QMainWindow):
         repo_menu.addAction(i18n.t("sidebar.clone_repo"), lambda: self._open_clone_dialog())
         repo_menu.addAction(i18n.t("github.repo_new"), self._create_github_repository)
         repo_menu.addAction(i18n.t("discover.menu"), self._discover_repositories)
+        github_discover = repo_menu.addAction(i18n.t("github_discover.menu"), self._discover_github)
+        github_discover.setToolTip(i18n.t("tip.github_discover_menu"))
         repo_menu.addSeparator()
         refresh_action = QAction(i18n.t("action.refresh"), self)
         refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
@@ -2438,6 +2442,54 @@ class MainWindow(QMainWindow):
         for entry in added:
             self._start_scan(entry.key)
 
+    def _discover_github(self) -> None:
+        """
+        Lists the account's repositories on GitHub that Branchly does not have,
+        clones the ticked ones and registers them.
+
+        Returns:
+            None
+        """
+
+        if not self._settings.github_enabled or not self._github.has_token:
+            if not self.ask_signin("github.signin_for_discover_hint") or not self._open_signin():
+                return
+            if not self._github.has_token:
+                return
+
+        known = {
+            github_discovery.slug_key(entry.remote_url): entry.name
+            for entry in self._registry.entries
+            if github_discovery.slug_key(entry.remote_url)
+        }
+        folder = (
+            Path(self._settings.github_clone_folder)
+            if self._settings.github_clone_folder
+            else github_discovery.default_folder(entry.path for entry in self._registry.entries)
+        )
+        dialog = GitHubDiscoverDialog(self._github, known, self._registry.categories, folder, self)
+        dialog.exec()
+
+        if str(dialog.folder) != self._settings.github_clone_folder:
+            self._settings.github_clone_folder = str(dialog.folder)
+            save_settings(self._settings)
+
+        added: list[RepoEntry] = []
+        for path in dialog.added:
+            outcome, entry = self._registry.add(path, dialog.category)
+            if entry is not None and outcome == ADD_OK:
+                added.append(entry)
+        if not added:
+            return
+
+        self._save_registry()
+        self._sidebar.refresh()
+        self.statusBar().showMessage(i18n.t("discover.added", count=len(added)), 6000)
+        self._sidebar.select_key(added[0].key)
+        self._activate(added[0])
+        for entry in added:
+            self._start_scan(entry.key)
+
     def _maybe_offer_discovery(self) -> None:
         """
         Offers the search once, on the first start with an empty project list.
@@ -2965,11 +3017,24 @@ class MainWindow(QMainWindow):
             bool: True when the user chose to sign in.
         """
 
+        return self.ask_signin("github.signin_for_repo_hint")
+
+    def ask_signin(self, hint_key: str) -> bool:
+        """
+        Asks whether to sign in to GitHub for something that needs it.
+
+        Args:
+            hint_key: Translation key saying what the sign-in is needed for.
+
+        Returns:
+            bool: True when the user chose to sign in.
+        """
+
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Information)
         box.setWindowTitle(i18n.t("github.no_token"))
         box.setText(i18n.t("github.no_token"))
-        box.setInformativeText(i18n.t("github.signin_for_repo_hint"))
+        box.setInformativeText(i18n.t(hint_key))
         sign_in = box.addButton(i18n.t("signin.menu"), QMessageBox.ButtonRole.AcceptRole)
         box.addButton(i18n.t("action.cancel"), QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(sign_in)
