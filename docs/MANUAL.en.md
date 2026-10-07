@@ -757,7 +757,8 @@ servers, the panel says so explicitly and everything else keeps working normally
 
 The menu bar has **Sign in to GitHub** under *Account*. Below it, it always says
 who is signed in, and **Sign out** removes the token from the computer again.
-Nothing changes on the server.
+Nothing changes on the server. The *GitHub* tab shows the same button for as long
+as nobody is signed in.
 
 ![Signing in](screenshots/en/signin-dark.png)
 
@@ -919,6 +920,9 @@ cannot be made unseen, while the opposite mistake costs one click.
 
 If "Clone straight after creating" is ticked, the usual clone dialog opens
 afterwards with the address already filled in.
+
+Without a sign-in, Branchly first asks whether you want to sign in to GitHub. Once
+you have, the creation carries on straight away.
 
 ### Cloning an existing repository from GitHub
 

@@ -58,6 +58,9 @@ TAB_RELEASES = 2
 TAB_ACTIONS = 3
 
 
+# Identifier of the sign-in button on the "not signed in" note.
+ACTION_SIGNIN = "signin"
+
 class GitHubPanel(QWidget):
     """
     Shows and edits what the selected repository has on GitHub.
@@ -68,12 +71,15 @@ class GitHubPanel(QWidget):
         refresh_requested: Emitted when the user asks for fresh data.
         repository_removed: Emitted after the repository was deleted on the
             server, so the window can offer to drop the local copy as well.
+        signin_requested: Emitted when the user wants to sign in to GitHub from
+            the "not signed in" note.
     """
 
     checkout_branch_requested = Signal(str)
     open_url_requested = Signal(str)
     refresh_requested = Signal()
     repository_removed = Signal(str)
+    signin_requested = Signal()
 
     def __init__(
         self,
@@ -115,6 +121,7 @@ class GitHubPanel(QWidget):
         notice_layout = QVBoxLayout(self._notice_holder)
         notice_layout.setContentsMargins(16, 16, 16, 16)
         self._notice = InlineMessage("", "", "info", self._notice_holder)
+        self._notice.action_clicked.connect(self._on_notice_action)
         notice_layout.addWidget(self._notice)
         notice_layout.addStretch(1)
         self._stack.addWidget(self._notice_holder)
@@ -193,9 +200,30 @@ class GitHubPanel(QWidget):
             i18n.t(detail_key, **params) if detail_key else "",
             token,
         )
+        self._notice.clear_actions()
+        if title_key == "github.no_token":
+            # The note names the problem, and the way out belongs right next to it
+            # rather than in a menu the reader first has to find.
+            self._notice.add_action(
+                i18n.t("signin.menu"), ACTION_SIGNIN, primary=True, tip=i18n.t("tip.signin")
+            )
         self._stack.setCurrentWidget(self._notice_holder)
         self._refresh_button.setEnabled(title_key != "github.not_github")
         self._settings_button.setEnabled(False)
+
+    def _on_notice_action(self, action_id: str) -> None:
+        """
+        Carries out a button on the note.
+
+        Args:
+            action_id: Which button.
+
+        Returns:
+            None
+        """
+
+        if action_id == ACTION_SIGNIN:
+            self.signin_requested.emit()
 
     def set_context(self, context: GitHubContext) -> None:
         """
