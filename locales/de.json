@@ -401,7 +401,7 @@
   "github.not_github": "Dieses Projekt liegt nicht auf GitHub",
   "github.not_github_hint": "Pull Requests, Issues und Build-Status gibt es nur für GitHub-Projekte. Alles andere in Branchly funktioniert wie gewohnt.",
   "github.no_token": "Nicht bei GitHub angemeldet",
-  "github.no_token_hint": "Hinterlege in den Einstellungen ein Zugriffstoken, um Pull Requests, Issues und Build-Status zu sehen.",
+  "github.no_token_hint": "Melde dich bei GitHub an, um Pull Requests, Issues und Build-Status zu sehen.",
   "github.rate_limited": "GitHub bittet um eine Pause",
   "github.rate_limited_hint": "Zu viele Anfragen. Branchly versucht es in {count} Minute(n) erneut.",
   "confirm.reset_hard_title": "Deine Arbeit wegwerfen",
@@ -1025,5 +1025,6 @@
   "repo.relocate_duplicate": "Dieser Ordner steht schon in der Liste",
   "repo.relocate_duplicate_hint": "Er gehört bereits zum Projekt „{name}“. Wird das fehlende Projekt nicht mehr gebraucht, lässt es sich mit einem Rechtsklick entfernen.",
   "repo.relocate_other_remote": "Das gewählte Projekt hat eine andere Server-Adresse als bisher:\n\nBisher: {old}\nGewählt: {new}\n\nVielleicht ist es ein anderes Projekt. Trotzdem diesen Ordner nehmen?",
-  "repo.relocated": "„{name}“ liegt jetzt unter {path}."
+  "repo.relocated": "„{name}“ liegt jetzt unter {path}.",
+  "github.signin_for_repo_hint": "Ein Repository auf GitHub anzulegen braucht eine Anmeldung bei GitHub. Danach geht es hier direkt weiter."
 }

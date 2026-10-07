@@ -401,7 +401,7 @@
   "github.not_github": "This project is not on GitHub",
   "github.not_github_hint": "Pull requests, issues and build status only work for GitHub projects. Everything else in Branchly works as usual.",
   "github.no_token": "Not signed in to GitHub",
-  "github.no_token_hint": "Add an access token in the settings to see pull requests, issues and build status.",
+  "github.no_token_hint": "Sign in to GitHub to see pull requests, issues and build status.",
   "github.rate_limited": "GitHub is asking us to slow down",
   "github.rate_limited_hint": "Too many requests. Branchly will try again in {count} minute(s).",
   "confirm.reset_hard_title": "Throw your work away",
@@ -1025,5 +1025,6 @@
   "repo.relocate_duplicate": "This folder is already in the list",
   "repo.relocate_duplicate_hint": "It already belongs to the project “{name}”. If the missing project is not needed any more, right-click it to remove it.",
   "repo.relocate_other_remote": "The chosen project has a different server address than before:\n\nBefore: {old}\nChosen: {new}\n\nIt may be a different project. Use this folder anyway?",
-  "repo.relocated": "“{name}” is now at {path}."
+  "repo.relocated": "“{name}” is now at {path}.",
+  "github.signin_for_repo_hint": "Creating a repository on GitHub needs you to be signed in to GitHub. Once you are, it carries on right here."
 }

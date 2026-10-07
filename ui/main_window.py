@@ -542,6 +542,7 @@ class MainWindow(QMainWindow):
         self._pull_requests.checkout_branch_requested.connect(self._checkout_branch)
         self._pull_requests.refresh_requested.connect(self._reload_github)
         self._pull_requests.repository_removed.connect(self._on_remote_repo_deleted)
+        self._pull_requests.signin_requested.connect(self._open_signin)
 
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -2947,11 +2948,33 @@ class MainWindow(QMainWindow):
         """
 
         if not self._settings.github_enabled or not self._github.has_token:
-            QMessageBox.information(
-                self, i18n.t("github.no_token"), i18n.t("github.no_token_hint")
-            )
-            return
+            # Creating a repository needs a GitHub login. Rather than only saying
+            # so, the question offers to sign in, and the creation goes on from
+            # there once that worked.
+            if not self.ask_signin_for_repository() or not self._open_signin():
+                return
+            if not self._github.has_token:
+                return
         self._github_runner.submit(self._github.organizations, self._prompt_new_repository)
+
+    def ask_signin_for_repository(self) -> bool:
+        """
+        Asks whether to sign in to GitHub so a repository can be created there.
+
+        Returns:
+            bool: True when the user chose to sign in.
+        """
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(i18n.t("github.no_token"))
+        box.setText(i18n.t("github.no_token"))
+        box.setInformativeText(i18n.t("github.signin_for_repo_hint"))
+        sign_in = box.addButton(i18n.t("signin.menu"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(i18n.t("action.cancel"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(sign_in)
+        box.exec()
+        return box.clickedButton() is sign_in
 
     def _prompt_new_repository(self, outcome: object) -> None:
         """
@@ -3185,18 +3208,18 @@ class MainWindow(QMainWindow):
             i18n.t("signin.state_in", login=name) if name else i18n.t("signin.state_in_unknown")
         )
 
-    def _open_signin(self) -> None:
+    def _open_signin(self) -> bool:
         """
         Opens the sign-in dialog and adopts the result.
 
         Returns:
-            None
+            bool: True when the user is signed in afterwards.
         """
 
         dialog = SignInDialog(self)
         if dialog.exec() != SignInDialog.DialogCode.Accepted:
             self._refresh_account_menu()
-            return
+            return False
 
         self._viewer_login = dialog.login
         # Signing in is only useful if the panel comes on with it. Somebody who
@@ -3207,6 +3230,7 @@ class MainWindow(QMainWindow):
         self._refresh_account_menu()
         self._reload_github()
         self.statusBar().showMessage(i18n.t("signin.done", login=dialog.login), 6000)
+        return True
 
     def _sign_out(self) -> None:
         """

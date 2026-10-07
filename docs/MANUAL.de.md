@@ -784,7 +784,8 @@ normal weiter.
 
 In der Menüleiste unter *Konto* steht **Bei GitHub anmelden**. Darunter steht
 immer, wer gerade angemeldet ist, und **Abmelden** entfernt das Token wieder vom
-Rechner. Auf dem Server ändert sich dabei nichts.
+Rechner. Auf dem Server ändert sich dabei nichts. Denselben Knopf zeigt auch der
+Reiter *GitHub*, solange niemand angemeldet ist.
 
 ![Anmelden](screenshots/de/signin-dark.png)
 
@@ -950,6 +951,9 @@ Klick.
 
 Ist „Direkt nach dem Anlegen klonen" angehakt, öffnet sich danach der gewohnte
 Klon-Dialog mit bereits eingetragener Adresse.
+
+Ohne Anmeldung fragt Branchly zuerst, ob du dich bei GitHub anmelden willst. Nach
+der Anmeldung geht es direkt mit dem Anlegen weiter.
 
 ### Ein vorhandenes Repository von GitHub klonen
 
