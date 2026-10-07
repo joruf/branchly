@@ -213,6 +213,8 @@ class AppSettings:
         last_repo: Path of the repository selected when the app last closed.
         download_folder: Folder the last download of old file versions went
             into, offered again next time. Empty until the first download.
+        github_clone_folder: Folder the last clones from "find new repositories
+            on GitHub" went into, offered again next time. Empty until then.
         window_geometry: Hex-encoded Qt geometry blob.
         window_state: Hex-encoded Qt window state blob.
     """
@@ -239,6 +241,7 @@ class AppSettings:
     discovery_offered: bool = False
     last_repo: str = ""
     download_folder: str = ""
+    github_clone_folder: str = ""
     window_geometry: str = ""
     window_state: str = ""
 
@@ -277,6 +280,9 @@ class AppSettings:
             last_repo=self.last_repo if isinstance(self.last_repo, str) else "",
             download_folder=(
                 self.download_folder if isinstance(self.download_folder, str) else ""
+            ),
+            github_clone_folder=(
+                self.github_clone_folder if isinstance(self.github_clone_folder, str) else ""
             ),
             window_geometry=self.window_geometry if isinstance(self.window_geometry, str) else "",
             window_state=self.window_state if isinstance(self.window_state, str) else "",

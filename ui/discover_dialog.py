@@ -39,6 +39,7 @@ import i18n
 from models.category import Category
 from services import discovery
 from services.discovery import Candidate
+from ui.changes_panel import SelectAllBox
 from ui.widgets import InlineMessage
 
 _ROLE_PATH = int(Qt.ItemDataRole.UserRole)
@@ -161,7 +162,7 @@ class DiscoverDialog(QDialog):
 
         self._list = QListWidget(self)
         self._list.setToolTip(i18n.t("tip.discover_list"))
-        self._list.itemChanged.connect(lambda _item: self._update_buttons())
+        self._list.itemChanged.connect(self._on_item_changed)
         column.addWidget(self._list, 1)
 
         column.addWidget(self._build_selection_row())
@@ -237,15 +238,13 @@ class DiscoverDialog(QDialog):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
 
-        self._select_all = QPushButton(i18n.t("changes.select_all"), holder)
+        # One tick for all of them, the same control as above the changes list
+        # and in the search on GitHub: it shows all, some or none at a glance.
+        self._select_all = SelectAllBox("", holder)
+        self._select_all.setTristate(True)
         self._select_all.setToolTip(i18n.t("tip.discover_select_all"))
-        self._select_all.clicked.connect(lambda: self._set_all_checked(True))
+        self._select_all.clicked.connect(self._on_select_all_clicked)
         row.addWidget(self._select_all)
-
-        self._select_none = QPushButton(i18n.t("changes.select_none"), holder)
-        self._select_none.setToolTip(i18n.t("tip.discover_select_none"))
-        self._select_none.clicked.connect(lambda: self._set_all_checked(False))
-        row.addWidget(self._select_none)
 
         row.addStretch(1)
         row.addWidget(QLabel(i18n.t("discover.category_label"), holder))
@@ -403,6 +402,29 @@ class DiscoverDialog(QDialog):
             self._root.setText(chosen)
             self.start_scan()
 
+    def _on_item_changed(self, _item: QListWidgetItem) -> None:
+        """
+        Follows a click on one row's tick.
+
+        Args:
+            _item: The row.
+
+        Returns:
+            None
+        """
+
+        self._update_buttons()
+
+    def _on_select_all_clicked(self) -> None:
+        """
+        Ticks or unticks every offered row, as the box now says.
+
+        Returns:
+            None
+        """
+
+        self._set_all_checked(self._select_all.checkState() == Qt.CheckState.Checked)
+
     def _set_all_checked(self, checked: bool) -> None:
         """
         Ticks or unticks every offered row.
@@ -456,12 +478,22 @@ class DiscoverDialog(QDialog):
         self._apply_button.setText(
             i18n.t("discover.apply_count", count=count) if count else i18n.t("discover.apply")
         )
-        offerable = any(
-            self._list.item(index).flags() & Qt.ItemFlag.ItemIsUserCheckable
+        offerable = sum(
+            1
             for index in range(self._list.count())
+            if self._list.item(index).flags() & Qt.ItemFlag.ItemIsUserCheckable
         )
-        self._select_all.setEnabled(offerable)
-        self._select_none.setEnabled(offerable)
+        if count == 0:
+            state = Qt.CheckState.Unchecked
+        elif count == offerable:
+            state = Qt.CheckState.Checked
+        else:
+            state = Qt.CheckState.PartiallyChecked
+        self._select_all.setCheckState(state)
+        self._select_all.setEnabled(offerable > 0 and not busy)
+        self._select_all.setText(
+            i18n.t("changes.selected_count", selected=count, total=offerable) if offerable else ""
+        )
 
     def _on_accept(self) -> None:
         """

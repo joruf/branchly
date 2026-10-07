@@ -110,6 +110,33 @@ Kategorie.
 
 ![Repositories suchen](screenshots/de/discover-dark.png)
 
+Der Haken über der Liste steht für alle Zeilen, wie unter *Änderungen*: ein Klick
+hakt alles an oder ab, halb angehakt heißt, ein Teil ist ausgewählt.
+
+### Neue Repositories auf GitHub finden
+
+*Projekt → Neue Repositories auf GitHub suchen…* listet die Repositories deines
+GitHub-Kontos, die Branchly noch nicht kennt. Archivierte Repositories und Forks
+bleiben draußen. Ohne Anmeldung fragt Branchly zuerst, ob du dich anmelden willst.
+
+![Neue Repositories auf GitHub](screenshots/de/github-discover-dark.png)
+
+Oben steht der Zielordner. Vorgeschlagen ist der Ordner, in dem die meisten deiner
+Projekte liegen, danach der zuletzt gewählte. Jedes Repository kommt in einen
+Unterordner mit seinem Namen. Was in der Liste steht:
+
+| Steht da | Heißt |
+|---|---|
+| *privat* oder *öffentlich*, *zuletzt geändert …* | Neu, angehakt: wird geklont und aufgenommen |
+| *liegt schon unter …, wird nur aufgenommen* | Der Ordner ist schon ein Klon davon, Branchly kannte ihn nur nicht |
+| *schon in Branchly als „…“* | Grau, es gibt nichts zu tun. Auch ein umbenanntes Repository wird erkannt |
+| *… gibt es schon und ist etwas anderes* | Grau: dort liegt ein anderes Projekt oder ein normaler Ordner |
+
+**Klonen und aufnehmen** arbeitet die angehakten Zeilen nacheinander ab, jede
+Zeile meldet, wie es lief. Private Repositories werden mit deiner Anmeldung bei
+GitHub geklont. Über *Einsortieren unter* landen alle in einer Kategorie.
+**Abbrechen** beendet den laufenden Klon, schon fertige Projekte bleiben.
+
 ### Kategorien
 
 Rechtsklick in die Liste oder auf eine Kategorie:

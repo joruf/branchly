@@ -36,6 +36,7 @@ from github_api.client import GitHubClient
 from gitops import clone as clone_mod
 from gitops import remote_url
 from models.category import Category
+from services import git_credentials
 from ui.github_dialogs import RepositoryPickerDialog
 from ui.github_worker import ApiRunner
 from ui.widgets import InlineMessage
@@ -53,14 +54,16 @@ class _CloneWorker(QObject):
     progress = Signal(str)
     finished = Signal(bool, str)
 
-    def __init__(self, request: clone_mod.CloneRequest) -> None:
+    def __init__(self, request: clone_mod.CloneRequest, credentials: dict[str, str] | None = None) -> None:
         """
         Args:
             request: Validated clone job.
+            credentials: Login for the server, None for git's own helper.
         """
 
         super().__init__()
         self._request = request
+        self._credentials = credentials
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -85,6 +88,7 @@ class _CloneWorker(QObject):
             self._request,
             on_progress=self.progress.emit,
             should_cancel=lambda: self._cancelled,
+            credentials=self._credentials,
         )
         self.finished.emit(result.ok, result.message)
 
@@ -400,7 +404,10 @@ class CloneDialog(QDialog):
         self._result_category = str(self._category.currentData() or "")
         self._set_busy(True)
 
-        worker = _CloneWorker(request)
+        # Read here, on the GUI thread: the keychain is not something to touch
+        # from a worker. A private GitHub repository then clones with the token
+        # Branchly already holds, like a push does.
+        worker = _CloneWorker(request, git_credentials.for_url(request.url))
         thread = QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)

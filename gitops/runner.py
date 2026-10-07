@@ -408,6 +408,7 @@ def run_streaming(
     cwd: Path | str | None = None,
     timeout: int = GIT_TIMEOUT_LOCAL,
     should_cancel: Callable[[], bool] | None = None,
+    env_extra: dict[str, str] | None = None,
 ) -> GitResult:
     """
     Runs a git command and reports its progress lines as they arrive.
@@ -424,6 +425,7 @@ def run_streaming(
         cwd: Repository directory to run in.
         timeout: Seconds before the process is killed.
         should_cancel: Polled between lines; returning True terminates git.
+        env_extra: Extra environment variables, e.g. the login for a clone.
 
     Returns:
         GitResult: Outcome, with the collected progress text in ``stderr``.
@@ -450,7 +452,7 @@ def run_streaming(
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             shell=False,
-            env=build_environment(),
+            env=build_environment(env_extra),
             bufsize=0,
         )
     except (OSError, ValueError) as error:
