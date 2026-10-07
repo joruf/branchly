@@ -143,6 +143,7 @@ class SignInDialog(QDialog):
         self.setWindowTitle(i18n.t("signin.title"))
         self.setMinimumWidth(480)
         self._thread: QThread | None = None
+        self._checked_token = ""
         self._worker: QObject | None = None
         self._login = ""
 
@@ -315,9 +316,7 @@ class SignInDialog(QDialog):
         self._notice.set_message(i18n.t("signin.checking"), "", "info")
         self._notice.setVisible(True)
 
-        worker = _TokenCheckWorker(pasted)
-        worker.finished.connect(lambda name, error: self._on_checked(pasted, name, error))
-        self._run(worker)
+        self._check_token(pasted)
 
     def _run(self, worker: QObject) -> None:
         """
@@ -400,9 +399,44 @@ class SignInDialog(QDialog):
             None
         """
 
+        self._check_token(token)
+
+    def _check_token(self, token: str) -> None:
+        """
+        Starts the check of a token on its own thread.
+
+        The answer is connected to a method of this dialog, never to a lambda. A
+        lambda has no thread of its own, so PySide runs it on the thread that
+        emits, which is the worker's: the handler then waited for its own thread
+        to end and closed the dialog from outside the GUI thread, and the window
+        froze for good. A bound method of a QObject is queued to the thread the
+        dialog lives in.
+
+        Args:
+            token: Token to verify.
+
+        Returns:
+            None
+        """
+
+        self._checked_token = token
         worker = _TokenCheckWorker(token)
-        worker.finished.connect(lambda name, error: self._on_checked(token, name, error))
+        worker.finished.connect(self._on_token_checked)
         self._run(worker)
+
+    def _on_token_checked(self, login: str, error_key: str) -> None:
+        """
+        Receives the answer of a token check on the GUI thread.
+
+        Args:
+            login: Who the token belongs to, empty when the check failed.
+            error_key: Why it failed, empty on success.
+
+        Returns:
+            None
+        """
+
+        self._on_checked(self._checked_token, login, error_key)
 
     def _on_checked(self, token: str, login: str, error_key: str) -> None:
         """
