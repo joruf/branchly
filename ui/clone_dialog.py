@@ -116,6 +116,7 @@ class CloneDialog(QDialog):
         self.setMinimumWidth(560)
 
         self._thread: QThread | None = None
+        self._clone_target = Path()
         self._worker: _CloneWorker | None = None
         self._result_path: Path | None = None
         self._result_category = ""
@@ -138,8 +139,6 @@ class CloneDialog(QDialog):
         self._url.setToolTip(i18n.t("tip.clone_url"))
         self._url.setPlaceholderText(i18n.t("clone.url_placeholder"))
         self._url.textChanged.connect(self._on_url_changed)
-        if initial_url:
-            self._url.setText(initial_url)
         url_layout.addWidget(self._url, 1)
         self._pick_remote = QPushButton(i18n.t("clone.from_github"), url_row)
         self._pick_remote.setToolTip(i18n.t("tip.clone_from_github"))
@@ -203,6 +202,10 @@ class CloneDialog(QDialog):
         self._buttons.rejected.connect(self._on_cancel)
         layout.addWidget(self._buttons)
 
+        # Filled in last: the address suggests the folder name, and the folder
+        # field has to exist by the time it does.
+        if initial_url:
+            self._url.setText(initial_url)
         self._revalidate()
 
     # ------------------------------------------------------------------ results
@@ -402,7 +405,10 @@ class CloneDialog(QDialog):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._on_progress)
-        worker.finished.connect(lambda ok, message: self._on_finished(ok, message, request.target))
+        # A bound method rather than a lambda: a lambda runs on the worker's
+        # thread, and closing the dialog from there froze the window.
+        self._clone_target = request.target
+        worker.finished.connect(self._on_clone_finished)
         self._worker = worker
         self._thread = thread
         thread.start()
@@ -447,6 +453,20 @@ class CloneDialog(QDialog):
             self._progress_text.setText(f"{phase} — {percent}%")
             return
         self._progress_text.setText(line)
+
+    def _on_clone_finished(self, ok: bool, message: str) -> None:
+        """
+        Receives the end of the clone on the GUI thread.
+
+        Args:
+            ok: Whether the clone succeeded.
+            message: Text git produced.
+
+        Returns:
+            None
+        """
+
+        self._on_finished(ok, message, self._clone_target)
 
     def _on_finished(self, ok: bool, message: str, target: Path) -> None:
         """
