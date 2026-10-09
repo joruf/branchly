@@ -137,6 +137,7 @@ class GitHubDiscoverDialog(QDialog):
         folder: Path,
         parent: QWidget | None = None,
         load: bool = True,
+        known_paths: dict[str, Path] | None = None,
     ) -> None:
         """
         Args:
@@ -147,6 +148,8 @@ class GitHubDiscoverDialog(QDialog):
             parent: Parent widget.
             load: Whether to ask GitHub right away. Off only for tests and
                 screenshots that hand in the list themselves.
+            known_paths: ``slug_key`` mapped to the registered folder, so a ghost
+                entry cannot block setup in the real project folder.
         """
 
         super().__init__(parent)
@@ -157,6 +160,7 @@ class GitHubDiscoverDialog(QDialog):
         self.category = ""
         self._client = client
         self._known = known
+        self._known_paths = dict(known_paths or {})
         self._repositories: list[RemoteRepository] = []
         self._offers: list[Offer] = []
         self._runner = ApiRunner(self)
@@ -377,6 +381,13 @@ class GitHubDiscoverDialog(QDialog):
             return
         payload = getattr(outcome, "payload", [])
         if self._moved_known is not None:
+            for key, name in self._moved_known.items():
+                if key in self._known_paths:
+                    continue
+                for old_key, old_name in self._known.items():
+                    if old_name == name and old_key in self._known_paths:
+                        self._known_paths[key] = self._known_paths[old_key]
+                        break
             self._known = self._moved_known
         self.set_repositories([RemoteRepository.from_model(item) for item in payload or []])
 
@@ -404,7 +415,9 @@ class GitHubDiscoverDialog(QDialog):
 
         if self._thread is not None:
             return
-        self._offers = discovery.plan(self._repositories, self._known, self.folder)
+        self._offers = discovery.plan(
+            self._repositories, self._known, self.folder, known_paths=self._known_paths
+        )
         self._results = {}
         self._fill()
 

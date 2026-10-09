@@ -4,6 +4,8 @@ Tests for branches, remotes, history layout, conflicts and cloning.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -620,6 +622,76 @@ class RealCloneTests(unittest.TestCase):
                 self.assertTrue((target / ".git").exists())
                 self.assertTrue((target / "README.md").exists())
                 self.assertEqual("do not lose me", (target / "my-notes.txt").read_text(encoding="utf-8"))
+
+    def test_clone_into_folder_with_matching_names_keeps_local_files(self) -> None:
+        with temp_repo_pair() as (_first, _second, origin):
+            with tempfile.TemporaryDirectory() as tmp:
+                target = Path(tmp) / "mixed"
+                target.mkdir()
+                (target / "README.md").write_text("my local start\n", encoding="utf-8")
+                (target / "extra.py").write_text("print(1)\n", encoding="utf-8")
+
+                request = clone_mod.prepare(str(origin), tmp, "mixed")
+                assert request is not None
+                result = clone_mod.clone(request)
+                self.assertTrue(result.ok, result.message)
+                self.assertEqual("my local start\n", (target / "README.md").read_text(encoding="utf-8"))
+                self.assertEqual("print(1)\n", (target / "extra.py").read_text(encoding="utf-8"))
+                # Local README differs from the remote one, so it shows as edited.
+                status = (target / ".git").exists() and subprocess.run(
+                    ["git", "-C", str(target), "status", "--porcelain", "--", "README.md"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout
+                self.assertTrue(status.strip())
+
+    def test_clone_into_folder_with_empty_remote_commits_local_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            origin = Path(tmp) / "empty.git"
+            subprocess.run(
+                ["git", "init", "--bare", "-b", "main", str(origin)],
+                capture_output=True,
+                check=True,
+            )
+            target = Path(tmp) / "project"
+            target.mkdir()
+            (target / "app.py").write_text("print('hi')\n", encoding="utf-8")
+            (target / "notes.txt").write_text("started locally\n", encoding="utf-8")
+
+            request = clone_mod.CloneRequest(url=origin.as_uri(), target=target)
+            # Identity for the initial commit without touching the user's gitconfig.
+            identity = {
+                "GIT_AUTHOR_NAME": "Branchly Test",
+                "GIT_AUTHOR_EMAIL": "test@example.invalid",
+                "GIT_COMMITTER_NAME": "Branchly Test",
+                "GIT_COMMITTER_EMAIL": "test@example.invalid",
+            }
+            saved = {key: os.environ.get(key) for key in identity}
+            os.environ.update(identity)
+            self.addCleanup(
+                lambda: [
+                    os.environ.update({key: value}) if value is not None else os.environ.pop(key, None)
+                    for key, value in saved.items()
+                ]
+            )
+            result = clone_mod.clone(request)
+            self.assertTrue(result.ok, result.message)
+            self.assertTrue((target / ".git").exists())
+            listed = subprocess.run(
+                ["git", "-C", str(target), "ls-files"],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.splitlines()
+            self.assertEqual(["app.py", "notes.txt"], sorted(listed))
+            log = subprocess.run(
+                ["git", "-C", str(target), "log", "-1", "--pretty=%s"],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+            self.assertEqual("Initial commit", log)
 
     def test_clone_into_an_existing_repository_is_refused(self) -> None:
         with temp_repo_pair() as (first, _second, origin):
