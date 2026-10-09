@@ -288,25 +288,27 @@ skipped or failed project is not lost. If you would rather close it yourself,
 untick *Close the “Update all projects” window by itself when it is done* under
 *General* in the settings. That also applies to sending every project.
 
-## Sending every project at once
+## Uploading every project at once
 
-The counterpart is in the menu **Branch → Send all changes to the server…**, right under the entry for the single project.
-It sends the commits in every project that are not on the server yet, in the same
-window and also without a second confirmation.
+The counterpart is the **Upload all changes to the server** button at the top
+right, with the number of commits waiting across every project. The same entry is
+in the **Branch** menu, right under the one for the single project. It uploads the
+commits in every project that are not on the server yet, in the same window and
+also without a second confirmation.
 
-![Sending every project](screenshots/en/push-all-dark.png)
+![Uploading every project](screenshots/en/push-all-dark.png)
 
-As when updating, a project jumps to the right, here under **Sent**, as soon as
+As when updating, a project jumps to the right, here under **Uploaded**, as soon as
 its commits are on the server.
 
 Only what can simply be sent is sent. Nothing is forced:
 
 | It says | It means |
 |---|---|
-| *2 commits sent* | The server now has everything |
-| *nothing to send* | There was nothing unsent |
+| *2 commits uploaded* | The server now has everything |
+| *nothing to upload* | There was nothing open |
 | *the server has newer commits, update first* | Someone else sent something. Get it first, then send |
-| *the branch is not on the server yet, send it once from the project* | A new branch is not published on the side |
+| *the branch is not on the server yet, upload it once from the project* | A new branch is not published on the side |
 | *conflicts waiting for a decision*, *no branch selected*, *no server* | As when updating |
 
 Uncommitted changes in the folder are no obstacle, since commits are sent, not
@@ -316,7 +318,28 @@ files.
 
 1. Tick the files that belong together
 2. Write a summary (required), a description is optional
-3. **"Save n file(s) to \<branch\>"**
+3. **Save and upload**, or just **Save**
+
+Below the text field the two steps stand side by side, with an arrow between
+them, and underneath the button for both:
+
+```
+     1  LOCAL                     2  SERVER
+ [ ✓ Save (2) ]       - - ›  [ ⇡ Upload (1) ]
+           both in one click
+ [           ✓ ⇡  Save and upload                ]
+```
+
+| Button | What it does | Works when |
+|---|---|---|
+| **Save (n)** | Commits the n ticked files, the commit stays on your computer | Files are ticked and a summary is written |
+| **Upload (n)** | Sends n saved commits to the server | Something is waiting, or the branch is new and goes up for the first time |
+| **Save and upload** | The commit first, then the upload straight away | Both of the above, and the project has a server |
+
+If uploading fails, say because somebody else sent something in the meantime,
+the commit is kept. The strip at the top then says what to do. The
+**Upload all changes to the server** button at the top right, by contrast,
+uploads every project at once.
 
 Summary, description and the *Add to the previous commit instead* tick belong to the project. Click
 another project in between and everything is as you left it when you come back,
@@ -627,9 +650,10 @@ puts the previous state back; your own saved work is untouched by it.
 
 ## Branches and the server
 
-At the top right of the project there is now only **Send changes to the server**,
-with the count as soon as something is waiting. Everything else is in the menu
-under *Branch*: new branch, switch branch, rename, delete, check the server, get
+At the top right there is now only **Upload all changes to the server**, with the
+number of commits waiting across every project. Only this one project is uploaded
+by *Branch → Upload changes to the server*, or **Upload** under the commit box.
+Everything else is in the menu under *Branch* too: new branch, switch branch, rename, delete, check the server, get
 changes from the server, and the rarer cases below. The count sits on the fetch
 entry there too, as soon as something is waiting.
 
@@ -773,8 +797,8 @@ was before.
 
 ### Sending a new branch for the first time
 
-A freshly created branch is only on your disk. On the first **Send changes to the
-server**, Branchly creates it there and remembers the pairing, so that every
+A freshly created branch is only on your disk. On the first **Upload**, Branchly
+creates it there and remembers the pairing, so that every
 further send goes to the same place without asking. You do not have to set
 anything for that.
 

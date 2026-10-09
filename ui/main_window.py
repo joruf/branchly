@@ -332,14 +332,14 @@ class MainWindow(QMainWindow):
         buttons.setContentsMargins(0, 0, 0, 0)
         row.addWidget(actions)
 
-        # Only sending stays in the bar. Fetching, pulling and the two branch
-        # actions live in the Branch menu, which is where somebody looks for
-        # them anyway, and five buttons across the top of every project were
-        # four more than the one thing people press all day.
-        self._push_button = QPushButton(i18n.t("sync.push_generic"), actions)
-        self._push_button.setToolTip(i18n.t("tip.push"))
+        # Only uploading stays in the bar, and for every project at once: the
+        # current one alone is the "Upload" step under the commit box and an
+        # entry in the Branch menu. Fetching, pulling and the branch actions live
+        # in that menu too, which is where somebody looks for them anyway.
+        self._push_button = QPushButton(i18n.t("push_all.button"), actions)
+        self._push_button.setToolTip(i18n.t("tip.push_all_button"))
         self._push_button.setObjectName("Primary")
-        self._push_button.clicked.connect(self._do_push)
+        self._push_button.clicked.connect(self._push_all)
         buttons.addWidget(self._push_button)
         return holder
 
@@ -447,7 +447,8 @@ class MainWindow(QMainWindow):
             i18n.t("sync.pull_generic"), self._do_pull
         )
         self._pull_action.setToolTip(i18n.t("tip.pull"))
-        branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
+        push_one = branch_menu.addAction(i18n.t("sync.push_generic"), self._do_push)
+        push_one.setToolTip(i18n.t("tip.push"))
         # Sending every project sits right under sending this one, where
         # somebody looking for "send" finds both.
         push_all = branch_menu.addAction(i18n.t("push_all.menu"), self._push_all)
@@ -514,6 +515,8 @@ class MainWindow(QMainWindow):
 
         self._changes.file_selected.connect(self._show_file_diff)
         self._changes.commit_requested.connect(self._do_commit)
+        self._changes.commit_and_push_requested.connect(self._do_commit_and_push)
+        self._changes.push_requested.connect(self._do_push)
         self._changes.discard_requested.connect(self._confirm_discard)
         self._changes.open_file_requested.connect(self._open_repo_file)
         self._changes.reveal_file_requested.connect(self._reveal_repo_file)
@@ -784,6 +787,9 @@ class MainWindow(QMainWindow):
         """
         Enables or disables the branch and sync buttons together.
 
+        The upload button works on every project, so one project that cannot be
+        read does not switch it off; only an empty project list does.
+
         Args:
             enabled: Whether they are usable.
 
@@ -791,7 +797,8 @@ class MainWindow(QMainWindow):
             None
         """
 
-        self._push_button.setEnabled(enabled)
+        del enabled
+        self._update_push_all_button()
 
     def _update_sync_buttons(self, state: RepositoryState) -> None:
         """
@@ -806,9 +813,28 @@ class MainWindow(QMainWindow):
 
         entry = self._entry
         has_remote = bool(entry and remote_mod.has_remote(entry.path))
-        self._push_button.setEnabled(has_remote)
+        self._changes.set_remote(has_remote)
+        if entry is not None:
+            # The bar counts every project, so this one's count goes in first.
+            entry.status.ahead = state.ahead
+        self._update_push_all_button()
+
+    def _update_push_all_button(self) -> None:
+        """
+        Labels the upload button with the commits waiting across every project.
+
+        The counts come from the last check of each project, so a project not
+        checked yet counts as nothing waiting. The button stays usable either
+        way: the run itself finds out what is really there.
+
+        Returns:
+            None
+        """
+
+        waiting = sum(max(0, entry.status.ahead) for entry in self._registry.entries)
+        self._push_button.setEnabled(bool(self._registry.entries))
         self._push_button.setText(
-            i18n.t("sync.push", count=state.ahead) if state.ahead else i18n.t("sync.push_generic")
+            i18n.t("push_all.button_count", count=waiting) if waiting else i18n.t("push_all.button")
         )
 
     def _reload_graph(self) -> None:
@@ -1166,7 +1192,7 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------------------- commit
 
-    def _do_commit(self, draft: CommitDraft, selected: list[str]) -> None:
+    def _do_commit(self, draft: CommitDraft, selected: list[str]) -> bool:
         """
         Stages the ticked files and commits them.
 
@@ -1175,17 +1201,17 @@ class MainWindow(QMainWindow):
             selected: Paths to include.
 
         Returns:
-            None
+            bool: True when the commit was made.
         """
 
         entry = self._entry
         if entry is None or not selected:
-            return
+            return False
 
         staged = stage_mod.unstage_all(entry.path)
         if staged.failed and "did not match" not in staged.message:
             self._report(staged)
-            return
+            return False
 
         # Files the user took single blocks out of are staged block by block, the
         # rest wholesale. The index has to start at the last saved version for
@@ -1196,7 +1222,7 @@ class MainWindow(QMainWindow):
             added = stage_mod.stage_files(entry.path, whole)
             if added.failed:
                 self._report(added)
-                return
+                return False
         for path in selected:
             if path not in partial:
                 continue
@@ -1205,12 +1231,12 @@ class MainWindow(QMainWindow):
             applied = stage_mod.stage_selected_hunks(entry.path, parsed)
             if applied.failed:
                 self._report(applied)
-                return
+                return False
 
         result = do_commit(entry.path, draft)
         if result.failed:
             self._report(result)
-            return
+            return False
         self._changes.clear_draft()
         # Whatever went in is settled. Keeping it in the deselection would untick
         # a future, unrelated change to the same file.
@@ -1223,6 +1249,26 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(draft.summary.strip(), 4000)
         self._reload_current()
         self._start_scan(entry.key)
+        return True
+
+    def _do_commit_and_push(self, draft: CommitDraft, selected: list[str]) -> None:
+        """
+        Commits the ticked files and sends them to the server in one go.
+
+        The push only starts once the commit is made. If it then fails, for
+        instance because somebody else sent something first, the commit stays:
+        the explanation is the same one the upload button gives on its own.
+
+        Args:
+            draft: Message the user typed.
+            selected: Paths to include.
+
+        Returns:
+            None
+        """
+
+        if self._do_commit(draft, selected):
+            self._do_push()
 
     def _remember_selection(self) -> None:
         """
@@ -1855,13 +1901,14 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().clearMessage()
         if result.failed:
+            # Reloaded before the explanation, which a reload afterwards would hide.
+            self._reload_current()
             # A lease that no longer holds is the whole point of the flag: somebody
             # pushed in the meantime and their work would have been deleted.
             if "stale info" in result.message.lower():
                 self._show_notice("sync.lease_stale", "sync.lease_stale_hint", "warning")
             else:
                 self._report_sync(result, entry)
-            self._reload_current()
             return
         self._reload_current()
         self._start_scan(entry.key)
@@ -2240,15 +2287,15 @@ class MainWindow(QMainWindow):
         dialog.exec()
         if not dialog.results:
             return
+        if any(result.changed for result in dialog.results):
+            self._reload_current()
         if dialog.summary is not None:
             # The window may have closed by itself, so the totals stay on screen
-            # here: a skipped or failed project is not something to miss.
+            # here: a skipped or failed project is not something to miss. Shown
+            # after the reload, which would otherwise hide them again.
             title, detail, token = dialog.summary
             self._notice.set_message(title, detail, token)
             self._notice.setVisible(True)
-
-        if any(result.changed for result in dialog.results):
-            self._reload_current()
         # Every badge is stale now, whether the project moved or was only fetched.
         self._start_scan("")
 
@@ -2286,6 +2333,10 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().clearMessage()
         if result.failed:
+            # Read the project again first: a reload settles the notice strip on
+            # what the project's state says, and done afterwards it took the
+            # explanation of the refusal straight off the screen again.
+            self._reload_current()
             hints = {
                 "sync.push_rejected": "sync.push_rejected_hint",
                 "sync.no_upstream": "sync.no_upstream_hint",
@@ -2296,7 +2347,6 @@ class MainWindow(QMainWindow):
                 self._show_notice(key, hints[key], "warning")
             else:
                 self._report_sync(result, entry)
-            self._reload_current()
             return
         self._reload_current()
         self._start_scan(entry.key)
@@ -2796,6 +2846,7 @@ class MainWindow(QMainWindow):
             return
         scanner.apply_result(entry, result)
         self._sidebar.update_entry(entry)
+        self._update_push_all_button()
 
     def _run_pending_scan(self) -> None:
         """
