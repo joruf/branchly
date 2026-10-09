@@ -5,10 +5,13 @@ What has to hold:
 
 * **The list is the account's own work.** Forks and archived repositories are
   left out.
-* **Each repository lands in the right group.** New ones are offered and ticked,
-  one already in Branchly is shown but not offered (matched by its address, in
-  any spelling), one whose clone already lies in the target folder is offered
-  for adding only, and one whose folder holds something else is not offered.
+* **Each repository lands in the right group.** New ones are offered but start
+  unticked, one already in Branchly is shown but not offered (matched by its
+  address, in any spelling), one whose clone already lies in the target folder
+  is offered for adding only, one whose folder already has files but no git is
+  offered for an in-place setup, and one whose folder holds a different
+  repository is not offered. The destination is exactly the defined folder, never
+  a nested folder of the same name. A search field narrows the list as you type.
 * **Ticked ones are cloned and come back for the project list**, with the token
   Branchly holds, since most of an account's repositories are private.
 * **The search on disk and this one share the tick for all rows.**
@@ -118,16 +121,39 @@ class PlanTests(unittest.TestCase):
             self.assertTrue(offer.offered)
 
     @requires_git
-    def test_a_folder_holding_something_else_is_not_offered(self) -> None:
+    def test_a_folder_holding_a_different_repository_is_not_offered(self) -> None:
         with tempfile.TemporaryDirectory() as base:
             make_clone(Path(base) / "mindor", "https://github.com/somebody/else.git")
-            (Path(base) / "plain").mkdir()
-            offers = {o.repository.name: o for o in discovery.plan(
-                [repository("mindor"), repository("plain")], {}, Path(base)
-            )}
-            self.assertEqual(discovery.STATE_BLOCKED, offers["mindor"].state)
-            self.assertEqual(discovery.STATE_BLOCKED, offers["plain"].state)
-            self.assertFalse(offers["plain"].offered)
+            offer = discovery.plan([repository("mindor")], {}, Path(base))[0]
+            self.assertEqual(discovery.STATE_BLOCKED, offer.state)
+            self.assertFalse(offer.offered)
+
+    def test_a_folder_with_files_is_offered_for_in_place_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            target = Path(base) / "mindor"
+            target.mkdir()
+            (target / "readme.txt").write_text("local start\n", encoding="utf-8")
+            offer = discovery.plan([repository("mindor")], {}, Path(base))[0]
+            self.assertEqual(discovery.STATE_EXISTING, offer.state)
+            self.assertEqual(target, offer.target)
+            self.assertTrue(offer.offered)
+
+    def test_an_empty_folder_counts_as_new(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            (Path(base) / "mindor").mkdir()
+            offer = discovery.plan([repository("mindor")], {}, Path(base))[0]
+            self.assertEqual(discovery.STATE_NEW, offer.state)
+            self.assertTrue(offer.offered)
+
+    def test_pointing_at_the_project_folder_does_not_nest(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            project = Path(base) / "mindor"
+            project.mkdir()
+            (project / "app.py").write_text("print(1)\n", encoding="utf-8")
+            offer = discovery.plan([repository("mindor")], {}, project)[0]
+            self.assertEqual(project, offer.target)
+            self.assertEqual(discovery.STATE_EXISTING, offer.state)
+            self.assertNotEqual(project / "mindor", offer.target)
 
     def test_new_ones_come_first_then_by_name(self) -> None:
         with tempfile.TemporaryDirectory() as base:
@@ -219,24 +245,55 @@ class DialogTests(unittest.TestCase):
         dialog.set_repositories(repositories)
         return dialog
 
-    def test_new_ones_start_ticked_and_known_ones_cannot_be(self) -> None:
+    def test_new_ones_start_unticked_and_known_ones_cannot_be(self) -> None:
         with tempfile.TemporaryDirectory() as base:
             known = {discovery.slug_key("https://github.com/joruf/old.git"): "old"}
             dialog = self._dialog(Path(base), [repository("fresh"), repository("old")], known)
-            self.assertEqual(["fresh"], [offer.repository.name for _i, offer in dialog.checked_offers()])
-            self.assertEqual(Qt.CheckState.Checked, dialog._select_all.checkState())
+            self.assertEqual([], dialog.checked_offers())
+            self.assertEqual(Qt.CheckState.Unchecked, dialog._select_all.checkState())
+            self.assertTrue(dialog._list.item(0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
+            self.assertFalse(dialog._list.item(1).flags() & Qt.ItemFlag.ItemIsUserCheckable)
             self.assertIn(i18n.t("github_discover.state_known", name="old"), dialog._list.item(1).text())
 
     def test_the_tick_for_all_shows_some_and_switches(self) -> None:
         with tempfile.TemporaryDirectory() as base:
             dialog = self._dialog(Path(base), [repository("a"), repository("b")])
-            dialog._list.item(0).setCheckState(Qt.CheckState.Unchecked)
+            self.assertEqual([], dialog.checked_offers())
+            dialog._list.item(0).setCheckState(Qt.CheckState.Checked)
             self.assertEqual(Qt.CheckState.PartiallyChecked, dialog._select_all.checkState())
             dialog._select_all.click()
             self.assertEqual(2, len(dialog.checked_offers()))
             dialog._select_all.click()
             self.assertEqual([], dialog.checked_offers())
             self.assertFalse(dialog._apply_button.isEnabled())
+
+    def test_the_search_field_narrows_the_list_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            dialog = self._dialog(
+                Path(base),
+                [
+                    repository("alpha", description="First one"),
+                    repository("beta", description="Second one"),
+                    repository("gamma", description="Also about alpha tools"),
+                ],
+            )
+            dialog._search.setText("alpha")
+            visible = [
+                dialog._list.item(row).text().splitlines()[0]
+                for row in range(dialog._list.count())
+                if not dialog._list.item(row).isHidden()
+            ]
+            self.assertEqual(["alpha", "gamma"], visible)
+            dialog._search.clear()
+            self.assertEqual(3, sum(1 for row in range(dialog._list.count()) if not dialog._list.item(row).isHidden()))
+
+    def test_select_all_sits_above_the_list(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            dialog = self._dialog(Path(base), [repository("a")])
+            column = dialog.layout()
+            select_row = dialog._select_all.parentWidget()
+            self.assertLess(column.indexOf(select_row), column.indexOf(dialog._list))
+            self.assertLess(column.indexOf(dialog._search), column.indexOf(select_row))
 
     def test_ticked_ones_are_cloned_and_handed_back(self) -> None:
         with temp_repo_pair() as (_first, _second, origin), tempfile.TemporaryDirectory() as base:
@@ -248,6 +305,7 @@ class DialogTests(unittest.TestCase):
                     repository("already"),
                 ],
             )
+            dialog._select_all.click()
             app = QApplication.instance()
             deadline = QTimer()
             deadline.setSingleShot(True)
@@ -268,6 +326,62 @@ class DialogTests(unittest.TestCase):
             )
             self.assertTrue((Path(base) / "fresh" / ".git").exists())
             self.assertIn(i18n.t("github_discover.done"), dialog._list.item(0).text())
+
+    def test_existing_folder_asks_before_cloning(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        with tempfile.TemporaryDirectory() as base:
+            target = Path(base) / "mindor"
+            target.mkdir()
+            (target / "app.py").write_text("print(1)\n", encoding="utf-8")
+            dialog = self._dialog(Path(base), [repository("mindor")])
+            dialog._list.item(0).setCheckState(Qt.CheckState.Checked)
+            asked: list[str] = []
+
+            def fake_question(parent, title, text, buttons, default):  # noqa: ANN001
+                asked.append(title)
+                self.assertIn(str(target), text)
+                return QMessageBox.StandardButton.No
+
+            real = QMessageBox.question
+            QMessageBox.question = staticmethod(fake_question)
+            self.addCleanup(setattr, QMessageBox, "question", real)
+            dialog.start_cloning()
+            self.assertEqual([i18n.t("github_discover.existing_confirm_title")], asked)
+            self.assertIsNone(dialog._thread)
+            self.assertFalse((target / ".git").exists())
+
+    def test_existing_folder_proceeds_when_confirmed(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        with temp_repo_pair() as (_first, _second, origin), tempfile.TemporaryDirectory() as base:
+            target = Path(base) / "fresh"
+            target.mkdir()
+            (target / "kept.txt").write_text("local\n", encoding="utf-8")
+            dialog = self._dialog(
+                Path(base),
+                [RemoteRepository(name="fresh", full_name="joruf/fresh", clone_url=origin.as_uri())],
+            )
+            dialog._list.item(0).setCheckState(Qt.CheckState.Checked)
+            real = QMessageBox.question
+            QMessageBox.question = staticmethod(lambda *_a, **_k: QMessageBox.StandardButton.Yes)
+            self.addCleanup(setattr, QMessageBox, "question", real)
+            app = QApplication.instance()
+            deadline = QTimer()
+            deadline.setSingleShot(True)
+            deadline.timeout.connect(app.quit)
+            dialog.start_cloning()
+            poll = QTimer()
+            poll.timeout.connect(lambda: app.quit() if dialog._thread is None else None)
+            poll.start(50)
+            deadline.start(30_000)
+            app.exec()
+            poll.stop()
+            deadline.stop()
+            self.assertIsNone(dialog._thread, "the clone run never finished")
+            self.assertEqual([target], dialog.added)
+            self.assertTrue((target / ".git").exists())
+            self.assertTrue((target / "kept.txt").exists())
 
 
 @requires_qt
@@ -350,6 +464,34 @@ class WindowTests(unittest.TestCase):
         )
 
     @requires_git
+    def test_a_missing_known_folder_does_not_block_the_offer(self) -> None:
+        """
+        A registry entry whose path is gone must not keep the repository grey.
+        """
+
+        from github_api.client import GitHubClient
+        from ui.github_discover_dialog import GitHubDiscoverDialog
+
+        with tempfile.TemporaryDirectory() as base:
+            gone = Path(base) / "gone" / "home-vpn"
+            # The project list still names this remote, but the folder is missing.
+            known = {discovery.slug_key("https://github.com/joruf/home-vpn.git"): "home-vpn"}
+            target = Path(base) / "home-vpn"
+            target.mkdir()
+            (target / "vpn_ui.py").write_text("# local\n", encoding="utf-8")
+            # Mimic the main window: only still-present folders count as known.
+            live_known = {
+                key: name
+                for key, name in known.items()
+                if gone.exists()  # gone does not exist → empty live_known
+            }
+            dialog = GitHubDiscoverDialog(GitHubClient(""), live_known, [], Path(base), load=False)
+            self.addCleanup(dialog.deleteLater)
+            dialog.set_repositories([repository("home-vpn")])
+            self.assertEqual(discovery.STATE_EXISTING, dialog._offers[0].state)
+            self.assertTrue(dialog._offers[0].offered)
+            self.assertTrue(dialog._list.item(0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
+
     def test_the_cloned_ones_are_registered_under_the_category(self) -> None:
         import ui.main_window as module
 

@@ -2,15 +2,18 @@
 Finding the repositories on GitHub that Branchly does not have yet.
 
 The counterpart of ``services.discovery``, which looks on the disk. This one asks
-GitHub for the account's own repositories and sorts each into one of four:
+GitHub for the account's own repositories and sorts each into one of five:
 
 * **New**: nowhere to be seen locally. Ticked, it is cloned into the chosen
   folder and added.
+* **Existing**: the destination folder is already there with files, but is not a
+  git repository (or not one of this remote). Ticked, the repository is set up
+  in that folder in place, never in a nested folder of the same name.
 * **On disk**: the folder it would be cloned into already holds a clone of it,
   Branchly just never knew. Ticked, it is added as it is, without a second clone.
 * **Known**: Branchly already lists a project with this repository as its server.
   Shown so the list does not look incomplete, never offered.
-* **Blocked**: the folder it would be cloned into exists and is something else.
+* **Blocked**: the destination is a different git repository, or not a folder.
   Shown with the reason, never offered: a clone there would mix two projects.
 
 Archived repositories and forks are left out. An archived one takes no new work,
@@ -27,12 +30,13 @@ from gitops.remote_url import github_slug
 from services.discovery import read_origin_url, resolve_git_dir
 
 STATE_NEW = "new"
+STATE_EXISTING = "existing"
 STATE_ON_DISK = "on_disk"
 STATE_KNOWN = "known"
 STATE_BLOCKED = "blocked"
 
 #: States whose rows can be ticked.
-OFFERED_STATES = frozenset({STATE_NEW, STATE_ON_DISK})
+OFFERED_STATES = frozenset({STATE_NEW, STATE_EXISTING, STATE_ON_DISK})
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +112,8 @@ class Offer:
         Reports whether the row can be ticked.
 
         Returns:
-            bool: True for a new repository and for one already on disk.
+            bool: True for a new repository, one whose folder already has files,
+                and one already on disk.
         """
 
         return self.state in OFFERED_STATES
@@ -143,6 +148,27 @@ def is_wanted(repository: RemoteRepository) -> bool:
     return bool(repository.name and repository.clone_url) and not (repository.fork or repository.archived)
 
 
+def clone_target(folder: Path, name: str) -> Path:
+    """
+    Returns the folder a repository is cloned into under the chosen parent.
+
+    The usual case is ``folder / name``. When the parent is already named after
+    the repository (the field was pointed at the project folder itself), that
+    folder is the destination: ``project/project`` is never created.
+
+    Args:
+        folder: Parent chosen in the dialog, or the project folder itself.
+        name: Repository name.
+
+    Returns:
+        Path: Exact destination for the clone.
+    """
+
+    if folder.name == name:
+        return folder
+    return folder / name
+
+
 def folder_state(target: Path, key: str) -> str:
     """
     Says what the folder a repository would be cloned into holds.
@@ -152,16 +178,27 @@ def folder_state(target: Path, key: str) -> str:
         key: ``slug_key`` of the repository.
 
     Returns:
-        str: ``STATE_NEW`` when there is nothing, ``STATE_ON_DISK`` when it is a
-            clone of this repository, ``STATE_BLOCKED`` otherwise.
+        str: ``STATE_NEW`` when there is nothing, ``STATE_EXISTING`` when the
+            folder is there but can receive the repository in place,
+            ``STATE_ON_DISK`` when it is already a clone of this repository,
+            ``STATE_BLOCKED`` when it is a different git repository or not a
+            folder.
     """
 
     if not target.exists():
         return STATE_NEW
-    git_dir = resolve_git_dir(target) if target.is_dir() else None
-    if git_dir is not None and slug_key(read_origin_url(git_dir)) == key:
-        return STATE_ON_DISK
-    return STATE_BLOCKED
+    if not target.is_dir():
+        return STATE_BLOCKED
+    git_dir = resolve_git_dir(target)
+    if git_dir is not None:
+        if key and slug_key(read_origin_url(git_dir)) == key:
+            return STATE_ON_DISK
+        return STATE_BLOCKED
+    try:
+        empty = not any(target.iterdir())
+    except OSError:
+        return STATE_BLOCKED
+    return STATE_NEW if empty else STATE_EXISTING
 
 
 def plan(
@@ -183,13 +220,19 @@ def plan(
             group by name.
     """
 
-    order = {STATE_NEW: 0, STATE_ON_DISK: 1, STATE_KNOWN: 2, STATE_BLOCKED: 3}
+    order = {
+        STATE_NEW: 0,
+        STATE_EXISTING: 0,
+        STATE_ON_DISK: 1,
+        STATE_KNOWN: 2,
+        STATE_BLOCKED: 3,
+    }
     offers: list[Offer] = []
     for repository in repositories:
         if not is_wanted(repository):
             continue
         key = slug_key(repository.clone_url)
-        target = folder / repository.name
+        target = clone_target(folder, repository.name)
         if key and key in known:
             offers.append(Offer(repository, STATE_KNOWN, target, known[key]))
             continue

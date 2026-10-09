@@ -789,8 +789,10 @@ def capture_github_discover(theme: str, base: Path) -> Path:
     }
     dialog = GitHubDiscoverDialog(GitHubClient(""), known, [], folder, load=False)
     dialog.set_repositories(repositories)
-    # One row left out, so the box above the list shows its third state.
-    dialog._list.item(2).setCheckState(Qt.CheckState.Unchecked)
+    # Two of the three new rows ticked, so the box above the list shows its
+    # third state. Offered rows start unticked on purpose.
+    dialog._list.item(0).setCheckState(Qt.CheckState.Checked)
+    dialog._list.item(1).setCheckState(Qt.CheckState.Checked)
     # The plan is made, so the field can show a plausible home instead of the
     # temporary folder this picture was built in.
     dialog._folder.setText("/home/alex/Applications")

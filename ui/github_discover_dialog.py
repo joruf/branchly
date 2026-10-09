@@ -5,8 +5,9 @@ not have yet, and clones the ticked ones.
 It looks like the search on disk on purpose (``ui.discover_dialog``): the same
 two-line rows, the same tick that stands for all of them, the same category to
 file the new projects under. What differs is the target folder at the top, since
-these projects do not exist locally yet, and that the work after the click is a
-clone per project, so each row reports how it went.
+these projects do not exist locally yet, that every offered row starts unticked
+(the account can hold dozens of repositories), and that the work after the click
+is a clone per project, so each row reports how it went.
 
 Both slow parts run off the GUI thread: reading the list from GitHub through an
 ``ApiRunner``, and the clones on a thread of their own. The clone worker's
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -184,12 +186,21 @@ class GitHubDiscoverDialog(QDialog):
         self._status.setObjectName("Muted")
         column.addWidget(self._status)
 
+        self._search = QLineEdit(self)
+        self._search.setClearButtonEnabled(True)
+        self._search.setPlaceholderText(i18n.t("github_discover.search_placeholder"))
+        self._search.setToolTip(i18n.t("tip.github_discover_search"))
+        self._search.textChanged.connect(self._on_search_changed)
+        column.addWidget(self._search)
+
+        column.addWidget(self._build_select_all_row())
+
         self._list = QListWidget(self)
         self._list.setToolTip(i18n.t("tip.github_discover_list"))
         self._list.itemChanged.connect(self._on_item_changed)
         column.addWidget(self._list, 1)
 
-        column.addWidget(self._build_selection_row(categories))
+        column.addWidget(self._build_category_row(categories))
 
         self._notice = InlineMessage("", "", "info", self)
         self._notice.setVisible(False)
@@ -247,15 +258,12 @@ class GitHubDiscoverDialog(QDialog):
         row.addWidget(self._reload_button)
         return holder
 
-    def _build_selection_row(self, categories: list[Category]) -> QWidget:
+    def _build_select_all_row(self) -> QWidget:
         """
-        Builds the tick for all rows and the category picker.
-
-        Args:
-            categories: Categories to offer.
+        Builds the tick that stands for every visible offered row.
 
         Returns:
-            QWidget: The row.
+            QWidget: The row above the list.
         """
 
         holder = QWidget(self)
@@ -268,6 +276,24 @@ class GitHubDiscoverDialog(QDialog):
         self._select_all.setToolTip(i18n.t("tip.discover_select_all"))
         self._select_all.clicked.connect(self._on_select_all_clicked)
         row.addWidget(self._select_all)
+        row.addStretch(1)
+        return holder
+
+    def _build_category_row(self, categories: list[Category]) -> QWidget:
+        """
+        Builds the category picker for filing the new projects.
+
+        Args:
+            categories: Categories to offer.
+
+        Returns:
+            QWidget: The row below the list.
+        """
+
+        holder = QWidget(self)
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
 
         row.addStretch(1)
         row.addWidget(QLabel(i18n.t("discover.category_label"), holder))
@@ -402,7 +428,9 @@ class GitHubDiscoverDialog(QDialog):
                     | Qt.ItemFlag.ItemIsSelectable
                     | Qt.ItemFlag.ItemIsUserCheckable
                 )
-                item.setCheckState(Qt.CheckState.Checked)
+                # Off by default: an account often has dozens of repositories,
+                # and ticking the few wanted ones is less work than clearing all.
+                item.setCheckState(Qt.CheckState.Unchecked)
             else:
                 # Nothing to do with these, so they are shown but not offered.
                 item.setFlags(Qt.ItemFlag.ItemIsEnabled)
@@ -417,6 +445,7 @@ class GitHubDiscoverDialog(QDialog):
             self._status.setText(
                 i18n.t("github_discover.summary", new=fresh, known=len(self._offers) - fresh)
             )
+        self._apply_filter()
         self._update_buttons()
 
     def _row_text(self, index: int, offer: Offer) -> str:
@@ -437,6 +466,8 @@ class GitHubDiscoverDialog(QDialog):
             parts.append(i18n.t("github_discover.pushed", date=repository.pushed_at[:10]))
         if offer.state == discovery.STATE_KNOWN:
             parts.append(i18n.t("github_discover.state_known", name=offer.known_name))
+        elif offer.state == discovery.STATE_EXISTING:
+            parts.append(i18n.t("github_discover.state_existing", path=str(offer.target)))
         elif offer.state == discovery.STATE_ON_DISK:
             parts.append(i18n.t("github_discover.state_on_disk", path=str(offer.target)))
         elif offer.state == discovery.STATE_BLOCKED:
@@ -456,10 +487,10 @@ class GitHubDiscoverDialog(QDialog):
 
     def checked_offers(self) -> list[tuple[int, Offer]]:
         """
-        Returns the ticked rows.
+        Returns the ticked rows, including ones currently hidden by the filter.
 
         Returns:
-            list[tuple[int, Offer]]: Row index and offer, in list order.
+            list[tuple[int, Offer]]: Offer index and offer, in list order.
         """
 
         picked: list[tuple[int, Offer]] = []
@@ -474,7 +505,10 @@ class GitHubDiscoverDialog(QDialog):
 
     def _offerable_items(self) -> list[QListWidgetItem]:
         """
-        Collects the rows that can be ticked.
+        Collects the visible rows that can be ticked.
+
+        Hidden rows stay out of the tick-for-all count so the box only talks about
+        what the filter still shows.
 
         Returns:
             list[QListWidgetItem]: Those rows.
@@ -483,8 +517,48 @@ class GitHubDiscoverDialog(QDialog):
         return [
             self._list.item(row)
             for row in range(self._list.count())
-            if self._list.item(row).flags() & Qt.ItemFlag.ItemIsUserCheckable
+            if not self._list.item(row).isHidden()
+            and self._list.item(row).flags() & Qt.ItemFlag.ItemIsUserCheckable
         ]
+
+    def _on_search_changed(self, _text: str) -> None:
+        """
+        Narrows the list to rows that match what was typed.
+
+        Args:
+            _text: The search field's text.
+
+        Returns:
+            None
+        """
+
+        self._apply_filter()
+        self._update_buttons()
+
+    def _apply_filter(self) -> None:
+        """
+        Shows or hides each row for the current search text.
+
+        A row matches when the keyword sits in the repository name, full name or
+        description. An empty field shows every row again.
+
+        Returns:
+            None
+        """
+
+        needle = self._search.text().strip().lower()
+        for row in range(self._list.count()):
+            item = self._list.item(row)
+            index = item.data(_ROLE_INDEX)
+            if not isinstance(index, int) or index < 0 or index >= len(self._offers):
+                item.setHidden(False)
+                continue
+            if not needle:
+                item.setHidden(False)
+                continue
+            repository = self._offers[index].repository
+            haystack = f"{repository.name} {repository.full_name} {repository.description}".lower()
+            item.setHidden(needle not in haystack)
 
     def _on_item_changed(self, _item: QListWidgetItem) -> None:
         """
@@ -526,23 +600,31 @@ class GitHubDiscoverDialog(QDialog):
             None
         """
 
-        offerable = len(self._offerable_items())
-        count = len(self.checked_offers())
+        offerable_items = self._offerable_items()
+        offerable = len(offerable_items)
+        visible_checked = sum(
+            1 for item in offerable_items if item.checkState() == Qt.CheckState.Checked
+        )
+        picked = len(self.checked_offers())
         busy = self._thread is not None
-        if count == 0:
+        if visible_checked == 0:
             state = Qt.CheckState.Unchecked
-        elif count == offerable:
+        elif visible_checked == offerable:
             state = Qt.CheckState.Checked
         else:
             state = Qt.CheckState.PartiallyChecked
         self._select_all.setCheckState(state)
         self._select_all.setEnabled(offerable > 0 and not busy)
         self._select_all.setText(
-            i18n.t("changes.selected_count", selected=count, total=offerable) if offerable else ""
+            i18n.t("changes.selected_count", selected=visible_checked, total=offerable)
+            if offerable
+            else ""
         )
-        self._apply_button.setEnabled(count > 0 and not busy)
+        self._apply_button.setEnabled(picked > 0 and not busy)
         self._apply_button.setText(
-            i18n.t("github_discover.apply_count", count=count) if count else i18n.t("github_discover.apply")
+            i18n.t("github_discover.apply_count", count=picked)
+            if picked
+            else i18n.t("github_discover.apply")
         )
 
     # ----------------------------------------------------------------- folders
@@ -575,6 +657,8 @@ class GitHubDiscoverDialog(QDialog):
         jobs = self.checked_offers()
         if not jobs or self._thread is not None:
             return
+        if not self._confirm_existing(jobs):
+            return
         self.category = str(self._category.currentData() or "")
         # The keychain is read here, on the GUI thread, once per address.
         credentials = {
@@ -588,6 +672,7 @@ class GitHubDiscoverDialog(QDialog):
         self._list.setEnabled(True)
         self._folder.setEnabled(False)
         self._reload_button.setEnabled(False)
+        self._search.setEnabled(False)
         self._category.setEnabled(False)
         self._status.setText(i18n.t("github_discover.cloning", count=len(jobs)))
 
@@ -603,6 +688,39 @@ class GitHubDiscoverDialog(QDialog):
         self._close_button.setText(i18n.t("action.abort"))
         self._update_buttons()
         thread.start()
+
+    def _confirm_existing(self, jobs: list[tuple[int, Offer]]) -> bool:
+        """
+        Asks before setting a repository up inside a folder that already has files.
+
+        Folders that already are a Git repository never reach this step: those rows
+        are not offered. Empty and missing destinations need no question.
+
+        Args:
+            jobs: Ticked rows about to be cloned.
+
+        Returns:
+            bool: True when cloning may go ahead.
+        """
+
+        existing = [
+            offer.target for _index, offer in jobs if offer.state == discovery.STATE_EXISTING
+        ]
+        if not existing:
+            return True
+        if len(existing) == 1:
+            body = i18n.t("github_discover.existing_confirm_hint", path=str(existing[0]))
+        else:
+            listed = "\n".join(f"• {path}" for path in existing)
+            body = i18n.t("github_discover.existing_confirm_hint_many", paths=listed)
+        answer = QMessageBox.question(
+            self,
+            i18n.t("github_discover.existing_confirm_title"),
+            body,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def _item_for(self, index: int) -> QListWidgetItem | None:
         """
