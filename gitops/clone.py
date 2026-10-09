@@ -2,15 +2,21 @@
 Cloning, including into a directory that already holds files.
 
 ``git clone`` refuses a non-empty destination outright. The equivalent that does
-work is the long way round: create the repository in place, add the remote, fetch,
-then check the branch out. Git's checkout then refuses to overwrite any existing
-untracked file, so nothing already in the folder can be lost — if a name collides,
-the checkout stops and the folder is left as it was.
+work is the long way round: create the repository in place, add the remote, and
+fetch. What happens next depends on the remote:
 
-Both routes end in the same place, so the caller just calls ``clone`` and the
-right one is picked from what is actually at the destination. The inspection runs
-*before* anything happens, so the warning shown to the user is accurate rather
-than a guess.
+* **Remote already has commits.** The branch is pointed at that history with a
+  mixed reset, so every file already in the folder stays as it is. Matching
+  names become normal project files (clean when identical, modified when not).
+  Files that exist only on the remote are filled in afterwards.
+* **Remote is still empty.** The files already in the folder are recorded as the
+  first commit. That is the common case where a project started without Git and
+  the GitHub repository was created afterwards.
+
+Both routes end in a usable working tree, so the caller just calls ``clone`` and
+the right one is picked from what is actually at the destination. The inspection
+runs *before* anything happens, so the warning shown to the user is accurate
+rather than a guess.
 """
 
 from __future__ import annotations
@@ -247,9 +253,9 @@ def _clone_into_existing(
     """
     Sets a repository up inside a directory that already holds files.
 
-    On any failure the ``.git`` directory that was just created is removed again,
-    so a half-finished attempt does not leave the user's folder looking like a
-    broken repository.
+    Local files are never overwritten and never deleted. On any failure the
+    ``.git`` directory that was just created is removed again, so a half-finished
+    attempt does not leave the user's folder looking like a broken repository.
 
     Args:
         request: Validated clone job.
@@ -258,7 +264,7 @@ def _clone_into_existing(
         credentials: Login for the server, None for git's own helper.
 
     Returns:
-        GitResult: Outcome of the step that failed, or of the final checkout.
+        GitResult: Outcome of the step that failed, or of the successful finish.
     """
 
     target = request.target
@@ -295,12 +301,104 @@ def _clone_into_existing(
         _cleanup()
         return fetched
 
-    # Checkout refuses to overwrite an existing untracked file, which is exactly
-    # the protection promised in the warning shown before this ran.
-    checked_out = run(["checkout", "-b", branch, "--track", f"origin/{branch}"], cwd=target)
-    if checked_out.failed:
-        _cleanup()
-    return checked_out
+    remote_tip = run(
+        ["rev-parse", "--verify", f"refs/remotes/origin/{branch}"],
+        cwd=target,
+        read_only=True,
+    )
+    if remote_tip.ok:
+        return _attach_remote_history(target, branch, on_progress, _cleanup)
+    return _record_existing_files(target, branch, on_progress, _cleanup)
+
+
+def _attach_remote_history(
+    target: Path,
+    branch: str,
+    on_progress: Callable[[str], None],
+    cleanup: Callable[[], None],
+) -> GitResult:
+    """
+    Points the new repository at the remote history without touching local files.
+
+    Args:
+        target: Working tree.
+        branch: Branch name shared with the remote.
+        on_progress: Progress callback.
+        cleanup: Removes the half-built ``.git`` on failure.
+
+    Returns:
+        GitResult: Outcome.
+    """
+
+    on_progress("Linking…")
+    # Mixed reset moves HEAD and the index to the remote tip and leaves every
+    # working-tree file alone: identical ones are clean, different ones show as
+    # local edits, extras stay untracked.
+    reset = run(["reset", "--mixed", f"origin/{branch}"], cwd=target)
+    if reset.failed:
+        cleanup()
+        return reset
+
+    deleted = run(["ls-files", "--deleted"], cwd=target, read_only=True)
+    if deleted.ok and deleted.out_lines:
+        # Only fill in paths that are missing locally; never overwrite what the
+        # user already has under the same name.
+        restored = run(["checkout", "HEAD", "--", *deleted.out_lines], cwd=target)
+        if restored.failed:
+            cleanup()
+            return restored
+
+    tracking = run(["branch", f"--set-upstream-to=origin/{branch}", branch], cwd=target)
+    if tracking.failed:
+        cleanup()
+        return tracking
+    return tracking
+
+
+def _record_existing_files(
+    target: Path,
+    branch: str,
+    on_progress: Callable[[str], None],
+    cleanup: Callable[[], None],
+) -> GitResult:
+    """
+    Makes the files already in the folder the first commit of an empty remote.
+
+    Args:
+        target: Working tree.
+        branch: Local branch name, also the one the first push will create.
+        on_progress: Progress callback.
+        cleanup: Removes the half-built ``.git`` on failure.
+
+    Returns:
+        GitResult: Outcome.
+    """
+
+    on_progress("Recording…")
+    added = run(["add", "-A"], cwd=target)
+    if added.failed:
+        cleanup()
+        return added
+
+    # Do not set upstream yet: origin has no branch until the first push, and a
+    # tracking ref that does not exist makes the status line look broken.
+
+    status = run(["status", "--porcelain"], cwd=target, read_only=True)
+    if not status.ok:
+        cleanup()
+        return status
+    if not status.stdout.strip():
+        # Empty folder, empty remote: a usable repository with nothing in it yet.
+        return status
+
+    committed = run(
+        ["commit", "-F", "-"],
+        cwd=target,
+        input_text="Initial commit\n",
+    )
+    if committed.failed:
+        cleanup()
+    return committed
 
 
 def parse_progress(line: str) -> tuple[str, int] | None:

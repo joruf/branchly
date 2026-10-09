@@ -121,6 +121,21 @@ class PlanTests(unittest.TestCase):
             self.assertTrue(offer.offered)
 
     @requires_git
+    def test_a_listed_clone_at_the_target_stays_offered(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            target = Path(base) / "mindor"
+            make_clone(target, "https://github.com/joruf/mindor.git")
+            key = discovery.slug_key("https://github.com/joruf/mindor.git")
+            offer = discovery.plan(
+                [repository("mindor")],
+                {key: "mindor"},
+                Path(base),
+                known_paths={key: target},
+            )[0]
+            self.assertEqual(discovery.STATE_ON_DISK, offer.state)
+            self.assertTrue(offer.offered)
+
+    @requires_git
     def test_a_folder_holding_a_different_repository_is_not_offered(self) -> None:
         with tempfile.TemporaryDirectory() as base:
             make_clone(Path(base) / "mindor", "https://github.com/somebody/else.git")
@@ -154,6 +169,38 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(project, offer.target)
             self.assertEqual(discovery.STATE_EXISTING, offer.state)
             self.assertNotEqual(project / "mindor", offer.target)
+
+    def test_known_without_git_in_the_folder_stays_offered(self) -> None:
+        """
+        A registry entry must not grey out a folder that still needs Git.
+        """
+
+        with tempfile.TemporaryDirectory() as base:
+            target = Path(base) / "mindor"
+            target.mkdir()
+            (target / "app.py").write_text("print(1)\n", encoding="utf-8")
+            key = discovery.slug_key("https://github.com/joruf/mindor.git")
+            known = {key: "mindor"}
+            known_paths = {key: target}
+            offer = discovery.plan(
+                [repository("mindor")], known, Path(base), known_paths=known_paths
+            )[0]
+            self.assertEqual(discovery.STATE_EXISTING, offer.state)
+            self.assertTrue(offer.offered)
+
+    def test_a_ghost_known_path_does_not_block(self) -> None:
+        with tempfile.TemporaryDirectory() as base:
+            target = Path(base) / "mindor"
+            target.mkdir()
+            (target / "app.py").write_text("print(1)\n", encoding="utf-8")
+            key = discovery.slug_key("https://github.com/joruf/mindor.git")
+            known = {key: "mindor"}
+            known_paths = {key: Path(base) / "deleted" / "mindor"}
+            offer = discovery.plan(
+                [repository("mindor")], known, Path(base), known_paths=known_paths
+            )[0]
+            self.assertEqual(discovery.STATE_EXISTING, offer.state)
+            self.assertTrue(offer.offered)
 
     def test_new_ones_come_first_then_by_name(self) -> None:
         with tempfile.TemporaryDirectory() as base:
@@ -502,7 +549,7 @@ class WindowTests(unittest.TestCase):
         class Stub:
             """Stands in for the window, as if one clone had worked."""
 
-            def __init__(self, *_args: object) -> None:
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
                 self.added = [target]
                 self.category = "Work"
                 self.folder = target.parent

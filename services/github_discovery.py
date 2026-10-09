@@ -9,10 +9,13 @@ GitHub for the account's own repositories and sorts each into one of five:
 * **Existing**: the destination folder is already there with files, but is not a
   git repository (or not one of this remote). Ticked, the repository is set up
   in that folder in place, never in a nested folder of the same name.
-* **On disk**: the folder it would be cloned into already holds a clone of it,
-  Branchly just never knew. Ticked, it is added as it is, without a second clone.
-* **Known**: Branchly already lists a project with this repository as its server.
-  Shown so the list does not look incomplete, never offered.
+* **On disk**: the folder it would be cloned into already holds a clone of it.
+  Ticked, it is added as it is, without a second clone. Also used when Branchly
+  already lists that folder: the row stays offered so it can be ticked; adding
+  again does nothing harmful.
+* **Known**: Branchly already lists a project with this repository as its server,
+  and the target folder is not a place that still needs setup. Shown so the list
+  does not look incomplete, never offered.
 * **Blocked**: the destination is a different git repository, or not a folder.
   Shown with the reason, never offered: a clone there would mix two projects.
 
@@ -169,13 +172,15 @@ def clone_target(folder: Path, name: str) -> Path:
     return folder / name
 
 
-def folder_state(target: Path, key: str) -> str:
+def folder_state(target: Path, key: str, clone_url: str = "") -> str:
     """
     Says what the folder a repository would be cloned into holds.
 
     Args:
         target: The folder.
         key: ``slug_key`` of the repository.
+        clone_url: Clone address, used when the remote is not a GitHub URL (tests
+            and local remotes) so same-origin still counts as on disk.
 
     Returns:
         str: ``STATE_NEW`` when there is nothing, ``STATE_EXISTING`` when the
@@ -191,7 +196,10 @@ def folder_state(target: Path, key: str) -> str:
         return STATE_BLOCKED
     git_dir = resolve_git_dir(target)
     if git_dir is not None:
-        if key and slug_key(read_origin_url(git_dir)) == key:
+        origin = read_origin_url(git_dir)
+        if key and slug_key(origin) == key:
+            return STATE_ON_DISK
+        if clone_url and origin and _same_remote(origin, clone_url):
             return STATE_ON_DISK
         return STATE_BLOCKED
     try:
@@ -201,10 +209,35 @@ def folder_state(target: Path, key: str) -> str:
     return STATE_NEW if empty else STATE_EXISTING
 
 
+def _same_remote(left: str, right: str) -> bool:
+    """
+    Reports whether two remote addresses name the same repository.
+
+    Args:
+        left: First address.
+        right: Second address.
+
+    Returns:
+        bool: True when both reduce to the same GitHub slug, or when their
+            normalised forms match.
+    """
+
+    left_key = slug_key(left)
+    right_key = slug_key(right)
+    if left_key and right_key:
+        return left_key == right_key
+    from gitops.remote_url import normalized
+
+    a = normalized(left)
+    b = normalized(right)
+    return bool(a and b and a == b)
+
+
 def plan(
     repositories: Iterable[RemoteRepository],
     known: dict[str, str],
     folder: Path,
+    known_paths: dict[str, Path] | None = None,
 ) -> list[Offer]:
     """
     Sorts the account's repositories into what can be done with each.
@@ -214,12 +247,17 @@ def plan(
         known: ``slug_key`` of every project Branchly has, mapped to its display
             name.
         folder: Where new clones go.
+        known_paths: ``slug_key`` mapped to the registered folder. Ghosts whose
+            folder is gone are ignored. A project listed in Branchly whose folder
+            still needs Git (files only, or missing) stays offered so setup can
+            finish.
 
     Returns:
         list[Offer]: New ones first, then those on disk, then the rest, each
             group by name.
     """
 
+    paths = known_paths or {}
     order = {
         STATE_NEW: 0,
         STATE_EXISTING: 0,
@@ -233,10 +271,26 @@ def plan(
             continue
         key = slug_key(repository.clone_url)
         target = clone_target(folder, repository.name)
+        state = folder_state(target, key, repository.clone_url)
         if key and key in known:
+            registered = paths.get(key)
+            if registered is not None and not registered.exists():
+                # Ghost registry entry: fall through to what the folder actually is.
+                offers.append(Offer(repository, state, target))
+                continue
+            # Listed in Branchly, but the folder only has files and no Git yet —
+            # that is the usual "project first, Git later" case and stays offered.
+            if state == STATE_EXISTING:
+                offers.append(Offer(repository, state, target))
+                continue
+            # Clone already lies at the target: keep it offered as "add only" so the
+            # row stays tappable. Applying again is harmless when it is already listed.
+            if state == STATE_ON_DISK:
+                offers.append(Offer(repository, state, target, known[key]))
+                continue
             offers.append(Offer(repository, STATE_KNOWN, target, known[key]))
             continue
-        offers.append(Offer(repository, folder_state(target, key), target))
+        offers.append(Offer(repository, state, target))
     offers.sort(key=lambda offer: (order[offer.state], offer.repository.name.lower()))
     return offers
 
