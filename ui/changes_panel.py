@@ -13,6 +13,7 @@ from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter
 from PySide6.QtWidgets import (
     QCheckBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -32,7 +33,7 @@ from config.theme import get_theme_colors
 from gitops import ignore as ignore_mod
 from gitops.commit import CommitDraft
 from gitops.status import CHANGE_UNTRACKED, RepositoryState
-from ui.widgets import EmptyState, FlowLayout, InlineMessage, SectionHeader, token_color
+from ui.widgets import EmptyState, InlineMessage, SectionHeader, token_color
 
 # Which wording the ignore submenu uses for each kind of offer.
 # How much room the marker gets at the right edge, and how far it sits from
@@ -171,6 +172,8 @@ class ChangesPanel(QWidget):
 
     file_selected = Signal(str, bool)
     commit_requested = Signal(object, list)
+    commit_and_push_requested = Signal(object, list)
+    push_requested = Signal()
     discard_requested = Signal(list)
     open_file_requested = Signal(str)
     reveal_file_requested = Signal(str)
@@ -189,6 +192,7 @@ class ChangesPanel(QWidget):
         super().__init__(parent)
         self._state: RepositoryState | None = None
         self._branch = ""
+        self._has_remote = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -288,22 +292,99 @@ class ChangesPanel(QWidget):
         self._description.setFixedHeight(64)
         column.addWidget(self._description)
 
-        # The tick box carries a full sentence and the button carries a count, so
-        # side by side they pin the panel open. They wrap onto two lines instead.
-        actions = QWidget(holder)
-        row = FlowLayout(actions, spacing=8)
-        row.setContentsMargins(0, 0, 0, 0)
-        self._amend = QCheckBox(i18n.t("changes.amend"), actions)
+        self._amend = QCheckBox(i18n.t("changes.amend"), holder)
         self._amend.setToolTip(i18n.t("tip.amend"))
-        row.addWidget(self._amend)
-        self._commit_button = QPushButton("", actions)
-        self._commit_button.setObjectName("Primary")
-        self._commit_button.clicked.connect(self._emit_commit)
-        row.addWidget(self._commit_button)
-        column.addWidget(actions)
+        column.addWidget(self._amend)
+
+        column.addWidget(self._build_commit_chain(holder))
 
         self._commit_box = holder
         return holder
+
+    def _build_commit_chain(self, parent: QWidget) -> QWidget:
+        """
+        Builds the two steps of handing work over, and the shortcut for both.
+
+        Saving and uploading are two steps, and most of the time both are wanted.
+        So the steps stand side by side with an arrow between them, numbered and
+        labelled with where the work ends up, and the button that does both spans
+        them underneath, as the main action. Somebody who has never seen the
+        panel reads the order off it without an explanation.
+
+        Args:
+            parent: Widget the chain lives in.
+
+        Returns:
+            QWidget: The chain.
+        """
+
+        holder = QWidget(parent)
+        holder.setObjectName("CommitChain")
+        column = QVBoxLayout(holder)
+        column.setContentsMargins(0, 2, 0, 0)
+        column.setSpacing(4)
+
+        steps = QHBoxLayout()
+        steps.setSpacing(6)
+        self._commit_button = QPushButton("", holder)
+        self._commit_button.clicked.connect(self._emit_commit)
+        self._push_button = QPushButton("", holder)
+        self._push_button.clicked.connect(self._emit_push)
+        steps.addLayout(self._chain_step(holder, i18n.t("changes.step_local"), self._commit_button), 1)
+        arrow = QLabel("- - \u203a", holder)
+        arrow.setObjectName("ChainArrow")
+        arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        steps.addWidget(arrow, 0, Qt.AlignmentFlag.AlignBottom)
+        steps.addLayout(self._chain_step(holder, i18n.t("changes.step_server"), self._push_button), 1)
+        column.addLayout(steps)
+
+        brace = QLabel(i18n.t("changes.step_both"), holder)
+        brace.setObjectName("ChainCaption")
+        brace.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        column.addWidget(brace)
+
+        self._both_button = QPushButton("", holder)
+        self._both_button.setObjectName("Primary")
+        self._both_button.clicked.connect(self._emit_commit_and_push)
+        column.addWidget(self._both_button)
+        return holder
+
+    @staticmethod
+    def _chain_step(parent: QWidget, caption: str, button: QPushButton) -> QVBoxLayout:
+        """
+        Puts a step's caption above its button.
+
+        Args:
+            parent: Widget the step lives in.
+            caption: The step's number and where its work ends up.
+            button: The step's button.
+
+        Returns:
+            QVBoxLayout: The step.
+        """
+
+        step = QVBoxLayout()
+        step.setSpacing(3)
+        label = QLabel(caption, parent)
+        label.setObjectName("ChainCaption")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        step.addWidget(label)
+        step.addWidget(button)
+        return step
+
+    def set_remote(self, has_remote: bool) -> None:
+        """
+        Says whether the project has a server to upload to.
+
+        Args:
+            has_remote: True when a remote is configured.
+
+        Returns:
+            None
+        """
+
+        self._has_remote = has_remote
+        self._update_commit_button()
 
     # ------------------------------------------------------------------ filling
 
@@ -735,7 +816,7 @@ class ChangesPanel(QWidget):
 
     def _update_commit_button(self) -> None:
         """
-        Relabels and enables or disables the commit button.
+        Relabels and enables or disables the three buttons of the chain.
 
         Returns:
             None
@@ -743,27 +824,54 @@ class ChangesPanel(QWidget):
 
         paths = self.checked_paths()
         draft = self.commit_draft()
-        blocked_by_conflicts = bool(self._state and self._state.has_conflicts)
+        state = self._state
+        blocked_by_conflicts = bool(state and state.has_conflicts)
+        branch = self._branch or "?"
 
+        # Step 2 on its own: anything waiting to go up, or a branch the server
+        # has not seen yet, whose first upload publishes it.
+        waiting = state.ahead if state else 0
+        unpublished = bool(state and not state.upstream and not state.initial)
+        can_reach_server = bool(self._has_remote and state and not state.detached)
+        self._push_button.setText(
+            i18n.t("changes.push_step_count", count=waiting) if waiting else i18n.t("changes.push_step")
+        )
+        self._push_button.setEnabled(can_reach_server and (waiting > 0 or unpublished))
+        if not self._has_remote:
+            self._push_button.setToolTip(i18n.t("changes.push_no_remote"))
+        elif not (waiting or unpublished):
+            self._push_button.setToolTip(i18n.t("changes.push_nothing"))
+        else:
+            self._push_button.setToolTip(i18n.t("tip.push_step"))
+
+        self._both_button.setText(i18n.t("changes.both_button"))
         if blocked_by_conflicts:
             self._commit_button.setText(i18n.t("conflict.intro_start"))
             self._commit_button.setEnabled(False)
             self._commit_button.setToolTip(i18n.t("conflict.intro_hint"))
+            self._both_button.setEnabled(False)
+            self._both_button.setToolTip(i18n.t("conflict.intro_hint"))
             return
 
-        self._commit_button.setText(
-            i18n.t("changes.commit_button", count=len(paths), branch=self._branch or "?")
-        )
+        self._commit_button.setText(i18n.t("changes.commit_step", count=len(paths)))
         if not paths:
-            self._commit_button.setEnabled(False)
-            self._commit_button.setToolTip(i18n.t("changes.commit_empty"))
-            return
-        if not draft.is_valid:
-            self._commit_button.setEnabled(False)
-            self._commit_button.setToolTip(i18n.t("changes.commit_needs_summary"))
-            return
-        self._commit_button.setEnabled(True)
-        self._commit_button.setToolTip(i18n.t("tip.commit"))
+            reason = i18n.t("changes.commit_empty")
+        elif not draft.is_valid:
+            reason = i18n.t("changes.commit_needs_summary")
+        else:
+            reason = ""
+        self._commit_button.setEnabled(not reason)
+        self._commit_button.setToolTip(reason or i18n.t("tip.commit", branch=branch))
+
+        if reason:
+            self._both_button.setEnabled(False)
+            self._both_button.setToolTip(reason)
+        elif not can_reach_server:
+            self._both_button.setEnabled(False)
+            self._both_button.setToolTip(i18n.t("changes.push_no_remote"))
+        else:
+            self._both_button.setEnabled(True)
+            self._both_button.setToolTip(i18n.t("tip.both_button"))
 
     def _emit_commit(self) -> None:
         """
@@ -776,6 +884,28 @@ class ChangesPanel(QWidget):
         if not self._commit_button.isEnabled():
             return
         self.commit_requested.emit(self.commit_draft(), self.checked_paths())
+
+    def _emit_push(self) -> None:
+        """
+        Asks the main window to upload what is waiting.
+
+        Returns:
+            None
+        """
+
+        if self._push_button.isEnabled():
+            self.push_requested.emit()
+
+    def _emit_commit_and_push(self) -> None:
+        """
+        Asks the main window to commit the ticked files and upload them.
+
+        Returns:
+            None
+        """
+
+        if self._both_button.isEnabled():
+            self.commit_and_push_requested.emit(self.commit_draft(), self.checked_paths())
 
     def _show_project_menu(self, at) -> None:  # noqa: ANN001 - Qt passes a QPoint
         """

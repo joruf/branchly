@@ -469,6 +469,20 @@ QLabel {{
 QLabel#Muted {{
     color: {c.text_muted};
 }}
+QWidget#CommitChain, QWidget#CommitChain QLabel {{
+    background: transparent;
+}}
+QLabel#ChainCaption {{
+    color: {c.text_muted};
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}}
+QLabel#ChainArrow {{
+    color: {c.text_muted};
+    font-size: 13px;
+    padding-bottom: 6px;
+}}
 QLabel#Heading {{
     font-size: 14px;
     font-weight: 600;

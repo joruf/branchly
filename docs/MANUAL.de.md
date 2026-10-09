@@ -296,25 +296,27 @@ Fenster lieber selbst schließt, nimmt in den Einstellungen unter *Allgemein* de
 Haken bei *Fenster „Alle Projekte aktualisieren“ nach dem Abgleich selbst
 schließen* heraus. Das gilt auch für das Senden aller Projekte.
 
-## Alle Projekte auf einmal senden
+## Alle Projekte auf einmal hochladen
 
-Das Gegenstück steht im Menü **Branch → Alle Änderungen zum Server senden…**, direkt unter dem Eintrag für das einzelne Projekt. Es
-sendet in jedem Projekt die Commits, die noch nicht auf dem Server sind, im selben
-Fenster und ebenfalls ohne zweite Bestätigung.
+Das Gegenstück ist der Knopf **Alle Änderungen zum Server hochladen** oben rechts,
+mit der Zahl der wartenden Commits aller Projekte. Derselbe Eintrag steht im Menü
+**Branch**, direkt unter dem für das einzelne Projekt. Er lädt in jedem Projekt die
+Commits hoch, die noch nicht auf dem Server sind, im selben Fenster und ebenfalls
+ohne zweite Bestätigung.
 
-![Alle Änderungen zum Server senden](screenshots/de/push-all-dark.png)
+![Alle Änderungen zum Server hochladen](screenshots/de/push-all-dark.png)
 
-Wie beim Aktualisieren springt ein Projekt nach rechts, hier unter **Gesendet**,
+Wie beim Aktualisieren springt ein Projekt nach rechts, hier unter **Hochgeladen**,
 sobald seine Commits auf dem Server sind.
 
-Gesendet wird nur, was sich einfach senden lässt. Nichts wird erzwungen:
+Hochgeladen wird nur, was sich einfach hochladen lässt. Nichts wird erzwungen:
 
 | Steht da | Heißt |
 |---|---|
-| *2 Commits gesendet* | Der Server hat jetzt alles |
-| *nichts zu senden* | Es lag nichts Ungesendetes vor |
+| *2 Commits hochgeladen* | Der Server hat jetzt alles |
+| *nichts hochzuladen* | Es lag nichts Offenes vor |
 | *der Server hat neuere Commits, erst aktualisieren* | Jemand anderes hat gesendet. Erst holen, dann senden |
-| *der Branch ist noch nicht auf dem Server, einmal im Projekt senden* | Ein neuer Branch wird nicht nebenbei veröffentlicht |
+| *der Branch ist noch nicht auf dem Server, einmal im Projekt hochladen* | Ein neuer Branch wird nicht nebenbei veröffentlicht |
 | *Konflikte warten auf eine Entscheidung*, *kein Branch ausgewählt*, *kein Server* | Wie beim Aktualisieren |
 
 Ungespeicherte Änderungen im Ordner stören nicht, denn gesendet werden Commits,
@@ -324,7 +326,28 @@ keine Dateien.
 
 1. Dateien anhaken, die zusammengehören
 2. Kurzfassung schreiben (Pflicht), Beschreibung optional
-3. **„n Datei(en) in <branch> speichern"**
+3. **Speichern und hochladen**, oder nur **Speichern**
+
+Unter dem Textfeld stehen die zwei Schritte nebeneinander, mit einem Pfeil
+dazwischen, und darunter der Knopf für beides:
+
+```
+     1  LOKAL                     2  SERVER
+ [ ✓ Speichern (2) ]  - - ›  [ ⇡ Hochladen (1) ]
+           beides in einem Klick
+ [        ✓ ⇡  Speichern und hochladen           ]
+```
+
+| Knopf | Was er tut | Geht, wenn |
+|---|---|---|
+| **Speichern (n)** | Commit der n angehakten Dateien, er bleibt auf deinem Rechner | Dateien angehakt und Kurzfassung geschrieben |
+| **Hochladen (n)** | Schickt n gespeicherte Commits auf den Server | Etwas wartet, oder der Branch ist neu und kommt so zum ersten Mal hoch |
+| **Speichern und hochladen** | Erst der Commit, dann sofort das Hochladen | Beides oben, und das Projekt hat einen Server |
+
+Klappt das Hochladen nicht, etwa weil inzwischen jemand anderes etwas geschickt
+hat, bleibt der Commit erhalten. Oben steht dann, was zu tun ist. Der Knopf
+**Alle Änderungen zum Server hochladen** oben rechts lädt dagegen alle Projekte
+auf einmal hoch.
 
 Kurzfassung, Beschreibung und der Haken *Stattdessen zum letzten Commit hinzufügen* gehören zum
 Projekt. Wer zwischendurch ein anderes Projekt anklickt, findet beim Zurückkommen
@@ -648,8 +671,10 @@ eigene gespeicherte Arbeit bleibt dabei unberührt.
 
 ## Branches und Server
 
-Oben rechts im Projekt steht nur noch **Änderungen zum Server senden**, mit der
-Anzahl, sobald etwas anliegt. Alles Übrige steht im Menü unter *Branch*: neuer
+Oben rechts steht nur noch **Alle Änderungen zum Server hochladen**, mit der
+Anzahl wartender Commits aller Projekte. Nur dieses eine Projekt lädt
+*Branch → Änderungen zum Server hochladen* hoch, oder **Hochladen** unter dem
+Commit-Feld. Alles Übrige steht ebenfalls im Menü unter *Branch*: neuer
 Branch, Branch wechseln, umbenennen, löschen, Server prüfen, Änderungen vom
 Server holen, und die selteneren Fälle darunter. Auch dort steht die Anzahl am
 Holen-Eintrag, sobald etwas anliegt.
@@ -801,7 +826,7 @@ davor zurück.
 ### Einen neuen Branch das erste Mal senden
 
 Ein frisch angelegter Branch steht nur auf deiner Festplatte. Beim ersten
-**Änderungen zum Server senden** legt Branchly ihn dort an und merkt sich die
+**Hochladen** legt Branchly ihn dort an und merkt sich die
 Zuordnung, sodass jedes weitere Senden ohne Nachfrage an dieselbe Stelle geht.
 Du musst dafür nichts einstellen.
 
