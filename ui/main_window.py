@@ -2518,10 +2518,13 @@ class MainWindow(QMainWindow):
             if not self._github.has_token:
                 return
 
+        # Only projects whose folder is still there count as known. A leftover
+        # entry for a deleted nested clone must not block setting the repository
+        # up in the real project folder.
         known = {
             github_discovery.slug_key(entry.remote_url): entry.name
             for entry in self._registry.entries
-            if github_discovery.slug_key(entry.remote_url)
+            if github_discovery.slug_key(entry.remote_url) and Path(entry.path).exists()
         }
         folder = (
             Path(self._settings.github_clone_folder)
