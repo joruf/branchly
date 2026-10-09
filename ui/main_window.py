@@ -2231,10 +2231,21 @@ class MainWindow(QMainWindow):
             self._show_notice(mode.heading, mode.nothing, "info")
             return
 
-        dialog = PullAllDialog(puller.build_jobs(entries), self, mode)
+        dialog = PullAllDialog(
+            puller.build_jobs(entries),
+            self,
+            mode,
+            close_when_done=self._settings.bulk_close_when_done,
+        )
         dialog.exec()
         if not dialog.results:
             return
+        if dialog.summary is not None:
+            # The window may have closed by itself, so the totals stay on screen
+            # here: a skipped or failed project is not something to miss.
+            title, detail, token = dialog.summary
+            self._notice.set_message(title, detail, token)
+            self._notice.setVisible(True)
 
         if any(result.changed for result in dialog.results):
             self._reload_current()

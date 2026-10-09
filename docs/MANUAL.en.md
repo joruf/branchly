@@ -250,6 +250,11 @@ and changes nothing in your project. To work entirely without a network, switch
 from the server. The window starts at once, there is no second confirmation. It
 shows the progress, and afterwards what became of **each** project separately.
 
+The window is split in two. At the start every project is on the left. A project
+that actually receives new commits jumps to the right under **Updated**, keeping
+its colour. What stays on the left was already current, skipped or failed: that
+is where a second look pays off.
+
 ![Updating every project](screenshots/en/pull-all-dark.png)
 
 The run **only fast-forwards**. It merges nothing, overwrites nothing and cannot
@@ -277,6 +282,12 @@ While the run is working the **Close** button waits: the run writes into the
 folders, and a half-finished project with nobody watching would be the worse
 option. Once everything is through, it closes the window.
 
+By default the window **closes by itself** after the run, after a short moment
+to look. The result is shown at the top of the main window afterwards, so a
+skipped or failed project is not lost. If you would rather close it yourself,
+untick *Close the “Update all projects” window by itself when it is done* under
+*General* in the settings. That also applies to sending every project.
+
 ## Sending every project at once
 
 The counterpart is in the menu **Branch → Send all changes to the server…**, right under the entry for the single project.
@@ -284,6 +295,9 @@ It sends the commits in every project that are not on the server yet, in the sam
 window and also without a second confirmation.
 
 ![Sending every project](screenshots/en/push-all-dark.png)
+
+As when updating, a project jumps to the right, here under **Sent**, as soon as
+its commits are on the server.
 
 Only what can simply be sent is sent. Nothing is forced:
 
@@ -997,7 +1011,7 @@ often it runs at most is `update_check_hours` in `settings.json`, where `0` mean
 
 | Tab | Content |
 |---|---|
-| General | Language, default sort order, asking before anything is lost |
+| General | Language, default sort order, closing the “Update all projects” window by itself, asking before anything is lost |
 | Automatic check | Interval, whether the servers are asked, update check on start |
 | Comparison | Default layout, spacing, word highlighting |
 | GitHub | Token, GitHub features on/off, author pictures |

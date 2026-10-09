@@ -257,6 +257,11 @@ angesehen.
 es nicht. Es zeigt den Fortschritt und danach für **jedes** Projekt einzeln, was
 daraus geworden ist.
 
+Das Fenster ist zweigeteilt. Zu Beginn stehen alle Projekte links. Bekommt ein
+Projekt tatsächlich neue Commits, springt es nach rechts unter **Aktualisiert**,
+mit seiner Farbe. Links bleibt, was schon aktuell war, übersprungen wurde oder
+nicht ging: genau dort lohnt sich der zweite Blick.
+
 ![Alle Projekte aktualisieren](screenshots/de/pull-all-dark.png)
 
 Der Vorgang **spult nur vor**. Er führt nichts zusammen, überschreibt nichts und
@@ -284,6 +289,13 @@ Während der Lauf arbeitet, wartet der Knopf **Schließen**: der Lauf schreibt i
 die Ordner, und ein halb fertiges Projekt ohne jemanden, der zusieht, wäre die
 schlechtere Variante. Sobald alles durch ist, schließt er das Fenster.
 
+Von Haus aus schließt sich das Fenster nach dem Lauf **von selbst**, nach einem
+kurzen Moment zum Hinsehen. Das Ergebnis steht danach oben im Hauptfenster,
+übersprungene oder fehlgeschlagene Projekte gehen also nicht verloren. Wer das
+Fenster lieber selbst schließt, nimmt in den Einstellungen unter *Allgemein* den
+Haken bei *Fenster „Alle Projekte aktualisieren“ nach dem Abgleich selbst
+schließen* heraus. Das gilt auch für das Senden aller Projekte.
+
 ## Alle Projekte auf einmal senden
 
 Das Gegenstück steht im Menü **Branch → Alle Änderungen zum Server senden…**, direkt unter dem Eintrag für das einzelne Projekt. Es
@@ -291,6 +303,9 @@ sendet in jedem Projekt die Commits, die noch nicht auf dem Server sind, im selb
 Fenster und ebenfalls ohne zweite Bestätigung.
 
 ![Alle Änderungen zum Server senden](screenshots/de/push-all-dark.png)
+
+Wie beim Aktualisieren springt ein Projekt nach rechts, hier unter **Gesendet**,
+sobald seine Commits auf dem Server sind.
 
 Gesendet wird nur, was sich einfach senden lässt. Nichts wird erzwungen:
 
@@ -1028,7 +1043,7 @@ abschalten. Wie oft sie höchstens läuft, steht als `update_check_hours` in
 
 | Reiter | Inhalt |
 |---|---|
-| Allgemein | Sprache, Standard-Sortierung, Nachfragen vor Verlust |
+| Allgemein | Sprache, Standard-Sortierung, Fenster nach „Alle Projekte aktualisieren“ selbst schließen, Nachfragen vor Verlust |
 | Automatische Prüfung | Intervall, ob dabei die Server gefragt werden, Update-Suche beim Start |
 | Gegenüberstellung | Standardansicht, Abstände, Wort-Hervorhebung |
 | GitHub | Token, GitHub-Funktionen ein/aus, Autorenbilder |

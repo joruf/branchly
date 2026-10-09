@@ -30,6 +30,7 @@ except ImportError:  # pragma: no cover - PySide6 missing is a valid environment
     QT_AVAILABLE = False
 
 import i18n
+from config.app_settings import AppSettings
 from services import pusher
 from services.puller import (
     RESULT_CURRENT,
@@ -43,6 +44,20 @@ from services.puller import (
 from tests.support import requires_git, temp_repo, temp_repo_pair
 
 requires_qt = unittest.skipUnless(QT_AVAILABLE, "PySide6 is not installed")
+
+
+def job_for(key: str) -> PullJob:
+    """
+    Builds a job for a project that does not exist, for tests that feed results in.
+
+    Args:
+        key: Key and name for the job.
+
+    Returns:
+        PullJob: The job.
+    """
+
+    return PullJob(path=f"/nonexistent/{key}", key=key, name=key)
 
 
 def job(repo, key: str = "one") -> PullJob:  # noqa: ANN001 - TempRepo
@@ -186,8 +201,65 @@ class WindowTests(unittest.TestCase):
             dialog.show()
             self._drain(dialog)
             self.assertEqual([RESULT_PUSHED], [item.state for item in dialog.results])
-            self.assertIn(i18n.t("push_all.moved_one", count=1), dialog._list.item(0).text())
+            self.assertIn(i18n.t("push_all.moved_one", count=1), dialog._moved_list.item(0).text())
             self.assertTrue(dialog._close.isEnabled())
+
+    def test_a_project_that_moved_jumps_right_and_keeps_its_colour(self) -> None:
+        from PySide6.QtGui import QColor
+
+        from services.puller import RESULT_CURRENT, RESULT_PULLED, PullResult
+        from ui.pull_all_dialog import PullAllDialog
+        from ui.widgets import token_color
+
+        jobs = [job_for("a"), job_for("b")]
+        dialog = PullAllDialog(jobs, autostart=False)
+        self.addCleanup(dialog.close)
+        self.assertEqual((2, 0), (dialog._list.count(), dialog._moved_list.count()))
+
+        dialog._on_result(PullResult(key="a", name="a", state=RESULT_PULLED, commits=2))
+        dialog._on_result(PullResult(key="b", name="b", state=RESULT_CURRENT))
+
+        self.assertEqual((1, 1), (dialog._list.count(), dialog._moved_list.count()))
+        moved = dialog._moved_list.item(0)
+        self.assertTrue(moved.text().startswith("a:"))
+        self.assertEqual(QColor(token_color("success")), moved.foreground().color())
+        self.assertIn("(1)", dialog._moved_heading.text())
+
+    def test_the_window_closes_itself_when_asked_to(self) -> None:
+        from ui.pull_all_dialog import CLOSE_DELAY_MS, PullAllDialog
+
+        with temp_repo() as repo:
+            dialog = PullAllDialog([job(repo)], autostart=False, close_when_done=True)
+            self.addCleanup(dialog.close)
+            closed: list[int] = []
+            dialog.finished.connect(closed.append)
+            dialog.show()
+            dialog._begin()
+            self._drain(dialog)
+            self.assertIsNotNone(dialog.summary)
+            deadline = time.monotonic() + (CLOSE_DELAY_MS / 1000) + 5
+            while not closed and time.monotonic() < deadline:
+                self.app.processEvents()
+            self.assertEqual([dialog.DialogCode.Accepted], closed)
+
+    def test_without_the_setting_it_waits_for_close(self) -> None:
+        from ui.pull_all_dialog import CLOSE_DELAY_MS, PullAllDialog
+
+        with temp_repo() as repo:
+            dialog = PullAllDialog([job(repo)], autostart=False)
+            self.addCleanup(dialog.close)
+            dialog.show()
+            dialog._begin()
+            self._drain(dialog)
+            deadline = time.monotonic() + (CLOSE_DELAY_MS / 1000) + 0.5
+            while time.monotonic() < deadline:
+                self.app.processEvents()
+            self.assertTrue(dialog.isVisible())
+
+    def test_the_setting_starts_on_and_survives_a_round_trip(self) -> None:
+        self.assertTrue(AppSettings().bulk_close_when_done)
+        again = AppSettings.from_dict(AppSettings(bulk_close_when_done=False).to_dict())
+        self.assertFalse(again.bulk_close_when_done)
 
     def test_there_is_no_start_button_and_close_stays(self) -> None:
         from PySide6.QtWidgets import QPushButton
