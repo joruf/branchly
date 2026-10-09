@@ -1484,19 +1484,29 @@ class DiffView(QWidget):
         outer.setContentsMargins(10, 6, 10, 6)
         outer.setSpacing(8)
 
-        # Two wrapping groups rather than one long row. Six controls side by side
-        # gave this panel a minimum width of over a thousand pixels, and a
-        # minimum that large is not a cosmetic problem: the window manager drops
-        # the maximise button for a window that cannot be resized.
+        # One wrapping row for everything. Six options side by side gave this
+        # panel a minimum width of over a thousand pixels, and a minimum that
+        # large is not a cosmetic problem: the window manager drops the maximise
+        # button for a window that cannot be resized.
+        #
+        # The counts and the two file buttons are one unit in that row: they
+        # always stay together on one line and move to the next line as a whole
+        # when there is no room. As a group of their own beside the options they
+        # were squeezed into a narrow column and stacked three rows high, and as
+        # a fixed row beside the options they pushed the window wider than a
+        # small screen.
         left_holder = QWidget(holder)
         row = FlowLayout(left_holder, spacing=8)
         row.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(left_holder)
-        outer.addStretch(1)
-        right_holder = QWidget(holder)
-        right = FlowLayout(right_holder, spacing=8)
+        outer.addWidget(left_holder, 1)
+        right_holder = QWidget(left_holder)
+        right = QHBoxLayout(right_holder)
         right.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(right_holder)
+        right.setSpacing(8)
+        # First in the row: the unit is the widest item, and placed before the
+        # options it packs into fewer lines than trailing them, where it was the
+        # one thing left over for a line of its own.
+        row.addWidget(right_holder)
 
         self._target = QComboBox(left_holder)
         self._target.setToolTip(i18n.t("tip.diff_target"))
@@ -1563,7 +1573,7 @@ class DiffView(QWidget):
         self._counts = QLabel("", right_holder)
         self._counts.setToolTip(i18n.t("tip.diff_counts"))
         self._counts.setObjectName("Muted")
-        right.addWidget(self._counts)
+        right.addWidget(self._counts, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._open_button = QPushButton(i18n.t("diff.open_file"), right_holder)
         self._open_button.setToolTip(i18n.t("tip.diff_open"))
