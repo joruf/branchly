@@ -24,6 +24,7 @@ from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
     QProgressBar,
@@ -38,6 +39,9 @@ from services import puller, pusher
 from services.puller import PullJob, PullResult
 from services.scheduler import PullCoordinator
 from ui.widgets import InlineMessage, token_color
+
+#: How long the finished run stays on screen before the window closes itself.
+CLOSE_DELAY_MS = 1500
 
 #: Theme token used for each outcome, so the list reads at a glance.
 _TOKENS: dict[str, str] = {
@@ -71,6 +75,7 @@ class BulkMode:
         summary_moved: Count of projects that moved, for the report.
         summary_current: Count of projects with nothing to do.
         list_tip: Tooltip of the project list.
+        moved_heading: Heading of the right-hand list, the projects that moved.
     """
 
     work: Callable[[PullJob], PullResult]
@@ -86,6 +91,7 @@ class BulkMode:
     summary_moved: str
     summary_current: str
     list_tip: str
+    moved_heading: str
 
 
 #: Bringing every project up to the server's version.
@@ -103,6 +109,7 @@ MODE_PULL = BulkMode(
     summary_moved="pull_all.summary_moved",
     summary_current="pull_all.summary_current",
     list_tip="tip.pull_all_list",
+    moved_heading="pull_all.moved_heading",
 )
 
 #: Sending every project's unsent commits to the server.
@@ -120,6 +127,7 @@ MODE_PUSH = BulkMode(
     summary_moved="push_all.summary_moved",
     summary_current="push_all.summary_current",
     list_tip="tip.push_all_list",
+    moved_heading="push_all.moved_heading",
 )
 
 
@@ -160,6 +168,7 @@ class PullAllDialog(QDialog):
         parent: QWidget | None = None,
         mode: BulkMode = MODE_PULL,
         autostart: bool = True,
+        close_when_done: bool = False,
     ) -> None:
         """
         Args:
@@ -168,6 +177,9 @@ class PullAllDialog(QDialog):
             mode: Pulling or pushing.
             autostart: Whether the run begins as soon as the window is shown.
                 Off only for tests and screenshots that drive it themselves.
+            close_when_done: Whether the window closes by itself once the run is
+                over, after a moment to see how it ended. The totals stay
+                available in ``summary`` for the main window to show.
         """
 
         super().__init__(parent)
@@ -179,8 +191,11 @@ class PullAllDialog(QDialog):
         self.results: list[PullResult] = []
         self._running = False
         self._autostart = autostart
+        self._close_when_done = close_when_done
         self._scheduled = False
         self._started = False
+        # Headline, detail and colour token of the result, once the run is over.
+        self.summary: tuple[str, str, str] | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -202,10 +217,20 @@ class PullAllDialog(QDialog):
         self._progress.setVisible(False)
         layout.addWidget(self._progress)
 
-        self._list = QListWidget(self)
-        self._list.setAlternatingRowColors(False)
-        self._list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        self._list.setToolTip(i18n.t(mode.list_tip))
+        # Two lists side by side. Every project starts on the left; one that
+        # actually moves (new commits arrived, or its commits were sent) jumps to
+        # the right as soon as its result is in. What stays on the left is what
+        # was already current, skipped or failed, so that is where to look.
+        columns = QHBoxLayout()
+        columns.setSpacing(10)
+        self._list, self._list_heading = self._build_column(
+            columns, i18n.t("pull_all.left_heading"), i18n.t(mode.list_tip)
+        )
+        self._moved_list, self._moved_heading = self._build_column(
+            columns, i18n.t(mode.moved_heading), i18n.t("tip.bulk_moved_list")
+        )
+        layout.addLayout(columns, 1)
+
         # Filled before the run rather than during it. A hidden list contributes
         # nothing to the window's size hint, so the window opened at the height
         # of the explanation and had no room left once the entries appeared.
@@ -216,7 +241,7 @@ class PullAllDialog(QDialog):
             item.setForeground(QColor(token_color("text_muted")))
             item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             self._rows[job.key] = item
-        layout.addWidget(self._list, 1)
+        self._update_headings()
 
         row = QHBoxLayout()
         row.setSpacing(8)
@@ -238,7 +263,55 @@ class PullAllDialog(QDialog):
                 i18n.t(mode.heading), i18n.t(mode.nothing), "info"
             )
 
-        self.resize(620, self._preferred_height(len(jobs)))
+        self.resize(860, self._preferred_height(len(jobs)))
+
+    def _build_column(
+        self, columns: QHBoxLayout, heading: str, tip: str
+    ) -> tuple[QListWidget, QLabel]:
+        """
+        Adds one of the two lists with its heading.
+
+        Args:
+            columns: The row the column goes into.
+            heading: Text above the list.
+            tip: Tooltip of the list.
+
+        Returns:
+            tuple[QListWidget, QLabel]: The list and its heading.
+        """
+
+        holder = QVBoxLayout()
+        holder.setSpacing(4)
+        label = QLabel(heading, self)
+        label.setObjectName("Muted")
+        holder.addWidget(label)
+        widget = QListWidget(self)
+        widget.setAlternatingRowColors(False)
+        widget.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        widget.setToolTip(tip)
+        # Half the width each, so a long reason wraps instead of hiding behind a
+        # sideways scroll bar.
+        widget.setWordWrap(True)
+        widget.setResizeMode(QListWidget.ResizeMode.Adjust)
+        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        holder.addWidget(widget, 1)
+        columns.addLayout(holder, 1)
+        return widget, label
+
+    def _update_headings(self) -> None:
+        """
+        Puts the number of projects into both headings.
+
+        Returns:
+            None
+        """
+
+        self._list_heading.setText(
+            f"{i18n.t('pull_all.left_heading')} ({self._list.count()})"
+        )
+        self._moved_heading.setText(
+            f"{i18n.t(self._mode.moved_heading)} ({self._moved_list.count()})"
+        )
 
     def _preferred_height(self, count: int) -> int:
         """
@@ -348,7 +421,19 @@ class PullAllDialog(QDialog):
         item.setText(describe_result(result, self._mode))
         item.setForeground(QColor(token_color(_TOKENS.get(result.state, "text"))))
         item.setToolTip(result.detail or "")
-        self._list.scrollToItem(item)
+        if result.changed and self._list.row(item) >= 0:
+            # A project that moved jumps to the right, keeping its colour. A new
+            # row rather than the old one moved over: a row taken out of one list
+            # keeps the size it was laid out with there and comes out squashed.
+            self._list.takeItem(self._list.row(item))
+            moved = QListWidgetItem(item.text(), self._moved_list)
+            moved.setFlags(item.flags())
+            moved.setForeground(item.foreground())
+            moved.setToolTip(item.toolTip())
+            self._rows[result.key] = moved
+            item = moved
+        item.listWidget().scrollToItem(item)
+        self._update_headings()
 
     def _on_worker_error(self, key: str, message: str) -> None:
         """
@@ -399,11 +484,14 @@ class PullAllDialog(QDialog):
             token = "danger"
         elif summary.skipped:
             token = "warning"
-        self._notice.set_message(
-            i18n.t("pull_all.done"),
-            " · ".join(parts) if parts else i18n.t(mode.nothing),
-            token,
-        )
+        detail = " · ".join(parts) if parts else i18n.t(mode.nothing)
+        self.summary = (i18n.t(mode.title), detail, token)
+        self._notice.set_message(i18n.t("pull_all.done"), detail, token)
+
+        if self._close_when_done:
+            # A moment to see how it ended, then out of the way. The main window
+            # shows the same totals afterwards, so nothing is lost by closing.
+            QTimer.singleShot(CLOSE_DELAY_MS, self.accept)
 
     # --------------------------------------------------------------------- shared
 

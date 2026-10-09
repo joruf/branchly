@@ -185,6 +185,11 @@ class SettingsDialog(QDialog):
         self._sort_changes_first.setChecked(self._original.sort_changes_first)
         form.addRow("", self._sort_changes_first)
 
+        self._bulk_close = QCheckBox(i18n.t("settings.bulk_close_when_done"), page)
+        self._bulk_close.setToolTip(i18n.t("tip.settings_bulk_close"))
+        self._bulk_close.setChecked(self._original.bulk_close_when_done)
+        form.addRow("", self._bulk_close)
+
         self._confirm = QCheckBox(i18n.t("settings.confirm_destructive"), page)
         self._confirm.setToolTip(i18n.t("tip.settings_confirm"))
         self._confirm.setChecked(self._original.confirm_destructive)
@@ -542,6 +547,7 @@ class SettingsDialog(QDialog):
             github_enabled=self._github_enabled.isChecked(),
             show_avatars=self._show_avatars.isChecked(),
             confirm_destructive=self._confirm.isChecked(),
+            bulk_close_when_done=self._bulk_close.isChecked(),
         )
         return edited.normalized()
 

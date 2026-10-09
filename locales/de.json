@@ -1052,5 +1052,11 @@
   "github_discover.failed": "fehlgeschlagen: {reason}",
   "github_discover.finished": "{done} aufgenommen, {failed} fehlgeschlagen",
   "github_discover.finished_hint": "Bei den roten Zeilen steht, woran es lag. Ein neuer Versuch geht über „Erneut suchen“.",
-  "github.signin_for_discover_hint": "Deine Repositories auf GitHub zu finden braucht eine Anmeldung bei GitHub. Danach geht es hier direkt weiter."
+  "github.signin_for_discover_hint": "Deine Repositories auf GitHub zu finden braucht eine Anmeldung bei GitHub. Danach geht es hier direkt weiter.",
+  "pull_all.left_heading": "Projekte",
+  "pull_all.moved_heading": "Aktualisiert",
+  "push_all.moved_heading": "Gesendet",
+  "tip.bulk_moved_list": "Projekte, die bei diesem Lauf tatsächlich etwas bekommen oder gesendet haben. Sie wandern hierher, sobald ihr Ergebnis da ist.",
+  "settings.bulk_close_when_done": "Fenster „Alle Projekte aktualisieren“ nach dem Abgleich selbst schließen",
+  "tip.settings_bulk_close": "Gilt auch für „Alle Änderungen zum Server senden“. Das Ergebnis steht danach oben im Hauptfenster. Ohne Haken bleibt das Fenster offen, bis du „Schließen“ klickst."
 }

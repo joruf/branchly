@@ -1052,5 +1052,11 @@
   "github_discover.failed": "failed: {reason}",
   "github_discover.finished": "{done} added, {failed} failed",
   "github_discover.finished_hint": "The red rows say what went wrong. Try again through “Search again”.",
-  "github.signin_for_discover_hint": "Finding your repositories on GitHub needs you to be signed in to GitHub. Once you are, it carries on right here."
+  "github.signin_for_discover_hint": "Finding your repositories on GitHub needs you to be signed in to GitHub. Once you are, it carries on right here.",
+  "pull_all.left_heading": "Projects",
+  "pull_all.moved_heading": "Updated",
+  "push_all.moved_heading": "Sent",
+  "tip.bulk_moved_list": "Projects that actually received or sent something in this run. They move here as soon as their result is in.",
+  "settings.bulk_close_when_done": "Close the “Update all projects” window by itself when it is done",
+  "tip.settings_bulk_close": "Also applies to “Send all changes to the server”. The result is shown at the top of the main window afterwards. Unticked, the window stays open until you click “Close”."
 }

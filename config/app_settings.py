@@ -215,6 +215,9 @@ class AppSettings:
             into, offered again next time. Empty until the first download.
         github_clone_folder: Folder the last clones from "find new repositories
             on GitHub" went into, offered again next time. Empty until then.
+        bulk_close_when_done: Whether the window of "update all projects" and
+            "send all changes" closes by itself once the run is over. The totals
+            are shown in the main window afterwards either way.
         window_geometry: Hex-encoded Qt geometry blob.
         window_state: Hex-encoded Qt window state blob.
     """
@@ -242,6 +245,7 @@ class AppSettings:
     last_repo: str = ""
     download_folder: str = ""
     github_clone_folder: str = ""
+    bulk_close_when_done: bool = True
     window_geometry: str = ""
     window_state: str = ""
 
@@ -284,6 +288,7 @@ class AppSettings:
             github_clone_folder=(
                 self.github_clone_folder if isinstance(self.github_clone_folder, str) else ""
             ),
+            bulk_close_when_done=bool(self.bulk_close_when_done),
             window_geometry=self.window_geometry if isinstance(self.window_geometry, str) else "",
             window_state=self.window_state if isinstance(self.window_state, str) else "",
         )

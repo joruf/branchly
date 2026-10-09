@@ -702,7 +702,11 @@ class PullAllRunTests(unittest.TestCase):
                     self.assertEqual(SKIP_NO_REMOTE, by_key["lonely"].reason_key)
 
                     # The report is on screen, and the window can be left again.
-                    self.assertEqual(2, dialog._list.count())
+                    # The project that moved stands on the right, the skipped one
+                    # stays on the left.
+                    self.assertEqual(1, dialog._list.count())
+                    self.assertEqual(1, dialog._moved_list.count())
+                    self.assertIn("pair", dialog._moved_list.item(0).text())
                     self.assertTrue(dialog._close.isEnabled())
                     self.assertEqual(first.head(), second.head())
                 finally:
