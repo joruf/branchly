@@ -431,6 +431,8 @@ class DesktopEntryTests(unittest.TestCase):
                 text = self._install(Path(base) / "home")
                 icon = Path(base) / "home" / ".local" / "share" / "icons" / "hicolor" / "256x256" / "apps"
                 self.assertTrue((icon / "branchly.png").is_file(), "the icon outlives the unpacked files")
+                scalable = icon.parents[1] / "scalable" / "apps" / "branchly.svg"
+                self.assertTrue(scalable.is_file(), "the scalable icon matches the bitmap one")
         self.assertIn(f"Exec={program.resolve()} %f", text)
         self.assertNotIn("branchly.sh", text)
         self.assertIn("Icon=branchly\n", text)
