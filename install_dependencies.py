@@ -572,6 +572,7 @@ def install_desktop_entry(log: LogFn | None = None) -> bool:
 
     source = _ROOT / "resources" / "branchly.desktop"
     icon = _ROOT / "resources" / "branchly.png"
+    vector = _ROOT / "resources" / "branchly.svg"
     if not source.is_file():
         return False
 
@@ -596,6 +597,12 @@ def install_desktop_entry(log: LogFn | None = None) -> bool:
 
         if icon.is_file():
             shutil.copyfile(icon, icons / "branchly.png")
+        # Icon themes prefer the scalable copy for small sizes such as the
+        # panel, so a stale SVG there would win over the fresh PNG.
+        if vector.is_file():
+            scalable = icons.parents[1] / "scalable" / "apps"
+            scalable.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(vector, scalable / "branchly.svg")
     except OSError as problem:
         emit(f"the application menu entry could not be written: {problem}")
         return False
