@@ -388,6 +388,18 @@ class StageTests(unittest.TestCase):
             self.assertTrue(stage_mod.stage_files(repo.root, ["--force"]).failed)
             self.assertTrue(stage_mod.restore_committed(repo.root, ["-x"]).failed)
 
+    def test_stage_still_works_when_a_tracked_path_becomes_ignored(self) -> None:
+        # Same shape as CarDock: build output was committed, then .gitignore
+        # started ignoring /build/. Plain ``git add`` then refuses the pathspec.
+        with temp_repo() as repo:
+            (repo.root / "build").mkdir()
+            repo.commit_file("build/out.bin", "old\n")
+            (repo.root / ".gitignore").write_text("/build/\n", encoding="utf-8")
+            repo.write("build/out.bin", "new\n")
+            result = stage_mod.stage_files(repo.root, ["build/out.bin", ".gitignore"])
+            self.assertTrue(result.ok, result.message)
+            self.assertTrue(has_staged_changes(repo.root))
+
     def test_stage_a_single_hunk(self) -> None:
         # Forty lines, changed at the very top and the very bottom, so the two
         # stay separate blocks whatever the configured amount of surrounding

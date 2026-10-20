@@ -41,6 +41,12 @@ def stage_files(repo: Path | str, paths: list[str]) -> GitResult:
     """
     Stages whole files, including deletions and untracked files.
 
+    ``--force`` is required because the paths are an explicit selection: a file
+    that is already tracked can still sit under a new ``.gitignore`` pattern
+    (for example ``/build/`` after the ignore file was added). Plain ``git add``
+    then refuses the pathspec even though the user ticked that file, and the
+    commit stops with Git's "use -f" hint.
+
     Args:
         repo: Working tree path.
         paths: Paths relative to the working tree root.
@@ -52,7 +58,7 @@ def stage_files(repo: Path | str, paths: list[str]) -> GitResult:
     checked = checked_paths(paths)
     if checked is None:
         return GitResult(returncode=-1, stdout="", stderr="unsafe path", args=("add",))
-    return run(["add", "--all", "--", *checked], cwd=repo)
+    return run(["add", "--all", "--force", "--", *checked], cwd=repo)
 
 
 def unstage_files(repo: Path | str, paths: list[str]) -> GitResult:
