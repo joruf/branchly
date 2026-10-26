@@ -553,6 +553,18 @@ class CloneTargetTests(unittest.TestCase):
 
 
 class ClonePrepareTests(unittest.TestCase):
+    def test_without_a_folder_of_its_own_the_target_is_the_chosen_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            request = clone_mod.prepare(
+                "https://github.com/user/project.git", tmp, "ignored", create_folder=False
+            )
+            assert request is not None
+            self.assertEqual(Path(tmp).resolve(), request.target)
+
+    def test_without_a_folder_of_its_own_a_bad_address_is_still_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(clone_mod.prepare("ext::sh -c evil", tmp, create_folder=False))
+
     def test_folder_name_is_derived_from_the_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             request = clone_mod.prepare("https://github.com/user/project.git", tmp)
@@ -646,7 +658,7 @@ class RealCloneTests(unittest.TestCase):
                 ).stdout
                 self.assertTrue(status.strip())
 
-    def test_clone_into_folder_with_empty_remote_commits_local_files(self) -> None:
+    def test_clone_into_folder_with_empty_remote_only_links_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             origin = Path(tmp) / "empty.git"
             subprocess.run(
@@ -660,38 +672,23 @@ class RealCloneTests(unittest.TestCase):
             (target / "notes.txt").write_text("started locally\n", encoding="utf-8")
 
             request = clone_mod.CloneRequest(url=origin.as_uri(), target=target)
-            # Identity for the initial commit without touching the user's gitconfig.
-            identity = {
-                "GIT_AUTHOR_NAME": "Branchly Test",
-                "GIT_AUTHOR_EMAIL": "test@example.invalid",
-                "GIT_COMMITTER_NAME": "Branchly Test",
-                "GIT_COMMITTER_EMAIL": "test@example.invalid",
-            }
-            saved = {key: os.environ.get(key) for key in identity}
-            os.environ.update(identity)
-            self.addCleanup(
-                lambda: [
-                    os.environ.update({key: value}) if value is not None else os.environ.pop(key, None)
-                    for key, value in saved.items()
-                ]
-            )
             result = clone_mod.clone(request)
             self.assertTrue(result.ok, result.message)
             self.assertTrue((target / ".git").exists())
-            listed = subprocess.run(
-                ["git", "-C", str(target), "ls-files"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.splitlines()
-            self.assertEqual(["app.py", "notes.txt"], sorted(listed))
-            log = subprocess.run(
-                ["git", "-C", str(target), "log", "-1", "--pretty=%s"],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-            self.assertEqual("Initial commit", log)
+
+            def git(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["git", "-C", str(target), *args], capture_output=True, text=True
+                )
+
+            # Connected to the server, but nothing was committed or even staged:
+            # what belongs in the first commit is the user's pick.
+            self.assertEqual(origin.as_uri(), git("remote", "get-url", "origin").stdout.strip())
+            self.assertNotEqual(0, git("rev-parse", "--verify", "HEAD").returncode)
+            self.assertEqual("", git("ls-files").stdout)
+            self.assertEqual(
+                ["?? app.py", "?? notes.txt"], git("status", "--porcelain").stdout.splitlines()
+            )
 
     def test_clone_into_an_existing_repository_is_refused(self) -> None:
         with temp_repo_pair() as (first, _second, origin):

@@ -19,6 +19,7 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -138,6 +139,7 @@ class CloneTests(unittest.TestCase):
             dialog = CloneDialog([], origin.as_uri())
             self.addCleanup(dialog.deleteLater)
             dialog._parent_dir.setText(parent)
+            dialog._new_folder.setChecked(True)
             dialog._folder.setText("copy")
 
             outcome = run_until_finished(dialog, dialog._start)
@@ -145,6 +147,65 @@ class CloneTests(unittest.TestCase):
             self.assertEqual(dialog.DialogCode.Accepted, outcome["result"])
             self.assertEqual(Path(parent) / "copy", dialog.cloned_path)
             self.assertTrue((Path(parent) / "copy" / ".git").exists())
+
+    def test_unticked_the_repository_goes_straight_into_the_chosen_folder(self) -> None:
+        from ui.clone_dialog import CloneDialog
+
+        with temp_repo_pair() as (_first, _second, origin), tempfile.TemporaryDirectory() as parent:
+            dialog = CloneDialog([], origin.as_uri())
+            self.addCleanup(dialog.deleteLater)
+            dialog._parent_dir.setText(parent)
+
+            self.assertFalse(dialog._new_folder.isChecked())
+            self.assertFalse(dialog._folder.isEnabled())
+            outcome = run_until_finished(dialog, dialog._start)
+
+            self.assertEqual(dialog.DialogCode.Accepted, outcome["result"])
+            self.assertEqual(Path(parent).resolve(), dialog.cloned_path)
+            self.assertTrue((Path(parent) / ".git").exists())
+
+    def test_a_folder_with_files_is_asked_about_and_no_stops_everything(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from ui.clone_dialog import CloneDialog
+
+        with temp_repo_pair() as (_first, _second, origin), tempfile.TemporaryDirectory() as parent:
+            (Path(parent) / "mine.txt").write_text("keep", encoding="utf-8")
+            dialog = CloneDialog([], origin.as_uri())
+            self.addCleanup(dialog.deleteLater)
+            dialog._parent_dir.setText(parent)
+
+            asked: list[str] = []
+
+            def decline(*args, **_kwargs):
+                asked.append(args[1])
+                return QMessageBox.StandardButton.No
+
+            with mock.patch.object(QMessageBox, "question", decline):
+                dialog._start()
+
+            self.assertEqual([i18n.t("clone.nonempty_title")], asked)
+            self.assertIsNone(dialog._thread)
+            self.assertFalse((Path(parent) / ".git").exists())
+
+    def test_a_folder_that_is_a_repository_gets_a_message_and_nothing_else(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from ui.clone_dialog import CloneDialog
+
+        with temp_repo_pair() as (first, _second, origin):
+            dialog = CloneDialog([], origin.as_uri())
+            self.addCleanup(dialog.deleteLater)
+            dialog._parent_dir.setText(str(first.root))
+
+            shown: list[str] = []
+            with mock.patch.object(
+                QMessageBox, "warning", lambda *args, **_kwargs: shown.append(args[1])
+            ):
+                dialog._start()
+
+            self.assertEqual([i18n.t("clone.nonempty_is_repo")], shown)
+            self.assertIsNone(dialog._thread)
 
     def test_an_address_given_up_front_suggests_the_folder(self) -> None:
         # The address used to be filled in before the folder field existed, so

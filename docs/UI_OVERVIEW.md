@@ -8,7 +8,7 @@
 │  Projekte    ├──────────────────────────────────────────────────────────────┤
 │              │ ⓘ Hinweisstreifen (nur wenn es etwas zu sagen gibt)          │
 │  Hinzufügen  ├──────────────────────────┬───────────────────────────────────┤
-│  Klonen      │ Änderungen│Graph│PRs      │ Gegenüberstellung                │
+│  Repository  │ Änderungen│Graph│PRs      │ Gegenüberstellung                │
 │  ┌─────────┐ │                          │                                   │
 │  │ Suche   │ │  ☑ config.py             │ ┌─ Vergleichen: … ─ Nebeneinander ┐│
 │  └─────────┘ │  ☑ notes.md              │ │  1 port = 8080 │ 1 port = 3000  ││
@@ -29,7 +29,7 @@
 
 | Element | Zweck |
 |---|---|
-| Hinzufügen / Klonen | Projekt aufnehmen. Kurze Labels, volle Beschriftung im Tooltip |
+| Hinzufügen / Repository | Projekt aufnehmen. Kurze Labels, volle Beschriftung im Tooltip |
 | Suchfeld | Filtert Name und Pfad, auch in zugeklappten Kategorien |
 | Sortierung | Fünf Ordnungen; Favoriten stehen immer oben |
 | Projekte mit Änderungen zuerst | Zweites Kriterium vor der gewählten Ordnung: Konflikte, ungespeicherte Arbeit, wartende Commits, dann der Rest, jede Gruppe in der gewählten Ordnung |
