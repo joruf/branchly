@@ -9,9 +9,12 @@ fetch. What happens next depends on the remote:
   mixed reset, so every file already in the folder stays as it is. Matching
   names become normal project files (clean when identical, modified when not).
   Files that exist only on the remote are filled in afterwards.
-* **Remote is still empty.** The files already in the folder are recorded as the
-  first commit. That is the common case where a project started without Git and
-  the GitHub repository was created afterwards.
+* **Remote is still empty.** The folder is only connected to it. Nothing is
+  committed: the files wait in the change list, where the user picks what
+  belongs in the first commit. That is the common case where a project started
+  without Git and the GitHub repository was created afterwards, and a blanket
+  commit would take along whatever else lies in the folder (virtual
+  environments, build output, credentials).
 
 Both routes end in a usable working tree, so the caller just calls ``clone`` and
 the right one is picked from what is actually at the destination. The inspection
@@ -126,14 +129,24 @@ class CloneRequest:
     target: Path
 
 
-def prepare(url: str, parent: Path | str, directory_name: str = "") -> CloneRequest | None:
+def prepare(
+    url: str,
+    parent: Path | str,
+    directory_name: str = "",
+    create_folder: bool = True,
+) -> CloneRequest | None:
     """
     Turns user input into a validated clone job.
 
     Args:
         url: Remote URL as typed.
-        parent: Directory the project folder is created in.
+        parent: Directory the project folder is created in, or, without
+            ``create_folder``, the folder the project goes into itself.
         directory_name: Folder name. Defaults to the name derived from the URL.
+            Ignored without ``create_folder``.
+        create_folder: Whether the project gets a folder of its own inside
+            ``parent``. False puts it straight into ``parent``, whatever is
+            already there.
 
     Returns:
         CloneRequest | None: The job, or None when the URL was refused or no
@@ -143,6 +156,8 @@ def prepare(url: str, parent: Path | str, directory_name: str = "") -> CloneRequ
     clean_url = remote_url.normalized(url)
     if not clean_url:
         return None
+    if not create_folder:
+        return CloneRequest(url=clean_url, target=Path(parent).expanduser().resolve())
     name = directory_name.strip() or remote_url.suggested_directory_name(clean_url)
     if not name:
         return None
@@ -308,7 +323,13 @@ def _clone_into_existing(
     )
     if remote_tip.ok:
         return _attach_remote_history(target, branch, on_progress, _cleanup)
-    return _record_existing_files(target, branch, on_progress, _cleanup)
+    # The remote has no commits yet, so there is nothing to attach. The folder
+    # stays connected to it and untouched: nothing is staged or committed, because
+    # what belongs in the first commit is for the user to pick, not for a blanket
+    # ``add -A`` to decide. No upstream either: origin has no branch until the
+    # first push, and a tracking ref that does not exist makes the status line
+    # look broken.
+    return fetched
 
 
 def _attach_remote_history(
@@ -353,52 +374,6 @@ def _attach_remote_history(
         cleanup()
         return tracking
     return tracking
-
-
-def _record_existing_files(
-    target: Path,
-    branch: str,
-    on_progress: Callable[[str], None],
-    cleanup: Callable[[], None],
-) -> GitResult:
-    """
-    Makes the files already in the folder the first commit of an empty remote.
-
-    Args:
-        target: Working tree.
-        branch: Local branch name, also the one the first push will create.
-        on_progress: Progress callback.
-        cleanup: Removes the half-built ``.git`` on failure.
-
-    Returns:
-        GitResult: Outcome.
-    """
-
-    on_progress("Recording…")
-    added = run(["add", "-A"], cwd=target)
-    if added.failed:
-        cleanup()
-        return added
-
-    # Do not set upstream yet: origin has no branch until the first push, and a
-    # tracking ref that does not exist makes the status line look broken.
-
-    status = run(["status", "--porcelain"], cwd=target, read_only=True)
-    if not status.ok:
-        cleanup()
-        return status
-    if not status.stdout.strip():
-        # Empty folder, empty remote: a usable repository with nothing in it yet.
-        return status
-
-    committed = run(
-        ["commit", "-F", "-"],
-        cwd=target,
-        input_text="Initial commit\n",
-    )
-    if committed.failed:
-        cleanup()
-    return committed
 
 
 def parse_progress(line: str) -> tuple[str, int] | None:

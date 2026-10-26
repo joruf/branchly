@@ -50,21 +50,29 @@ diesen Fällen, was fehlt.
 
 - **Hinzufügen** wählt einen Ordner, in dem schon ein Git-Projekt liegt. Du darfst
   auch einen Unterordner wählen, Branchly findet den obersten Ordner selbst.
-- **Klonen** holt ein Projekt von einem Server.
+- **Repository hinzufügen** holt ein Projekt von einem Server auf diesen
+  Computer. Du gibst seine Adresse an, dann den Ordner, in den es gespeichert
+  werden soll. Der Haken *Neuen Ordner mit dem Projektnamen anlegen* entscheidet,
+  ob dieser Ordner der eigene des Projekts ist (mit Haken: darin entsteht ein
+  Unterordner mit dem Namen des Projekts) oder das Repository direkt hineinkommt
+  (ohne Haken, so ist es vorbelegt).
 
-Beim Klonen prüft Branchly die Adresse, während du tippst:
+Beim Hinzufügen prüft Branchly die Adresse, während du tippst:
 
 | Meldung | Bedeutung |
 |---|---|
 | „Diese Adresse lässt sich nicht verwenden" | Tippfehler. Erwartet werden `https://…` oder `git@server:nutzer/projekt.git` |
 | „Diese Adresse ist nicht sicher" | Die Adresse enthält Zeichen oder Optionen, mit denen Git etwas anderes täte als verlangt. Branchly verweigert sie |
-| „Dieser Ordner ist nicht leer" | Es liegen schon Dateien darin. Klonen ist möglich, siehe unten |
-| „Dieser Ordner ist schon ein Git-Projekt" | Hier würde ein Projekt im Projekt entstehen. Nimm „Hinzufügen" |
+| „Dieser Ordner ist schon ein Git-Projekt" | Hier würde ein Projekt im Projekt entstehen, deshalb sagt eine Meldung das beim Klick auf *Hinzufügen*. Nimm stattdessen „Hinzufügen" in der Seitenleiste |
 
-**Klonen in einen Ordner, in dem schon etwas liegt:** Alles Vorhandene bleibt
-erhalten, die Projektdateien kommen daneben. Hätte eine Datei aus dem Projekt
-denselben Namen wie eine vorhandene, bricht Git ab und ändert nichts. Du
-verlierst also nichts, auch wenn du dich verklickst.
+**Hinzufügen in einen Ordner, in dem schon etwas liegt:** Branchly fragt zuerst
+„Repository hier anlegen?". Sagst du ja, bleibt alles Vorhandene erhalten und
+wird weder überschrieben noch committet. Dateien, die nur auf dem Server liegen,
+kommen dazu. Eine Datei, die es dort unter demselben Namen gibt, erscheint als
+Änderung, du siehst also den Unterschied und entscheidest. Ist der Server noch
+leer, wird der Ordner nur mit ihm verbunden, und alle Dateien warten als
+Änderungen auf deinen ersten Commit, bei dem du auswählst, was hinein soll. So
+holst du ein Projekt, das ohne Git begonnen wurde, nachträglich darunter.
 
 ### Einen Ordner ohne Git aufnehmen
 

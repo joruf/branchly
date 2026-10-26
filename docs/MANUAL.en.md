@@ -50,7 +50,11 @@ In those cases the tooltip says what is missing.
 
 - **Add project** picks a folder that already holds a Git project. A subfolder
   is fine, Branchly finds the top of the project itself.
-- **Clone** fetches a project from a server.
+- **Add repository** brings a project from a server onto this computer. Give
+  its address, then the folder it should be saved into. The box *Create a new
+  folder named after the project* decides whether that folder is the project's
+  own (ticked: a subfolder named like the project is created in it) or the
+  repository goes straight into it (unticked, which is how it starts).
 
 While you type an address, Branchly checks it:
 
@@ -58,13 +62,16 @@ While you type an address, Branchly checks it:
 |---|---|
 | "This address cannot be used" | A typo. Expected is `https://…` or `git@server:user/project.git` |
 | "This address is not safe" | It holds characters or options that would make Git do something other than what was asked. Branchly refuses it |
-| "This folder is not empty" | Files are already in it. Cloning is still possible, see below |
-| "This folder is already a Git project" | That would put a project inside a project. Use "Add project" |
+| "This folder is already a Git project" | That would put a project inside a project, so a message says so when you press *Add*. Use "Add project" instead |
 
-**Cloning into a folder that already holds something:** everything there stays,
-the project's files land beside it. If a file from the project had the same name
-as one already present, Git stops and changes nothing. So you lose nothing, even
-if you pick the wrong folder.
+**Adding into a folder that already holds something:** Branchly asks "Add the
+repository here?" first. If you agree, everything there stays and is neither
+overwritten nor committed. Files that exist only on the server are added. A file
+whose name the server has too shows up as a change, so you see the difference
+and decide. If the server is still empty, the folder is only connected to it and
+all its files wait as changes for your first commit, where you pick what belongs
+in. That is the way to bring a project that was started without Git under it
+afterwards.
 
 ### Taking in a folder without Git
 

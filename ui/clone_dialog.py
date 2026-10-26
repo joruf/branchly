@@ -1,13 +1,17 @@
 """
-The clone dialog.
+The dialog that adds a repository from a server.
 
-Two things it does that a plain "URL and folder" form would not:
+Things it does that a plain "URL and folder" form would not:
 
 * It refuses an unsafe address before git ever sees it, and says whether the
   problem looks like a typo or like something deliberately crafted.
-* It inspects the destination as you type and, when the folder already holds
-  files, explains exactly what will happen instead of either refusing outright or
-  cheerfully overwriting.
+* It inspects the destination as you type. A folder that already holds a Git
+  project is refused with a message; one that holds other files is asked about
+  before anything happens, instead of either refusing outright or cheerfully
+  overwriting.
+* The project gets a folder of its own only when asked to. Without that the
+  repository goes straight into the chosen folder, which is how a project that
+  was started without Git is brought under it afterwards.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -24,6 +29,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -166,8 +172,16 @@ class CloneDialog(QDialog):
         parent_layout.addWidget(browse)
         form.addRow(i18n.t("clone.target_label"), parent_row)
 
+        # Off by default: the usual case is a project that already has its folder
+        # and is only now getting a repository.
+        self._new_folder = QCheckBox(i18n.t("clone.new_folder"), self)
+        self._new_folder.setToolTip(i18n.t("tip.clone_new_folder"))
+        self._new_folder.toggled.connect(self._on_new_folder_toggled)
+        form.addRow("", self._new_folder)
+
         self._folder = QLineEdit(self)
         self._folder.setToolTip(i18n.t("tip.clone_folder"))
+        self._folder.setEnabled(False)
         self._folder.textChanged.connect(lambda _text: self._revalidate())
         form.addRow(i18n.t("clone.name_label"), self._folder)
 
@@ -237,6 +251,36 @@ class CloneDialog(QDialog):
         return self._result_category
 
     # --------------------------------------------------------------- validation
+
+    def _request(self) -> clone_mod.CloneRequest | None:
+        """
+        Builds the clone job from what the fields say right now.
+
+        Returns:
+            clone_mod.CloneRequest | None: The job, None when the address or the
+                folder name cannot be used.
+        """
+
+        return clone_mod.prepare(
+            self._url.text(),
+            self._parent_dir.text().strip(),
+            self._folder.text(),
+            create_folder=self._new_folder.isChecked(),
+        )
+
+    def _on_new_folder_toggled(self, checked: bool) -> None:
+        """
+        Enables the folder name only while it is going to be used.
+
+        Args:
+            checked: Whether the project gets a folder of its own.
+
+        Returns:
+            None
+        """
+
+        self._folder.setEnabled(checked)
+        self._revalidate()
 
     def _on_pick_remote(self) -> None:
         """
@@ -335,7 +379,7 @@ class CloneDialog(QDialog):
             self._start_button.setEnabled(False)
             return
 
-        request = clone_mod.prepare(url_text, parent_text, self._folder.text())
+        request = self._request()
         if request is None:
             self._show(i18n.t("clone.invalid_url"), i18n.t("clone.invalid_url_hint"), "warning")
             self._start_button.setEnabled(False)
@@ -343,29 +387,22 @@ class CloneDialog(QDialog):
 
         inspection = clone_mod.inspect_target(request.target)
         if inspection.state == clone_mod.TARGET_IS_REPOSITORY:
+            # The button stays usable: pressing it is what brings up the message,
+            # and the strip says the same while the path is still being typed.
             self._show(
                 i18n.t("clone.nonempty_is_repo"),
                 i18n.t("clone.nonempty_is_repo_hint", path=str(request.target)),
                 "danger",
             )
-            self._start_button.setEnabled(False)
+            self._start_button.setEnabled(True)
             return
         if not inspection.can_proceed:
             self._show(i18n.t("clone.failed"), str(request.target), "danger")
             self._start_button.setEnabled(False)
             return
-        if inspection.needs_confirmation:
-            self._show(
-                i18n.t("clone.nonempty_title"),
-                i18n.t("clone.nonempty_hint", path=str(request.target), count=inspection.entry_count),
-                "warning",
-            )
-            self._start_button.setText(i18n.t("clone.nonempty_confirm"))
-            self._start_button.setEnabled(True)
-            return
 
-        self._notice.setVisible(False)
-        self._start_button.setText(i18n.t("clone.start"))
+        # What is asked, and what is only said, is decided on pressing the button.
+        self._show(i18n.t("clone.target_note"), str(request.target), "info")
         self._start_button.setEnabled(True)
 
     def _show(self, title: str, detail: str, token: str) -> None:
@@ -396,10 +433,33 @@ class CloneDialog(QDialog):
 
         if self._thread is not None:
             return
-        request = clone_mod.prepare(self._url.text(), self._parent_dir.text(), self._folder.text())
+        request = self._request()
         if request is None:
             self._revalidate()
             return
+
+        inspection = clone_mod.inspect_target(request.target)
+        if inspection.state == clone_mod.TARGET_IS_REPOSITORY:
+            QMessageBox.warning(
+                self,
+                i18n.t("clone.nonempty_is_repo"),
+                i18n.t("clone.nonempty_is_repo_hint", path=str(request.target)),
+            )
+            return
+        if inspection.needs_confirmation:
+            answer = QMessageBox.question(
+                self,
+                i18n.t("clone.nonempty_title"),
+                i18n.t(
+                    "clone.nonempty_hint",
+                    path=str(request.target),
+                    count=inspection.entry_count,
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
 
         self._result_category = str(self._category.currentData() or "")
         self._set_busy(True)
@@ -436,7 +496,8 @@ class CloneDialog(QDialog):
         self._start_button.setEnabled(not busy)
         self._url.setEnabled(not busy)
         self._parent_dir.setEnabled(not busy)
-        self._folder.setEnabled(not busy)
+        self._new_folder.setEnabled(not busy)
+        self._folder.setEnabled(not busy and self._new_folder.isChecked())
         self._category.setEnabled(not busy)
         if busy:
             self._show(i18n.t("clone.working"), "", "info")
