@@ -14,6 +14,8 @@ a branch peeling off rather than a long slanted line across the view.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from PySide6.QtCore import QModelIndex, QPointF, QRect, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
@@ -261,7 +263,7 @@ class GraphView(QWidget):
 
             item.setText(1, self._subject_text(row))
             item.setText(2, row.commit.author)
-            item.setText(3, row.commit.date[:10])
+            item.setText(3, self._date_text(row.commit))
             item.setToolTip(1, f"{row.commit.short}  {row.commit.subject}")
             if row.commit.is_head:
                 font = QFont(self._tree.font())
@@ -280,6 +282,28 @@ class GraphView(QWidget):
         self._tree.setColumnWidth(0, width)
         if self._tree.topLevelItemCount():
             self._tree.setCurrentItem(self._tree.topLevelItem(0))
+
+    @staticmethod
+    def _date_text(commit: Commit) -> str:
+        """
+        Formats when a commit was made, with the time of day.
+
+        The author date, as before, now in the user's own time zone, so two
+        commits made minutes apart read as minutes apart wherever their authors
+        were.
+
+        Args:
+            commit: The commit.
+
+        Returns:
+            str: Date and time, or just the date git reported when it cannot be
+                read as a full timestamp.
+        """
+
+        try:
+            return datetime.fromisoformat(commit.date).astimezone().strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            return commit.date[:10]
 
     @staticmethod
     def _rows_with_children(history: History) -> set[int]:

@@ -235,5 +235,72 @@ class BulkSummaryTests(unittest.TestCase):
             self.assertEqual("Update all projects", window._notice._title.text())
 
 
+@requires_qt
+class UpdateOneProjectTests(unittest.TestCase):
+    """
+    The project's own menu updates just that project.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+        i18n.set_language("en")
+
+    def _window(self):  # noqa: ANN202
+        from ui.main_window import MainWindow
+
+        os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="branchly-test-")
+        window = MainWindow(AppSettings(auto_check_minutes=0, github_enabled=False, language="en"))
+        self.addCleanup(window.close)
+        return window
+
+    def test_the_menu_entry_asks_for_that_project_only(self) -> None:
+        with temp_repo() as one, temp_repo() as two:
+            window = self._window()
+            _o, first = window._registry.add(one.root)
+            window._registry.add(two.root)
+            asked: list[str] = []
+            # Only the request is looked at here, not the run it would start.
+            window._sidebar.update_requested.disconnect(window._update_one)
+            window._sidebar.update_requested.connect(asked.append)
+
+            menu = window._sidebar.repo_menu(first.key)
+            update = next(a for a in menu.actions() if a.text() == i18n.t("repo.update_now"))
+            self.assertTrue(update.isEnabled())
+            update.trigger()
+
+            self.assertEqual([first.key], asked)
+
+    def test_the_run_covers_one_project_and_rescans_it(self) -> None:
+        import ui.main_window as module
+        from services.puller import RESULT_CURRENT, PullResult
+
+        with temp_repo() as one, temp_repo() as two:
+            window = self._window()
+            _o, first = window._registry.add(one.root)
+            window._registry.add(two.root)
+            scanned: list[str] = []
+            window._start_scan = scanned.append
+            covered: list[list[str]] = []
+
+            class Stub:
+                def __init__(self, jobs: list, *_args: object, **_kwargs: object) -> None:
+                    covered.append([job.key for job in jobs])
+                    self.results = [PullResult(key=jobs[0].key, state=RESULT_CURRENT)]
+                    self.summary = None
+
+                def exec(self) -> int:
+                    return 1
+
+            real = module.PullAllDialog
+            module.PullAllDialog = Stub
+            self.addCleanup(setattr, module, "PullAllDialog", real)
+
+            window._update_one(first.key)
+
+            self.assertEqual([[first.key]], covered)
+            self.assertEqual([first.key], scanned)
+
+
 if __name__ == "__main__":
     unittest.main()

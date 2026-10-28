@@ -244,6 +244,8 @@ By hand it still works like this:
 - **Check all projects** at the bottom of the list, directly above *Update all
   projects*. Both live only there and not additionally in a menu
 - **Check this project now** in the right-click menu
+- **Update this project** in the right-click menu does what *Update all projects*
+  does, for that one project only: the same window, the same rules
 - **Automatically** in Settings → Automatic check: off, 5, 15, 30, 60 or 120
   minutes
 
@@ -582,6 +584,8 @@ Every line is a branch, every dot a saved version, the newest at the top. The
 ring marks where you are standing. Branch and tag names are in brackets.
 
 ![The graph](screenshots/en/graph-dark.png)
+
+The date column gives the day and the time of day, in your own time zone.
 
 A click shows **everything that commit changed** on the right. Right-click:
 
