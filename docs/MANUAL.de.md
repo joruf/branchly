@@ -250,6 +250,9 @@ Von Hand geht es weiterhin so:
 - **Alle Projekte prüfen** unten in der Liste, direkt über *Alle Projekte
   aktualisieren*. Beide stehen nur dort und nicht zusätzlich im Menü
 - **Dieses Projekt jetzt prüfen** im Rechtsklickmenü
+- **Dieses Projekt aktualisieren** im Rechtsklickmenü macht, was *Alle Projekte
+  aktualisieren* macht, nur für dieses eine Projekt: dasselbe Fenster, dieselben
+  Regeln
 - **Automatisch** in Einstellungen → Automatische Prüfung: aus, 5, 15, 30, 60
   oder 120 Minuten
 
@@ -601,6 +604,8 @@ Jede Linie ist ein Branch, jeder Punkt ein gespeicherter Stand, der neueste oben
 Der Ring markiert, wo du stehst. In Klammern stehen Branch- und Tag-Namen.
 
 ![Der Graph](screenshots/de/graph-dark.png)
+
+Die Datumsspalte nennt den Tag und die Uhrzeit, in deiner eigenen Zeitzone.
 
 Ein Klick zeigt rechts **alle Änderungen dieses Commits**. Rechtsklick:
 

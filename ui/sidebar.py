@@ -219,6 +219,8 @@ class Sidebar(QWidget):
             checked, or with an empty string for all of them.
         pull_all_requested: Emitted when every project should be brought up to the
             server's version.
+        update_requested: Emitted with a registry key when only that project
+            should be brought up to the server's version.
         add_requested: Emitted when the user wants to add an existing project.
         clone_requested: Emitted when the user wants to clone one.
         registry_changed: Emitted whenever the registry was modified and needs
@@ -234,6 +236,7 @@ class Sidebar(QWidget):
     repo_selected = Signal(str)
     check_requested = Signal(str)
     pull_all_requested = Signal()
+    update_requested = Signal(str)
     add_requested = Signal()
     clone_requested = Signal()
     registry_changed = Signal()
@@ -883,6 +886,9 @@ class Sidebar(QWidget):
         )
         favorite.triggered.connect(lambda: self._on_favorite_toggled(key))
         menu.addAction(i18n.t("repo.check_now"), lambda: self.check_requested.emit(key))
+        update = menu.addAction(i18n.t("repo.update_now"), lambda: self.update_requested.emit(key))
+        update.setToolTip(i18n.t("tip.repo_update"))
+        update.setEnabled(entry.exists)
         menu.addSeparator()
         menu.addAction(i18n.t("repo.open_folder"), lambda: self.open_folder_requested.emit(key))
         remote_action = menu.addAction(

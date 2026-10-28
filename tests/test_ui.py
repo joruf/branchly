@@ -277,6 +277,8 @@ class MainWindowSmokeTests(unittest.TestCase):
                     tree = window._graph._tree
                     self.assertEqual(2, tree.topLevelItemCount())
                     self.assertIn("second commit", tree.topLevelItem(0).text(1))
+                    # Date and time of day, not the date alone.
+                    self.assertRegex(tree.topLevelItem(0).text(3), r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
                 finally:
                     window.close()
 

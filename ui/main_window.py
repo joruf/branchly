@@ -502,6 +502,7 @@ class MainWindow(QMainWindow):
         self._sidebar.repo_selected.connect(self._on_repo_selected)
         self._sidebar.check_requested.connect(self._start_scan)
         self._sidebar.pull_all_requested.connect(self._pull_all)
+        self._sidebar.update_requested.connect(self._update_one)
         self._sidebar.add_requested.connect(self._prompt_add_repo)
         self._sidebar.clone_requested.connect(self._open_clone_dialog)
         self._sidebar.registry_changed.connect(self._save_registry)
@@ -2246,6 +2247,25 @@ class MainWindow(QMainWindow):
 
         self._run_bulk(MODE_PULL)
 
+    def _update_one(self, key: str) -> None:
+        """
+        Brings one project up to the server's version.
+
+        The same careful run as for every project, over just this one: fast-forward
+        only, and a project that cannot be forwarded is named with the reason
+        instead of being merged.
+
+        Args:
+            key: Registry key of the project.
+
+        Returns:
+            None
+        """
+
+        entry = self._find(key)
+        if entry is not None:
+            self._run_bulk(MODE_PULL, [entry])
+
     def _push_all(self) -> None:
         """
         Sends every project's unsent commits to the server in one run.
@@ -2259,12 +2279,13 @@ class MainWindow(QMainWindow):
 
         self._run_bulk(MODE_PUSH)
 
-    def _run_bulk(self, mode: BulkMode) -> None:
+    def _run_bulk(self, mode: BulkMode, entries: list[RepoEntry] | None = None) -> None:
         """
         Runs a pull or a push over every project and reloads what changed.
 
         Args:
             mode: Which of the two.
+            entries: The projects to cover, every project when omitted.
 
         Returns:
             None
@@ -2273,7 +2294,9 @@ class MainWindow(QMainWindow):
         if self._scans.is_running:
             self.statusBar().showMessage(i18n.t("pull_all.busy"), 4000)
             return
-        entries = self._registry.entries
+        scan_key = entries[0].key if entries is not None and len(entries) == 1 else ""
+        if entries is None:
+            entries = self._registry.entries
         if not entries:
             self._show_notice(mode.heading, mode.nothing, "info")
             return
@@ -2297,7 +2320,7 @@ class MainWindow(QMainWindow):
             self._notice.set_message(title, detail, token)
             self._notice.setVisible(True)
         # Every badge is stale now, whether the project moved or was only fetched.
-        self._start_scan("")
+        self._start_scan(scan_key)
 
     def _do_push(self) -> None:
         """
