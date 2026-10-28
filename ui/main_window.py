@@ -25,6 +25,7 @@ from PySide6.QtCore import QByteArray, QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
@@ -76,6 +77,7 @@ from gitops.runner import GitResult, repository_root
 from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
 from services import (
+    divergence as divergence_mod,
     git_credentials,
     github_discovery,
     github_rename,
@@ -96,6 +98,7 @@ from ui.commit_files_dialog import CommitFilesDialog, ViewOptions
 from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
 from ui.discover_dialog import DiscoverDialog
+from ui.divergence_dialog import DivergenceDialog
 from ui.github_dialogs import CreateRepositoryDialog
 from ui.github_discover_dialog import GitHubDiscoverDialog
 from ui.github_lists import GitHubContext
@@ -195,6 +198,10 @@ class MainWindow(QMainWindow):
         self._hunk_selection: dict[str, set[str]] = {}
         self._update_info: updater.UpdateInfo | None = None
         self._restart_after_update = False
+        # Last diverged project the user dismissed without fixing: key plus the
+        # ahead/behind counts at that moment. Reloads must not reopen the same
+        # dialog; selecting the project again, or a changed count, may.
+        self._divergence_dismissed: tuple[str, int, int] | None = None
 
         self.setWindowTitle(APP_NAME)
         self.resize(1360, 860)
@@ -634,10 +641,17 @@ class MainWindow(QMainWindow):
         """
 
         previous = self._entry
-        if previous is None or previous.key != entry.key:
+        switching = previous is None or previous.key != entry.key
+        if switching:
             if previous is not None:
                 self._stash_draft(previous.key)
             self._changes.set_draft(self._drafts.get(entry.key, CommitDraft(summary="")))
+            # Selecting the project again is allowed to re-offer a dismissed fix.
+            if (
+                self._divergence_dismissed is not None
+                and self._divergence_dismissed[0] == entry.key
+            ):
+                self._divergence_dismissed = None
         self._entry = entry
         self._registry.touch(entry)
         self._settings.last_repo = str(entry.path)
@@ -655,6 +669,7 @@ class MainWindow(QMainWindow):
         # The panels above read the working tree; this brings the badges and the
         # server's answer up to date as well.
         self._schedule_current_scan()
+        self._offer_divergence_fix()
 
     def _stash_draft(self, key: str) -> None:
         """
@@ -2373,6 +2388,100 @@ class MainWindow(QMainWindow):
             return
         self._reload_current()
         self._start_scan(entry.key)
+
+    # ------------------------------------------------------------------ divergence
+
+    def _offer_divergence_fix(self) -> None:
+        """
+        Opens the fix dialog when this project and the server each moved.
+
+        Called after activating a project. Cancel remembers the counts so a
+        plain reload does not ask again; selecting the project anew clears that.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        state = self._state
+        if entry is None or state is None or not divergence_mod.should_offer(state):
+            return
+        signature = (entry.key, state.ahead, state.behind)
+        if self._divergence_dismissed == signature:
+            return
+
+        dialog = DivergenceDialog(
+            entry.name,
+            state.ahead,
+            state.behind,
+            dirty=not state.is_clean,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            self._divergence_dismissed = signature
+            return
+        mode = dialog.chosen_mode
+        if not mode:
+            self._divergence_dismissed = signature
+            return
+        self._divergence_dismissed = None
+        self._apply_divergence_fix(mode)
+
+    def _apply_divergence_fix(self, mode: str) -> None:
+        """
+        Runs the chosen divergence fix and refreshes the panels.
+
+        Args:
+            mode: ``MODE_REBASE_PUSH`` or ``MODE_MERGE_PUSH``.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        self.statusBar().showMessage(i18n.t("sync.working"))
+        outcome = divergence_mod.resolve(
+            entry.path,
+            mode,
+            credentials=self._credentials(entry),
+        )
+        self.statusBar().clearMessage()
+
+        if outcome.blocked_key:
+            self._reload_current()
+            detail = (
+                "divergence.dirty_hint"
+                if outcome.blocked_key == divergence_mod.BLOCKED_DIRTY
+                else ""
+            )
+            self._show_notice(outcome.blocked_key, detail, "warning")
+            return
+        if outcome.needs_conflict_assistant:
+            self._reload_current()
+            self._open_conflict_assistant()
+            return
+        if not outcome.ok:
+            self._reload_current()
+            failed = outcome.failed_step
+            if failed is None:
+                return
+            hints = {
+                "sync.push_rejected": "sync.push_rejected_hint",
+                "sync.no_upstream": "sync.no_upstream_hint",
+                "sync.detached": "sync.detached_hint",
+            }
+            key = failed.error_key()
+            if key in hints:
+                self._show_notice(key, hints[key], "warning")
+            else:
+                self._report_sync(failed, entry)
+            return
+
+        self._reload_current()
+        self._start_scan(entry.key)
+        self.statusBar().showMessage(i18n.t("divergence.done"), 4000)
 
     # ------------------------------------------------------------------ conflicts
 
