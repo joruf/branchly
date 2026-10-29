@@ -246,7 +246,7 @@ By hand it still works like this:
 - **Check this project now** in the right-click menu
 - **Update this project** in the right-click menu does what *Update all projects*
   does, for that one project only: the same window, the same rules
-- **Automatically** in Settings → Automatic check: off, 5, 15, 30, 60 or 120
+- **Automatically** in Settings → Automatic check: off, 5, 10, 15, 30, 60 or 120
   minutes
 
 The online check only asks the server which versions it has. It downloads nothing
@@ -467,7 +467,8 @@ all, opens a menu for the project as a whole:
 
 The same window also opens from the menu **Repository → Edit .gitignore…**, always
 for the project selected on the left. With none selected, the entry is greyed
-out.
+out. Right-click a project in the list on the left and **Edit .gitignore…** opens
+it for that project, selected or not.
 
 The window shows `.gitignore` as text, one pattern per line. Comments, blank
 lines and the order stay exactly as you type them, and a file written with

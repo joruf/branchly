@@ -271,6 +271,46 @@ class UpdateOneProjectTests(unittest.TestCase):
 
             self.assertEqual([first.key], asked)
 
+    def test_the_menu_offers_the_gitignore_of_that_project(self) -> None:
+        with temp_repo() as one, temp_repo() as two:
+            window = self._window()
+            _o, first = window._registry.add(one.root)
+            window._registry.add(two.root)
+            asked: list[str] = []
+            window._sidebar.gitignore_requested.disconnect(window._edit_gitignore_of)
+            window._sidebar.gitignore_requested.connect(asked.append)
+
+            menu = window._sidebar.repo_menu(first.key)
+            ignore = next(a for a in menu.actions() if a.text() == i18n.t("gitignore.menu"))
+            self.assertTrue(ignore.isEnabled())
+            ignore.trigger()
+
+            self.assertEqual([first.key], asked)
+
+    def test_every_ten_minutes_checks_all_projects_and_off_stops_it(self) -> None:
+        from ui.main_window import MainWindow
+
+        os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="branchly-test-")
+        window = MainWindow(AppSettings(auto_check_minutes=10, github_enabled=False, language="en"))
+        self.addCleanup(window.close)
+        scanned: list[str] = []
+        window._start_scan = scanned.append
+
+        self.assertTrue(window._scheduler.is_active)
+        self.assertEqual(10 * 60_000, window._scheduler._timer.interval())
+        window._scheduler.due.emit()
+        self.assertEqual([""], scanned)
+
+        window._scheduler.configure(0)
+        self.assertFalse(window._scheduler.is_active)
+
+    def test_the_title_carries_the_version(self) -> None:
+        from constants import APP_NAME, APP_TITLE
+
+        window = self._window()
+        self.assertEqual(APP_TITLE, window.windowTitle())
+        self.assertTrue(APP_TITLE.startswith(APP_NAME))
+
     def test_the_run_covers_one_project_and_rescans_it(self) -> None:
         import ui.main_window as module
         from services.puller import RESULT_CURRENT, PullResult

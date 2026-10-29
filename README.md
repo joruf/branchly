@@ -28,7 +28,7 @@ something new", locally *and* on the server.
   onto Branchly, and what you see is what is on disk. Switching project refreshes
   that one too. Both are rate limited, so alt-tabbing does not mean a round of
   `git status` per keystroke
-- A background check on a configurable interval (off, 5, 15, 30, 60, 120 minutes)
+- A background check on a configurable interval (off, 5, 10, 15, 30, 60, 120 minutes; 10 by default)
 - Manual check for one project or for all of them, with progress
 - The online check uses `git ls-remote`, which asks the server a question and
   changes nothing locally, so a background check can never move your refs

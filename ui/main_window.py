@@ -57,6 +57,7 @@ from constants import (
     APP_COMPANY,
     APP_COMPANY_URL,
     APP_NAME,
+    APP_TITLE,
     APP_VERSION_LABEL,
 )
 from github_api import token as token_store
@@ -203,7 +204,7 @@ class MainWindow(QMainWindow):
         # dialog; selecting the project again, or a changed count, may.
         self._divergence_dismissed: tuple[str, int, int] | None = None
 
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle(APP_TITLE)
         self.resize(1360, 860)
 
         self._build_ui()
@@ -510,6 +511,7 @@ class MainWindow(QMainWindow):
         self._sidebar.check_requested.connect(self._start_scan)
         self._sidebar.pull_all_requested.connect(self._pull_all)
         self._sidebar.update_requested.connect(self._update_one)
+        self._sidebar.gitignore_requested.connect(self._edit_gitignore_of)
         self._sidebar.add_requested.connect(self._prompt_add_repo)
         self._sidebar.clone_requested.connect(self._open_clone_dialog)
         self._sidebar.registry_changed.connect(self._save_registry)
@@ -1329,13 +1331,27 @@ class MainWindow(QMainWindow):
 
     def _edit_gitignore(self) -> None:
         """
-        Opens the project's .gitignore for editing.
+        Opens the current project's .gitignore for editing.
 
         Returns:
             None
         """
 
-        entry = self._entry
+        if self._entry is not None:
+            self._edit_gitignore_of(self._entry.key)
+
+    def _edit_gitignore_of(self, key: str) -> None:
+        """
+        Opens one project's .gitignore for editing, selected or not.
+
+        Args:
+            key: Registry key of the project.
+
+        Returns:
+            None
+        """
+
+        entry = self._find(key)
         if entry is None or not entry.exists:
             return
         dialog = GitignoreDialog(Path(entry.path), self)
@@ -1344,7 +1360,8 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage(i18n.t("gitignore.saved"), 4000)
         # What is ignored changes what the list shows, so it is read again.
-        self._reload_current()
+        if self._entry is entry:
+            self._reload_current()
         self._start_scan(entry.key)
 
     def _add_to_gitignore(self, pattern: str) -> None:
