@@ -253,7 +253,7 @@ Von Hand geht es weiterhin so:
 - **Dieses Projekt aktualisieren** im Rechtsklickmenü macht, was *Alle Projekte
   aktualisieren* macht, nur für dieses eine Projekt: dasselbe Fenster, dieselben
   Regeln
-- **Automatisch** in Einstellungen → Automatische Prüfung: aus, 5, 15, 30, 60
+- **Automatisch** in Einstellungen → Automatische Prüfung: aus, 5, 10, 15, 30, 60
   oder 120 Minuten
 
 Die Online-Prüfung fragt den Server nur, welche Stände er hat. Sie lädt nichts
@@ -483,7 +483,9 @@ gar keine Änderungen hat, öffnet ein Menü für das Projekt als Ganzes:
 
 Dasselbe Fenster öffnet auch das Menü **Projekt → .gitignore bearbeiten…**, immer
 für das links ausgewählte Projekt. Ist keines ausgewählt, ist der Eintrag
-ausgegraut.
+ausgegraut. Ein Rechtsklick auf ein Projekt in der Liste links zeigt außerdem
+**.gitignore bearbeiten…**, und das öffnet sie für genau dieses Projekt, ob
+ausgewählt oder nicht.
 
 Im Fenster steht die `.gitignore` als Text, ein Muster pro Zeile. Kommentare,
 Leerzeilen und die Reihenfolge bleiben genau so, wie du sie schreibst, und eine

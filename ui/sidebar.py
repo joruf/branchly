@@ -221,6 +221,8 @@ class Sidebar(QWidget):
             server's version.
         update_requested: Emitted with a registry key when only that project
             should be brought up to the server's version.
+        gitignore_requested: Emitted with a registry key when that project's
+            .gitignore should be edited.
         add_requested: Emitted when the user wants to add an existing project.
         clone_requested: Emitted when the user wants to clone one.
         registry_changed: Emitted whenever the registry was modified and needs
@@ -237,6 +239,7 @@ class Sidebar(QWidget):
     check_requested = Signal(str)
     pull_all_requested = Signal()
     update_requested = Signal(str)
+    gitignore_requested = Signal(str)
     add_requested = Signal()
     clone_requested = Signal()
     registry_changed = Signal()
@@ -891,6 +894,11 @@ class Sidebar(QWidget):
         update.setEnabled(entry.exists)
         menu.addSeparator()
         menu.addAction(i18n.t("repo.open_folder"), lambda: self.open_folder_requested.emit(key))
+        ignore = menu.addAction(
+            i18n.t("gitignore.menu"), lambda: self.gitignore_requested.emit(key)
+        )
+        ignore.setToolTip(i18n.t("tip.gitignore_menu"))
+        ignore.setEnabled(entry.exists)
         remote_action = menu.addAction(
             i18n.t("repo.open_remote"), lambda: self.open_remote_requested.emit(key)
         )

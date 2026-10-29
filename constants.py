@@ -12,6 +12,14 @@ APP_SLUG = "branchly"
 # three numbers come about, and .githooks/post-commit for when they are written.
 APP_VERSION = _version.name()
 APP_VERSION_LABEL = _version.current().label
+# What the window title carries: the number and the build, without the hash and
+# the date that the About box adds. An unknown version leaves the name alone
+# rather than showing a made-up number.
+APP_TITLE = (
+    f"{APP_NAME} {APP_VERSION} ({_version.current().build})"
+    if _version.current().is_known and _version.current().build
+    else f"{APP_NAME} {APP_VERSION}" if _version.current().is_known else APP_NAME
+)
 # The build number alone: the single-file executable's updater compares it with
 # the build number in the tag of the newest release.
 APP_BUILD = int(_version.current().build) if _version.current().build.isdigit() else 0

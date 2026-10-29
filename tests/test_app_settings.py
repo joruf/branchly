@@ -56,6 +56,11 @@ class NormalizationTests(unittest.TestCase):
         for preset in AUTO_CHECK_PRESETS:
             self.assertEqual(preset, normalize_auto_check_minutes(preset))
 
+    def test_ten_minutes_is_offered_and_is_the_default(self) -> None:
+        self.assertIn(10, AUTO_CHECK_PRESETS)
+        self.assertIn(0, AUTO_CHECK_PRESETS)
+        self.assertEqual(10, DEFAULT_AUTO_CHECK_MINUTES)
+
     def test_update_hours_zero_checks_on_every_start(self) -> None:
         self.assertEqual(0, normalize_update_check_hours(0))
         self.assertEqual(0, normalize_update_check_hours(-3))

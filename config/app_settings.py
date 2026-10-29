@@ -28,8 +28,8 @@ DEFAULT_LANGUAGE = "en"
 
 # Presets offered in the settings dialog. Any integer in range is accepted, so a
 # hand-edited config keeps working; 0 disables the automatic check entirely.
-AUTO_CHECK_PRESETS: tuple[int, ...] = (0, 5, 15, 30, 60, 120)
-DEFAULT_AUTO_CHECK_MINUTES = 15
+AUTO_CHECK_PRESETS: tuple[int, ...] = (0, 5, 10, 15, 30, 60, 120)
+DEFAULT_AUTO_CHECK_MINUTES = 10
 MAX_AUTO_CHECK_MINUTES = 1440
 
 # How often the startup update check may contact GitHub. Not offered in the
