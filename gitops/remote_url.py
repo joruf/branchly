@@ -46,6 +46,16 @@ _HOST_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(?::\d{1,5})?$")
 
 MAX_URL_LENGTH = 2048
 
+# Servers whose addresses are known to end in ``owner/project.git``. Only for
+# these is a missing ``.git`` filled in: elsewhere the form of an address is not
+# ours to guess, and a wrong guess is a clone that fails for no visible reason.
+_GIT_SUFFIX_HOSTS = frozenset({"github.com", "gitlab.com", "bitbucket.org", "codeberg.org"})
+
+# ``host.tld/path`` with no scheme, the way an address looks when it is copied out
+# of a browser's address bar or typed from memory. The dot is required so that a
+# plain relative path is never mistaken for a host.
+_BARE_ADDRESS = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)+(?::\d{1,5})?/\S+$")
+
 REASON_OK = "ok"
 REASON_EMPTY = "empty"
 REASON_TOO_LONG = "too_long"
@@ -169,6 +179,66 @@ def is_suspicious(url: str) -> bool:
     """
 
     return classify(url) in SUSPICIOUS_REASONS
+
+
+def completed(url: str) -> str:
+    """
+    Fills in the parts of an address that were left out.
+
+    ``github.com/user/project`` becomes ``https://github.com/user/project.git``:
+    the scheme is added to an address that starts with a host, and ``.git`` is
+    added to a project on one of the well-known servers. Anything that already is
+    a usable address is only given the ``.git`` where that applies, and anything
+    that cannot become one is returned as it was, so the usual refusal and its
+    explanation still happen. Nothing that ``classify`` refuses is ever turned
+    into something it accepts: only an address of unknown form is completed, and
+    the result has to pass ``classify`` again.
+
+    Args:
+        url: Address as typed.
+
+    Returns:
+        str: The completed address, or the input unchanged.
+    """
+
+    if not isinstance(url, str):
+        return url
+    raw = url.strip()
+    reason = classify(raw)
+    if reason == REASON_UNKNOWN_FORM and _BARE_ADDRESS.match(raw):
+        candidate = f"https://{raw}"
+        if classify(candidate) == REASON_OK:
+            return _with_git_suffix(candidate)
+        return raw
+    if reason == REASON_OK:
+        return _with_git_suffix(raw)
+    return raw
+
+
+def _with_git_suffix(url: str) -> str:
+    """
+    Adds ``.git`` to ``https://host/owner/project`` on a well-known server.
+
+    Args:
+        url: A usable address.
+
+    Returns:
+        str: The address with ``.git``, or unchanged when it is not of that form.
+    """
+
+    lowered = url.lower()
+    if not (lowered.startswith("https://") or lowered.startswith("http://")):
+        return url
+    rest = url.split("://", 1)[1].rstrip("/")
+    host, _, path = rest.partition("/")
+    if host.lower() not in _GIT_SUFFIX_HOSTS:
+        return url
+    parts = path.split("/")
+    if len(parts) != 2 or not all(_SLUG_PART.match(part) for part in parts):
+        return url
+    if parts[1].lower().endswith(".git"):
+        return f"{url.split('://', 1)[0]}://{rest}"
+    return f"{url.split('://', 1)[0]}://{rest}.git"
 
 
 def normalized(url: str) -> str:

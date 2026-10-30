@@ -57,6 +57,12 @@ diesen Fällen, was fehlt.
   Unterordner mit dem Namen des Projekts) oder das Repository direkt hineinkommt
   (ohne Haken, so ist es vorbelegt).
 
+Die Adresse darf kurz sein: `github.com/nutzer/projekt` wird beim Verlassen des
+Feldes zu `https://github.com/nutzer/projekt.git` ergänzt. Das `https://` kommt
+vor jede Adresse, die mit einem Servernamen beginnt, das `.git` an Projekte auf
+GitHub, GitLab, Bitbucket und Codeberg. Bei anderen Servern wird kein `.git`
+geraten.
+
 Beim Hinzufügen prüft Branchly die Adresse, während du tippst:
 
 | Meldung | Bedeutung |

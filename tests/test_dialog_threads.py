@@ -207,6 +207,19 @@ class CloneTests(unittest.TestCase):
             self.assertEqual([i18n.t("clone.nonempty_is_repo")], shown)
             self.assertIsNone(dialog._thread)
 
+    def test_a_bare_address_is_completed_and_accepted(self) -> None:
+        from ui.clone_dialog import CloneDialog
+
+        dialog = CloneDialog([], "")
+        self.addCleanup(dialog.deleteLater)
+        dialog._parent_dir.setText(tempfile.gettempdir())
+        dialog._url.setText("github.com/joruf/offerscheck")
+
+        self.assertEqual("offerscheck", dialog._folder.text())
+        self.assertTrue(dialog._start_button.isEnabled())
+        dialog._url.editingFinished.emit()
+        self.assertEqual("https://github.com/joruf/offerscheck.git", dialog._url.text())
+
     def test_an_address_given_up_front_suggests_the_folder(self) -> None:
         # The address used to be filled in before the folder field existed, so
         # the suggestion failed with an AttributeError and the field stayed empty.

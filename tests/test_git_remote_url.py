@@ -21,6 +21,7 @@ from gitops.remote_url import (
     REASON_TOO_LONG,
     REASON_UNKNOWN_FORM,
     classify,
+    completed,
     github_slug,
     is_suspicious,
     is_valid,
@@ -195,6 +196,57 @@ class AllowedSchemeTests(unittest.TestCase):
         for scheme in remote_url.ALLOWED_SCHEMES:
             self.assertIn(scheme, samples, f"no sample for {scheme}")
             self.assertEqual(REASON_OK, classify(samples[scheme]), scheme)
+
+
+class CompletionTests(unittest.TestCase):
+    def test_a_bare_address_gets_its_scheme_and_git_suffix(self) -> None:
+        self.assertEqual(
+            "https://github.com/joruf/offerscheck.git", completed("github.com/joruf/offerscheck")
+        )
+        self.assertEqual(
+            "https://gitlab.com/group/tool.git", completed("  gitlab.com/group/tool/  ")
+        )
+
+    def test_a_missing_git_suffix_is_added_to_a_full_address(self) -> None:
+        self.assertEqual(
+            "https://github.com/joruf/offerscheck.git",
+            completed("https://github.com/joruf/offerscheck"),
+        )
+
+    def test_complete_addresses_stay_as_they_are(self) -> None:
+        for address in (
+            "https://github.com/joruf/offerscheck.git",
+            "git@github.com:joruf/offerscheck.git",
+            "ssh://git@host.example/srv/repo",
+            "file:///srv/repo.git",
+            "/srv/repo.git",
+        ):
+            with self.subTest(address=address):
+                self.assertEqual(address, completed(address))
+
+    def test_an_unknown_server_gets_the_scheme_but_not_a_guessed_suffix(self) -> None:
+        self.assertEqual("https://git.example.org/team/app", completed("git.example.org/team/app"))
+        self.assertEqual(
+            "https://dev.azure.com/org/proj/_git/repo", completed("dev.azure.com/org/proj/_git/repo")
+        )
+
+    def test_other_paths_of_a_known_server_are_not_touched(self) -> None:
+        self.assertEqual("https://github.com/joruf", completed("https://github.com/joruf"))
+        self.assertEqual(
+            "https://github.com/joruf/app/tree/main", completed("https://github.com/joruf/app/tree/main")
+        )
+
+    def test_nothing_refused_becomes_acceptable(self) -> None:
+        for address in ("ext::sh -c evil", "-oProxyCommand=x", "github.com/a/b\revil", "no-dot/path"):
+            with self.subTest(address=address):
+                self.assertNotEqual(REASON_OK, classify(completed(address)))
+
+    def test_plain_words_and_empty_input_are_returned_unchanged(self) -> None:
+        self.assertEqual("", completed(""))
+        self.assertEqual("offerscheck", completed("offerscheck"))
+
+    def test_a_completed_address_names_its_folder(self) -> None:
+        self.assertEqual("offerscheck", suggested_directory_name(completed("github.com/joruf/offerscheck")))
 
 
 if __name__ == "__main__":
