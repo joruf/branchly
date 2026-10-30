@@ -149,6 +149,9 @@ class CloneDialog(QDialog):
         self._url.setToolTip(i18n.t("tip.clone_url"))
         self._url.setPlaceholderText(i18n.t("clone.url_placeholder"))
         self._url.textChanged.connect(self._on_url_changed)
+        # The completed form is written into the field once the user is done
+        # typing, so what is cloned is what the field says.
+        self._url.editingFinished.connect(self._complete_url)
         url_layout.addWidget(self._url, 1)
         self._pick_remote = QPushButton(i18n.t("clone.from_github"), url_row)
         self._pick_remote.setToolTip(i18n.t("tip.clone_from_github"))
@@ -343,12 +346,25 @@ class CloneDialog(QDialog):
             None
         """
 
-        suggestion = remote_url.suggested_directory_name(text)
+        suggestion = remote_url.suggested_directory_name(remote_url.completed(text))
         if suggestion and not self._folder.isModified():
             self._folder.blockSignals(True)
             self._folder.setText(suggestion)
             self._folder.blockSignals(False)
         self._revalidate()
+
+    def _complete_url(self) -> None:
+        """
+        Writes the completed address into the field.
+
+        Returns:
+            None
+        """
+
+        typed = self._url.text()
+        completed = remote_url.completed(typed)
+        if completed != typed.strip():
+            self._url.setText(completed)
 
     def _revalidate(self) -> None:
         """
@@ -358,7 +374,7 @@ class CloneDialog(QDialog):
             None
         """
 
-        url_text = self._url.text().strip()
+        url_text = remote_url.completed(self._url.text())
         if not url_text:
             self._notice.setVisible(False)
             self._start_button.setEnabled(False)

@@ -56,6 +56,12 @@ In those cases the tooltip says what is missing.
   own (ticked: a subfolder named like the project is created in it) or the
   repository goes straight into it (unticked, which is how it starts).
 
+An address may be short: `github.com/user/project` is completed to
+`https://github.com/user/project.git` when you leave the field. The `https://`
+is added to any address that starts with a host name, and the `.git` to
+projects on GitHub, GitLab, Bitbucket and Codeberg. Other servers get no `.git`
+guessed.
+
 While you type an address, Branchly checks it:
 
 | Message | Meaning |

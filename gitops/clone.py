@@ -153,7 +153,7 @@ def prepare(
             usable folder name could be determined.
     """
 
-    clean_url = remote_url.normalized(url)
+    clean_url = remote_url.normalized(remote_url.completed(url))
     if not clean_url:
         return None
     if not create_folder:
