@@ -282,6 +282,24 @@ class MainWindowSmokeTests(unittest.TestCase):
                 finally:
                     window.close()
 
+    def test_the_graph_header_stays_one_row_however_narrow_the_panel_is(self) -> None:
+        # The explanation used to sit inside the header's row of controls, got a
+        # sliver of width there, and wrapped into a column that made the header
+        # as tall as the sentence was long.
+        from ui.graph_view import GraphView
+
+        view = GraphView()
+        self.addCleanup(view.deleteLater)
+        header = view.layout().itemAt(0).widget()
+        for width in (900, 500, 320):
+            with self.subTest(width=width):
+                view.resize(width, 400)
+                view.show()
+                self.app.processEvents()
+                self.assertLess(header.height(), 70)
+                self.assertGreaterEqual(view._legend.y(), header.geometry().bottom())
+                self.assertLess(view._legend.height(), 90)
+
     def test_commit_flow_creates_a_commit(self) -> None:
         import tempfile
 
