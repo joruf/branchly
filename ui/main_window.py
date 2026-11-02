@@ -2932,9 +2932,19 @@ class MainWindow(QMainWindow):
             entries = [item for item in entries if item.key == key]
         if not entries:
             return False
-        return self._scans.start(
+        started = self._scans.start(
             scanner.build_requests(entries, self._settings.check_online_automatically)
         )
+        if not started and self._scans.is_running:
+            # A request made while another batch runs is kept, not dropped: the
+            # batch running may have read the project before what the caller just
+            # did to it. After "Save and upload" the scan begun by the save was
+            # still running when the upload ended, so the refresh the upload asked
+            # for was refused and the project kept showing the commit as waiting.
+            # An empty key means every project, and covers any single one.
+            if self._pending_scan_key != "":
+                self._pending_scan_key = key
+        return started
 
     def _schedule_current_scan(self) -> None:
         """
@@ -3018,9 +3028,9 @@ class MainWindow(QMainWindow):
 
         key = self._pending_scan_key
         self._pending_scan_key = None
-        if self._closing:
+        if self._closing or key is None:
             return
-        if key and self._find(key) is not None:
+        if not key or self._find(key) is not None:
             self._start_scan(key)
 
     def _on_scan_batch_finished(self) -> None:
