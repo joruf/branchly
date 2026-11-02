@@ -169,9 +169,11 @@ fehlt.
 
 Wurde der Ordner eines Projekts verschoben oder umbenannt, steht sein Name rot in der
 Liste und oben erscheint „Ordner nicht mehr gefunden". Ein Rechtsklick auf das
-Projekt bietet dann als ersten Eintrag **Pfad anpassen…** an. Die Auswahl öffnet
-im nächsten Ordner, den es noch gibt, und du zeigst auf den neuen Ort. Ein
-Unterordner genügt, Branchly findet den obersten Ordner selbst.
+Projekt bietet dann als ersten Eintrag **Ordner und Online-Repository…** an.
+Dessen Knopf *Durchsuchen…* öffnet im nächsten Ordner, den es noch gibt, und du
+zeigst auf den neuen Ort. Ein Unterordner genügt, Branchly findet den obersten
+Ordner selbst. Derselbe Eintrag steht im Menü jedes Projekts, dessen Ordner nicht
+fehlt, für einen Ordner, den du absichtlich verlegt hast.
 
 Erhalten bleiben Kategorie, Sternchen, eigene Reihenfolge, die abgewählten Dateien
 und ein selbst vergebener Name. Hieß das Projekt nur wie sein alter Ordner,
@@ -179,9 +181,9 @@ bekommt es den Namen des neuen. Branchly prüft die Wahl:
 
 | Fall | Was passiert |
 |---|---|
-| Dort liegt kein Git-Projekt | Hinweis, nichts ändert sich |
-| Der Ordner steht schon in der Liste | Hinweis mit dem Namen des anderen Eintrags |
-| Das gewählte Projekt hat eine andere Server-Adresse | Rückfrage, denn es ist vielleicht ein anderes Projekt |
+| Dort liegt kein Git-Projekt | Das Fenster sagt es, und *Übernehmen* bleibt aus |
+| Der Ordner steht schon in der Liste | Hinweis mit dem Namen des anderen Eintrags, nichts ändert sich |
+| Das gewählte Projekt hat eine Server-Adresse | Sie wird sofort ins Adressfeld eingetragen, du siehst also, wohin das Projekt zeigen wird |
 
 ### Sternchen und Sortierung
 
@@ -791,11 +793,23 @@ Erst ein Klick auf **Zurücksetzen** führt das aus. Voreingestellt ist
 *Abbrechen*, damit eine versehentliche Eingabetaste keine Arbeit vernichtet.
 Danach lässt sich hiervon nichts wiederherstellen, auch nicht über Git.
 
-### Ein Projekt mit einem Online-Repository verbinden
+### Ordner und Online-Repository eines Projekts
 
-Liegt ein Projekt bisher nur auf deinem Rechner, steht im Rechtsklickmenü der
-Projektliste **Mit Online-Repository verbinden**. Hat es schon eine Adresse,
-heißt der Eintrag stattdessen *Online-Repository ändern*.
+Ein Eintrag im Rechtsklickmenü der Projektliste, **Ordner und
+Online-Repository…**, öffnet ein Fenster dafür, wo das Projekt liegt: der Ordner
+auf diesem Rechner und die Adresse seines Online-Repositorys. Ändere eines davon
+oder beides. Ein Projekt, das bisher nur auf deinem Rechner liegt, bekommt hier
+auch seine erste Adresse.
+
+Das Rechtsklickmenü ist nach dem Thema der Einträge geordnet, jede Gruppe durch
+eine Linie getrennt:
+
+| Gruppe | Einträge |
+|---|---|
+| Täglich | Nach oben anpinnen, Dieses Projekt jetzt prüfen, Dieses Projekt aktualisieren |
+| Öffnen | Ordner öffnen, Auf dem Server öffnen, .gitignore bearbeiten… |
+| Das Projekt selbst | Ordner und Online-Repository…, Umbenennen, In Kategorie verschieben |
+| Wegnehmen | Alle Änderungen zurücksetzen…, Entfernen |
 
 ![Beide Seiten haben eine eigene Historie](screenshots/de/link-remote-dark.png)
 
@@ -827,8 +841,9 @@ würde eine der beiden Historien wegwerfen. Deshalb hast du zwei Möglichkeiten:
 
 ### Serveradresse ändern
 
-*Branch → Serveradresse ändern* setzt, wohin `origin` zeigt. Hat das Projekt noch
-gar keinen Server, wird er damit angelegt.
+*Branch → Ordner und Online-Repository…* öffnet für das ausgewählte Projekt
+dasselbe Fenster wie das Rechtsklickmenü des Projekts. Es setzt, wohin `origin`
+zeigt. Hat das Projekt noch gar keinen Server, wird er damit angelegt.
 
 ### Server überschreiben
 

@@ -18,6 +18,12 @@ what comes back decides what the user is asked:
 * **Not reachable.** Possibly a repository that does not exist yet, which is a
   perfectly normal thing to prepare for, so connecting stays possible and is
   labelled as the guess it is.
+
+Given a folder, the same window also says where the project lives on this
+computer. The two belong together: a project moved to another folder is
+often a project whose server changed too, and picking a folder that already has
+a server fills that address in, so both are settled in one place and what the
+server answers is about the folder that is actually chosen.
 """
 
 from __future__ import annotations
@@ -30,6 +36,8 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -39,7 +47,9 @@ from PySide6.QtWidgets import (
 )
 
 import i18n
+from gitops.runner import repository_root
 from services import remote_link
+from services.discovery import read_origin_url, resolve_git_dir
 from ui.widgets import InlineMessage
 
 # What to do once the address is set.
@@ -94,6 +104,7 @@ class LinkRemoteDialog(QDialog):
         current_url: str = "",
         credentials: Callable[[], dict[str, str]] | None = None,
         parent: QWidget | None = None,
+        folder: Path | None = None,
     ) -> None:
         """
         Args:
@@ -103,6 +114,9 @@ class LinkRemoteDialog(QDialog):
             current_url: Address the project has now, empty when it has none.
             credentials: Callable returning the login for the server.
             parent: Parent widget.
+            folder: The project's folder as the project has it now. Given, the
+                window also lets the folder be changed, and says so in its
+                title. Left out, only the address is asked for.
         """
 
         super().__init__(parent)
@@ -110,22 +124,33 @@ class LinkRemoteDialog(QDialog):
         self._credentials = credentials or dict
         self._check: remote_link.LinkCheck | None = None
         self._thread: QThread | None = None
+        self._original_folder = folder
+        self._original_url = current_url
+        self._url_typed = False
+        # The folder row's field, when there is one.
+        self._folder_edit: QLineEdit | None = None
 
-        self.setWindowTitle(i18n.t("link.title"))
+        self.setWindowTitle(i18n.t("link.title_both" if folder is not None else "link.title"))
         self.setMinimumWidth(520)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        intro = QLabel(i18n.t("link.intro", name=name), self)
+        intro = QLabel(
+            i18n.t("link.intro_both" if folder is not None else "link.intro", name=name), self
+        )
         intro.setWordWrap(True)
         intro.setObjectName("Muted")
         layout.addWidget(intro)
 
-        if current_url:
+        if folder is not None:
+            layout.addWidget(self._build_folder_row(folder))
+
+        if current_url and folder is None:
             # Not destructive, but a decision, and the old address belongs on
-            # screen while it is made.
+            # screen while it is made. With a folder in play the address is in
+            # the field itself, with nothing yet replaced.
             replaced = QLabel(i18n.t("link.replaces", url=current_url), self)
             replaced.setWordWrap(True)
             replaced.setObjectName("Muted")
@@ -135,6 +160,7 @@ class LinkRemoteDialog(QDialog):
         self._url.setPlaceholderText(i18n.t("link.placeholder"))
         self._url.setToolTip(i18n.t("tip.link_url"))
         self._url.textChanged.connect(self._on_url_changed)
+        self._url.textEdited.connect(self._on_url_typed)
         self._url.returnPressed.connect(self._start_check)
         layout.addWidget(self._url)
 
@@ -169,7 +195,7 @@ class LinkRemoteDialog(QDialog):
         )
         ok = self._buttons.button(QDialogButtonBox.StandardButton.Ok)
         if ok is not None:
-            ok.setText(i18n.t("link.connect"))
+            ok.setText(i18n.t("link.apply" if folder is not None else "link.connect"))
             ok.setObjectName("Primary")
         cancel = self._buttons.button(QDialogButtonBox.StandardButton.Cancel)
         if cancel is not None:
@@ -179,6 +205,150 @@ class LinkRemoteDialog(QDialog):
         layout.addWidget(self._buttons)
 
         self._on_url_changed(self._url.text())
+
+    # --------------------------------------------------------------- the folder
+
+    def _build_folder_row(self, folder: Path) -> QWidget:
+        """
+        Builds the field for the project's folder, with its button.
+
+        Args:
+            folder: The folder the project has now.
+
+        Returns:
+            QWidget: The row.
+        """
+
+        row = QWidget(self)
+        box = QVBoxLayout(row)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(4)
+        box.addWidget(QLabel(i18n.t("link.folder_label"), row))
+        line = QHBoxLayout()
+        line.setSpacing(6)
+        self._folder_edit = QLineEdit(str(folder), row)
+        self._folder_edit.setToolTip(i18n.t("tip.link_folder"))
+        self._folder_edit.textChanged.connect(self._on_folder_changed)
+        browse = QPushButton(i18n.t("action.browse"), row)
+        browse.setToolTip(i18n.t("tip.clone_browse"))
+        browse.clicked.connect(self._pick_folder)
+        line.addWidget(self._folder_edit, 1)
+        line.addWidget(browse)
+        box.addLayout(line)
+        return row
+
+    @property
+    def folder(self) -> Path | None:
+        """
+        Returns the folder the user settled on.
+
+        Returns:
+            Path | None: The project's top folder, or None when this window was
+                not asked about a folder or the one typed is no project.
+        """
+
+        return self._chosen_root()
+
+    @property
+    def folder_changed(self) -> bool:
+        """
+        Reports whether the project is to live somewhere else than before.
+
+        Returns:
+            bool: True when a valid, different folder was chosen.
+        """
+
+        chosen = self._chosen_root()
+        original = self._original_folder
+        if chosen is None or original is None:
+            return False
+        return chosen.resolve() != original.resolve()
+
+    def _chosen_root(self) -> Path | None:
+        """
+        Finds the project the folder field names.
+
+        Any folder inside a project names the project, like everywhere else.
+
+        Returns:
+            Path | None: The top folder, None for no field or no project.
+        """
+
+        if self._folder_edit is None:
+            return None
+        text = self._folder_edit.text().strip()
+        if not text:
+            return None
+        candidate = Path(text).expanduser()
+        if not candidate.is_dir():
+            return None
+        return repository_root(candidate)
+
+    def _pick_folder(self) -> None:
+        """
+        Opens a folder picker, starting at the nearest folder that exists.
+
+        Returns:
+            None
+        """
+
+        if self._folder_edit is None:
+            return
+        start = Path(self._folder_edit.text().strip() or str(self._original_folder or "")).expanduser()
+        while not start.is_dir() and start.parent != start:
+            start = start.parent
+        chosen = QFileDialog.getExistingDirectory(self, i18n.t("link.folder_label"), str(start))
+        if chosen:
+            self._folder_edit.setText(chosen)
+
+    def _on_folder_changed(self, _text: str) -> None:
+        """
+        Re-reads what the folder field names.
+
+        A folder that already has a server brings its address along, unless
+        something else was typed into the address field: what is there is
+        the best guess of where the project belongs, and it is shown before it
+        is used.
+
+        Args:
+            _text: The folder as typed, unused: the field is read again.
+
+        Returns:
+            None
+        """
+
+        root = self._chosen_root()
+        if root is not None:
+            self._repo = root
+            if not self._url_typed:
+                git_dir = resolve_git_dir(root)
+                found = read_origin_url(git_dir) if git_dir is not None else ""
+                # An address typed earlier is kept when the folder has none.
+                self._url.setText(found or self._original_url)
+        self._refresh_state()
+
+    def _on_url_typed(self, _text: str) -> None:
+        """
+        Remembers that the address is the user's own words now.
+
+        Args:
+            _text: The address as typed, unused.
+
+        Returns:
+            None
+        """
+
+        self._url_typed = True
+
+    def _folder_problem(self) -> bool:
+        """
+        Reports whether the folder field holds something unusable.
+
+        Returns:
+            bool: True when there is a folder field and it names no project.
+        """
+
+        return self._folder_edit is not None and self._chosen_root() is None
 
     # ------------------------------------------------------------------ results
 
@@ -223,14 +393,38 @@ class LinkRemoteDialog(QDialog):
         self._check = None
         self._choices.setVisible(False)
         self._notice.setVisible(False)
-        usable = bool(text.strip())
-        self._check_button.setEnabled(usable and self._thread is None)
+        self._refresh_state()
+
+    def _refresh_state(self) -> None:
+        """
+        Switches the buttons to what the two fields allow.
+
+        Returns:
+            None
+        """
+
+        usable = bool(self._url.text().strip())
+        problem = self._folder_problem()
+        self._check_button.setEnabled(usable and not problem and self._thread is None)
+        if problem:
+            self._notice.set_message(
+                i18n.t("link.folder_not_repo"), i18n.t("link.folder_not_repo_hint"), "warning"
+            )
+            self._notice.setVisible(True)
+            self.adjustSize()
         ok = self._buttons.button(QDialogButtonBox.StandardButton.Ok)
-        if ok is not None:
+        if ok is None:
+            return
+        if self._folder_edit is None:
             # Connecting without asking the server is allowed, because a
             # repository that does not exist yet cannot answer. It just should
             # not be the effortless path.
             ok.setEnabled(usable)
+            return
+        # With a folder in play there is something to apply when either field
+        # changed. An empty address then means "leave the server as it is".
+        changed_url = usable and self.url != self._original_url
+        ok.setEnabled(not problem and (self.folder_changed or changed_url))
 
     def _start_check(self) -> None:
         """

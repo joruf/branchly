@@ -231,8 +231,8 @@ class Sidebar(QWidget):
         open_remote_requested: Emitted with a registry key.
         rename_requested: Emitted with a registry key.
         remove_requested: Emitted with a registry key.
-        relocate_requested: Emitted with the registry key of a project whose
-            folder is gone, to point it at where it went.
+        connection_requested: Emitted with a registry key when the project's
+            folder and online repository should be looked at together.
     """
 
     repo_selected = Signal(str)
@@ -245,11 +245,10 @@ class Sidebar(QWidget):
     registry_changed = Signal()
     open_folder_requested = Signal(str)
     open_remote_requested = Signal(str)
-    link_remote_requested = Signal(str)
     revert_all_requested = Signal(str)
     rename_requested = Signal(str)
     remove_requested = Signal(str)
-    relocate_requested = Signal(str)
+    connection_requested = Signal(str)
 
     def __init__(
         self,
@@ -875,15 +874,25 @@ class Sidebar(QWidget):
 
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
+
+        def connection_action() -> QAction:
+            action = menu.addAction(
+                i18n.t("repo.connection"), lambda: self.connection_requested.emit(key)
+            )
+            action.setToolTip(i18n.t("tip.repo_connection"))
+            return action
+
+        # The entries are grouped by what they are about, in the order somebody
+        # reaches for them: what is done with the project every day, what is
+        # opened, what the project is called and where it lives, and last what
+        # takes something away.
         if not entry.exists:
             # The one thing a project whose folder is gone needs, so it comes
-            # first and only shows up then.
-            relocate = menu.addAction(
-                i18n.t("repo.relocate"), lambda: self.relocate_requested.emit(key)
-            )
-            relocate.setToolTip(i18n.t("tip.repo_relocate"))
-            menu.setDefaultAction(relocate)
+            # first and only shows up there, not a second time further down.
+            menu.setDefaultAction(connection_action())
             menu.addSeparator()
+
+        # Every day.
         favorite = menu.addAction(
             i18n.t("repo.favorite_off" if entry.favorite else "repo.favorite_on")
         )
@@ -893,25 +902,24 @@ class Sidebar(QWidget):
         update.setToolTip(i18n.t("tip.repo_update"))
         update.setEnabled(entry.exists)
         menu.addSeparator()
+
+        # Opening.
         menu.addAction(i18n.t("repo.open_folder"), lambda: self.open_folder_requested.emit(key))
+        remote_action = menu.addAction(
+            i18n.t("repo.open_remote"), lambda: self.open_remote_requested.emit(key)
+        )
+        remote_action.setEnabled(bool(entry.remote_url))
         ignore = menu.addAction(
             i18n.t("gitignore.menu"), lambda: self.gitignore_requested.emit(key)
         )
         ignore.setToolTip(i18n.t("tip.gitignore_menu"))
         ignore.setEnabled(entry.exists)
-        remote_action = menu.addAction(
-            i18n.t("repo.open_remote"), lambda: self.open_remote_requested.emit(key)
-        )
-        remote_action.setEnabled(bool(entry.remote_url))
-        # A project with no server is the case this exists for, so it says so
-        # rather than offering the same neutral wording either way.
-        link = menu.addAction(
-            i18n.t("repo.link_remote" if not entry.remote_url else "repo.relink_remote"),
-            lambda: self.link_remote_requested.emit(key),
-        )
-        link.setToolTip(i18n.t("tip.link_remote"))
         menu.addSeparator()
 
+        # What the project is called, where it lives and where it is filed.
+        if entry.exists:
+            connection_action()
+        menu.addAction(i18n.t("action.rename"), lambda: self.rename_requested.emit(key))
         move = menu.addMenu(i18n.t("category.move_to"))
         for category in self._registry.categories:
             action = move.addAction(category.name)
@@ -926,15 +934,14 @@ class Sidebar(QWidget):
         uncategorized.triggered.connect(lambda: self._move_entry(key, ""))
         move.addSeparator()
         move.addAction(i18n.t("category.new"), lambda: self._prompt_new_category(assign_key=key))
-
-        menu.addAction(i18n.t("action.rename"), lambda: self.rename_requested.emit(key))
         menu.addSeparator()
+
+        # Taking something away.
         revert = menu.addAction(
             i18n.t("revert.menu_all"), lambda: self.revert_all_requested.emit(key)
         )
         revert.setToolTip(i18n.t("tip.revert_all"))
         revert.setEnabled(entry.exists and entry.status.is_dirty)
-        menu.addSeparator()
         remove = QAction(i18n.t("action.remove"), menu)
         remove.triggered.connect(lambda: self.remove_requested.emit(key))
         menu.addAction(remove)
