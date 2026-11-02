@@ -182,18 +182,24 @@ class GraphView(QWidget):
         layout.setSpacing(0)
 
         header = SectionHeader(i18n.t("graph.title"), self)
-        self._legend = QLabel(i18n.t("graph.legend"), header)
+        reload_button = QPushButton(i18n.t("action.refresh"), header)
+        reload_button.clicked.connect(self.reload_requested.emit)
+        header.add_widget(reload_button)
+        layout.addWidget(header)
+
+        # On a row of its own, under the header. Inside the header it was one more
+        # control in a row that wraps, so it was given whatever width the button
+        # left over, broke into a column a few words wide, and made the header
+        # as tall as the sentence was long.
+        self._legend = QLabel(i18n.t("graph.legend"), self)
         self._legend.setObjectName("Muted")
         # A sentence this long refuses to be laid out narrower than itself unless
         # it is allowed to break, and that alone set a floor under the window's
         # width.
         self._legend.setWordWrap(True)
         self._legend.setMinimumWidth(1)
-        header.add_widget(self._legend)
-        reload_button = QPushButton(i18n.t("action.refresh"), header)
-        reload_button.clicked.connect(self.reload_requested.emit)
-        header.add_widget(reload_button)
-        layout.addWidget(header)
+        self._legend.setContentsMargins(12, 4, 12, 4)
+        layout.addWidget(self._legend)
 
         self._tree = QTreeWidget(self)
         self._tree.setColumnCount(4)
