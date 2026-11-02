@@ -388,20 +388,6 @@ class WindowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_the_context_menu_offers_it_for_a_project_without_a_server(self) -> None:
-        import i18n
-        from models.repository import RepoEntry
-        from services.registry import Registry
-        from ui.sidebar import Sidebar
-
-        i18n.set_language("en")
-        sidebar = Sidebar(Registry(), "name_asc")
-        self.addCleanup(sidebar.deleteLater)
-        # The label depends on whether there is already an address, because the
-        # two cases are a different thing to be doing.
-        self.assertNotEqual(i18n.t("repo.link_remote"), i18n.t("repo.relink_remote"))
-        self.assertIsNotNone(RepoEntry)
-
     def test_connecting_records_the_address_everywhere(self) -> None:
         from config.app_settings import AppSettings
         from ui.main_window import MainWindow

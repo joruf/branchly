@@ -3,14 +3,16 @@ Tests for pointing a project at the folder it moved to.
 
 A project whose folder was moved or renamed shows as missing. Removing it and
 adding it again loses everything arranged around it, so the right-click menu
-offers to change its path instead. What has to hold:
+offers to change its folder instead, in the window that also holds the project's
+online repository. What has to hold:
 
-* **The entry is offered only when the folder is gone**, and then first.
+* **The entry is always there**, and first when the folder is gone.
 * **Everything arranged stays**: category, star, manual position, the files left
   out of the next commit, a display name the user chose. A name that was only
   the old folder's name follows the new folder.
-* **A wrong pick is caught**: a folder that is no project, one already in the
-  list, and one whose server differs, which is asked about.
+* **A wrong pick is caught**: a folder that is no project cannot be accepted, and
+  one already in the list is refused with the reason.
+* **A folder with a server brings its address along**, shown before it is used.
 """
 
 from __future__ import annotations
@@ -183,12 +185,55 @@ class WindowTests(unittest.TestCase):
         menu = window._sidebar.repo_menu(key)
         return [action.text() for action in menu.actions() if action.text()]
 
-    def test_the_entry_shows_only_for_a_missing_folder_and_then_first(self) -> None:
+    def _scripted(self, **script):  # noqa: ANN003, ANN202 - Qt at import time
+        """
+        Replaces the folder and server window by one that fills itself in.
+
+        The real window with its real rules, only without waiting for a person:
+        what is typed is applied, and "OK" counts only when the window would have
+        allowed it.
+
+        Args:
+            **script: ``folder`` and ``url`` to enter, ``accept`` to press Cancel
+                instead.
+
+        Returns:
+            list: Every window shown, so a test can look at what it offered.
+        """
+
+        import ui.main_window as module
+        from ui.link_remote_dialog import LinkRemoteDialog
+
+        shown: list = []
+
+        class Scripted(LinkRemoteDialog):
+            def exec(self) -> int:  # noqa: A003
+                shown.append(self)
+                if "folder" in script:
+                    self._folder_edit.setText(str(script["folder"]))
+                if "url" in script:
+                    self._url.setText(script["url"])
+                    self._url.textEdited.emit(script["url"])
+                ok = self._buttons.button(self._buttons.StandardButton.Ok)
+                if script.get("accept", True) and ok.isEnabled():
+                    return int(self.DialogCode.Accepted)
+                return int(self.DialogCode.Rejected)
+
+        real = module.LinkRemoteDialog
+        module.LinkRemoteDialog = Scripted
+        self.addCleanup(setattr, module, "LinkRemoteDialog", real)
+        return shown
+
+    def test_the_entry_is_always_offered_and_first_only_for_a_missing_folder(self) -> None:
         with TemporaryDirectory() as base, temp_repo() as repo:
             window, entry = self._window(Path(base), repo)
-            self.assertNotIn(i18n.t("repo.relocate"), self._entries(window, entry.key))
+            entries = self._entries(window, entry.key)
+            self.assertIn(i18n.t("repo.connection"), entries)
+            self.assertNotEqual(i18n.t("repo.connection"), entries[0])
             moved(repo, Path(base))
-            self.assertEqual(i18n.t("repo.relocate"), self._entries(window, entry.key)[0])
+            entries = self._entries(window, entry.key)
+            self.assertEqual(i18n.t("repo.connection"), entries[0])
+            self.assertEqual(1, entries.count(i18n.t("repo.connection")))
 
     def test_choosing_the_new_folder_moves_the_project(self) -> None:
         with TemporaryDirectory() as base, temp_repo() as repo:
@@ -196,53 +241,103 @@ class WindowTests(unittest.TestCase):
             window._changes.set_draft(CommitDraft("Half written"))
             old_key = entry.key
             target = moved(repo, Path(base))
-            window.choose_relocation = lambda _entry: str(target)
-            window._prompt_relocate_repo(old_key)
+            self._scripted(folder=target)
+            window._edit_connection(old_key)
             self.assertTrue(entry.exists)
             self.assertEqual(target.resolve(), entry.path.resolve())
             self.assertIs(entry, window._entry)
             self.assertEqual("Half written", window._changes.commit_draft().summary)
             self.assertNotIn(old_key, window._drafts)
 
-    def test_cancelling_the_picker_changes_nothing(self) -> None:
+    def test_cancelling_changes_nothing(self) -> None:
+        with TemporaryDirectory() as base, temp_repo() as repo:
+            window, entry = self._window(Path(base), repo)
+            before = entry.path
+            target = moved(repo, Path(base))
+            self._scripted(folder=target, accept=False)
+            window._edit_connection(entry.key)
+            self.assertEqual(before, entry.path)
+
+    def test_a_folder_that_is_no_project_cannot_be_accepted(self) -> None:
         with TemporaryDirectory() as base, temp_repo() as repo:
             window, entry = self._window(Path(base), repo)
             before = entry.path
             moved(repo, Path(base))
-            window.choose_relocation = lambda _entry: ""
-            window._prompt_relocate_repo(entry.key)
+            empty = Path(base) / "empty"
+            empty.mkdir()
+            shown = self._scripted(folder=empty)
+            window._edit_connection(entry.key)
+            ok = shown[0]._buttons.button(shown[0]._buttons.StandardButton.Ok)
+            self.assertFalse(ok.isEnabled())
             self.assertEqual(before, entry.path)
+            self.assertFalse(entry.exists)
 
-    def test_a_different_server_is_asked_about(self) -> None:
+    def test_a_folder_with_its_own_server_brings_the_address_along(self) -> None:
         with TemporaryDirectory() as base, temp_repo() as repo, temp_repo() as other:
             window, entry = self._window(Path(base), repo)
             entry.remote_url = "https://github.com/joruf/one.git"
             other.git("remote", "add", "origin", "https://github.com/joruf/two.git")
+            shown = self._scripted(folder=other.root, accept=False)
+            window._edit_connection(entry.key)
+            self.assertEqual("https://github.com/joruf/two.git", shown[0].url)
+
+    def test_an_address_typed_by_hand_is_not_overwritten_by_a_folder(self) -> None:
+        with TemporaryDirectory() as base, temp_repo() as repo, temp_repo() as other:
+            window, entry = self._window(Path(base), repo)
+            other.git("remote", "add", "origin", "https://github.com/joruf/two.git")
+            shown = self._scripted(accept=False)
+            window._edit_connection(entry.key)
+            dialog = shown[0]
+            dialog._url.setText("https://github.com/joruf/mine.git")
+            dialog._url.textEdited.emit("https://github.com/joruf/mine.git")
+            dialog._folder_edit.setText(str(other.root))
+            self.assertEqual("https://github.com/joruf/mine.git", dialog.url)
+
+    def test_a_folder_already_in_the_list_is_refused_with_the_reason(self) -> None:
+        with TemporaryDirectory() as base, temp_repo() as repo, temp_repo() as other:
+            window, entry = self._window(Path(base), repo)
+            window._registry.add(other.root)
             before = entry.path
-            moved(repo, Path(base))
-            asked: list[str] = []
-
-            def refuse(_title: str, message: str, *_rest: object, **_kw: object) -> bool:
-                asked.append(message)
-                return False
-
-            window._confirm = refuse
-            window.choose_relocation = lambda _entry: str(other.root)
-            window._prompt_relocate_repo(entry.key)
-            self.assertEqual(1, len(asked))
-            self.assertIn("two.git", asked[0])
+            self._scripted(folder=other.root)
+            window._edit_connection(entry.key)
+            self.assertEqual(i18n.t("repo.relocate_duplicate"), window._notice._title.text())
             self.assertEqual(before, entry.path)
 
-    def test_a_folder_that_is_no_project_is_explained(self) -> None:
+    def test_only_the_address_changes_when_the_folder_stays(self) -> None:
         with TemporaryDirectory() as base, temp_repo() as repo:
             window, entry = self._window(Path(base), repo)
-            moved(repo, Path(base))
-            empty = Path(base) / "empty"
-            empty.mkdir()
-            window.choose_relocation = lambda _entry: str(empty)
-            window._prompt_relocate_repo(entry.key)
-            self.assertEqual(i18n.t("repo.relocate_not_repo"), window._notice._title.text())
-            self.assertFalse(entry.exists)
+            repo.git("remote", "add", "origin", "https://github.com/joruf/old.git")
+            entry.remote_url = "https://github.com/joruf/old.git"
+            before = entry.path
+            self._scripted(url="https://github.com/joruf/new.git")
+            window._edit_connection(entry.key)
+            self.assertEqual(before, entry.path)
+            self.assertEqual("https://github.com/joruf/new.git", entry.remote_url)
+            self.assertEqual(
+                "https://github.com/joruf/new.git", repo.git("remote", "get-url", "origin").stdout.strip()
+            )
+
+    def test_folder_and_address_change_together(self) -> None:
+        with TemporaryDirectory() as base, temp_repo() as repo:
+            window, entry = self._window(Path(base), repo)
+            target = moved(repo, Path(base))
+            repo.root = target
+            self._scripted(folder=target, url="https://github.com/joruf/elsewhere.git")
+            window._edit_connection(entry.key)
+            self.assertEqual(target.resolve(), entry.path.resolve())
+            self.assertEqual("https://github.com/joruf/elsewhere.git", entry.remote_url)
+            self.assertEqual(
+                "https://github.com/joruf/elsewhere.git",
+                repo.git("remote", "get-url", "origin").stdout.strip(),
+            )
+
+    def test_nothing_changed_means_nothing_to_accept(self) -> None:
+        with TemporaryDirectory() as base, temp_repo() as repo:
+            window, entry = self._window(Path(base), repo)
+            shown = self._scripted()
+            window._edit_connection(entry.key)
+            ok = shown[0]._buttons.button(shown[0]._buttons.StandardButton.Ok)
+            self.assertFalse(ok.isEnabled())
 
 
 if __name__ == "__main__":

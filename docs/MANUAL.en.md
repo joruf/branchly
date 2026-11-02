@@ -165,9 +165,11 @@ seems to be missing.
 
 When a project's folder was moved or renamed, the project's name shows in red in
 the list and "Folder no longer found" appears at the top. Right-click the
-project and the first entry is **Change path…**. The picker opens in the nearest
-folder that still exists, and you point at the new location. A subfolder is
-fine, Branchly finds the top of the project itself.
+project and the first entry is **Folder and online repository…**. Its
+*Browse…* button opens in the nearest folder that still exists, and you point at
+the new location. A subfolder is fine, Branchly finds the top of the project
+itself. The same entry is in the menu of every project that is not missing, for
+a folder you moved on purpose.
 
 Category, star, your own order, the unticked files and a name you chose all
 stay. If the project was only called like its old folder, it takes the new
@@ -175,9 +177,9 @@ folder's name. Branchly checks the choice:
 
 | Case | What happens |
 |---|---|
-| There is no Git project there | A note, nothing changes |
-| The folder is already in the list | A note naming the other entry |
-| The chosen project has a different server address | A question, since it may be a different project |
+| There is no Git project there | The window says so and *Apply* stays off |
+| The folder is already in the list | A note naming the other entry, nothing changes |
+| The chosen project has a server address | It is filled into the address field right away, so you see where the project is going to point |
 
 ### Stars and sorting
 
@@ -762,11 +764,22 @@ Only a click on **Revert** carries it out. *Cancel* is the default, so that a
 stray Return key destroys no work. Nothing of this can be recovered afterwards,
 not through Git either.
 
-### Connecting a project to an online repository
+### The project's folder and online repository
 
-If a project has so far only been on your computer, the project list's
-right-click menu offers **Connect to an online repository**. If it already has an
-address, the entry reads *Change the online repository* instead.
+One entry in the project list's right-click menu, **Folder and online
+repository…**, opens one window for where the project lives: the folder on this
+computer and the address of its online repository. Change either, or both. A
+project that so far only exists on your computer gets its first address here too.
+
+The right-click menu is ordered by what the entries are about, each group
+separated by a line:
+
+| Group | Entries |
+|---|---|
+| Every day | Pin to top, Check this project now, Update this project |
+| Opening | Open folder, Open on the server, Edit .gitignore… |
+| The project itself | Folder and online repository…, Rename, Move to category |
+| Taking away | Revert all changes…, Remove |
 
 ![Both sides have their own history](screenshots/en/link-remote-dark.png)
 
@@ -797,8 +810,9 @@ histories away. So you have two options:
 
 ### Changing the server address
 
-*Branch → Change the server address* sets where `origin` points. If the project
-has no server at all yet, this creates one.
+*Branch → Folder and online repository…* opens the same window as the project's
+right-click menu, for the selected project. It sets where `origin` points. If the
+project has no server at all yet, this creates one.
 
 ### Overwriting the server
 

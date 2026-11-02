@@ -74,7 +74,7 @@ from gitops.commit import commit as do_commit
 from gitops.history import read_history
 from gitops.refname import suggest_branch_name
 from gitops.remote_url import github_slug
-from gitops.runner import GitResult, repository_root
+from gitops.runner import GitResult
 from gitops.status import RepositoryState, git_dir, read_state
 from models.repository import RepoEntry
 from services import (
@@ -89,7 +89,6 @@ from services import (
     updater,
 )
 from services import revert as revert_mod
-from services.discovery import read_origin_url, resolve_git_dir
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui import changes_panel as changes_panel_mod
@@ -465,7 +464,7 @@ class MainWindow(QMainWindow):
         force_action.setToolTip(i18n.t("tip.force_push"))
         force_action.triggered.connect(self._do_force_push)
         branch_menu.addAction(force_action)
-        branch_menu.addAction(i18n.t("remote.change"), self._prompt_remote_url)
+        branch_menu.addAction(i18n.t("repo.connection"), self._edit_current_connection)
         branch_menu.addSeparator()
 
         self._abort_action = QAction(i18n.t("merge.abort"), self)
@@ -517,11 +516,10 @@ class MainWindow(QMainWindow):
         self._sidebar.registry_changed.connect(self._save_registry)
         self._sidebar.open_folder_requested.connect(self._open_folder_of)
         self._sidebar.open_remote_requested.connect(self._open_remote_of)
-        self._sidebar.link_remote_requested.connect(self._link_remote)
+        self._sidebar.connection_requested.connect(self._edit_connection)
         self._sidebar.revert_all_requested.connect(self._revert_all)
         self._sidebar.rename_requested.connect(self._prompt_rename_repo)
         self._sidebar.remove_requested.connect(self._prompt_remove_repo)
-        self._sidebar.relocate_requested.connect(self._prompt_relocate_repo)
 
         self._changes.file_selected.connect(self._show_file_diff)
         self._changes.commit_requested.connect(self._do_commit)
@@ -1834,69 +1832,25 @@ class MainWindow(QMainWindow):
         url = dialog.url
         if not url:
             return
-        had_remote = bool(remote_mod.remote_fetch_url(entry.path))
-        result = (
-            remote_mod.set_remote_url(entry.path, url)
-            if had_remote
-            else remote_mod.add_remote(entry.path, url)
-        )
-        if result.failed:
-            self._report(result)
+        if not self._set_server(entry, url, dialog.follow_up == AFTER_FETCH):
             return
-
-        entry.remote_url = url
         self._save_registry()
         self._sidebar.refresh()
-        self.statusBar().showMessage(i18n.t("link.done", url=url), 6000)
-
-        if dialog.follow_up == AFTER_FETCH:
-            # Only tracking refs are written. No file in the working tree moves,
-            # which is what makes this safe to offer next to the connection.
-            fetched = remote_mod.fetch(entry.path, credentials=self._credentials(entry))
-            if fetched.failed:
-                self._report_sync(fetched, entry)
 
         if entry.key == (self._entry.key if self._entry else ""):
             self._reload_current()
         self._start_scan(entry.key)
 
-    def _prompt_remote_url(self) -> None:
+    def _edit_current_connection(self) -> None:
         """
-        Changes where the project's ``origin`` points.
+        Opens the folder and server window for the selected project.
 
         Returns:
             None
         """
 
-        entry = self._entry
-        if entry is None:
-            return
-        current = remote_mod.remote_fetch_url(entry.path)
-        typed, accepted = QInputDialog.getText(
-            self,
-            i18n.t("remote.change_title"),
-            i18n.t("remote.change_prompt"),
-            text=current,
-        )
-        if not accepted:
-            return
-        url = typed.strip()
-        if not url or url == current:
-            return
-
-        result = (
-            remote_mod.set_remote_url(entry.path, url)
-            if current
-            else remote_mod.add_remote(entry.path, url)
-        )
-        if result.failed:
-            self._report(result)
-            return
-        entry.remote_url = url
-        self._save_registry()
-        self.statusBar().showMessage(i18n.t("remote.changed"), 4000)
-        self._reload_current()
-        self._start_scan(entry.key)
+        if self._entry is not None:
+            self._edit_connection(self._entry.key)
 
     def _do_force_push(self) -> None:
         """
@@ -2778,33 +2732,17 @@ class MainWindow(QMainWindow):
             if self._entry is entry:
                 self._repo_label.setText(entry.name)
 
-    def choose_relocation(self, entry: RepoEntry) -> str:
+    def _edit_connection(self, key: str) -> None:
         """
-        Asks where a project whose folder is gone went.
+        Changes where a project lives on this computer and on the server.
 
-        The picker opens in the closest folder that still exists, which is
-        usually where the project was moved within or renamed in.
+        One window for both, because they are the same question asked twice:
+        where is this project? A project whose folder was moved shows as missing
+        and is pointed at its new folder here; one whose server changed gets the
+        new address here, and the server's answer is about the folder chosen.
 
         Args:
-            entry: The project.
-
-        Returns:
-            str: The chosen folder, empty when the user cancelled.
-        """
-
-        start = entry.path
-        while not start.is_dir() and start.parent != start:
-            start = start.parent
-        return QFileDialog.getExistingDirectory(
-            self, i18n.t("repo.relocate_title", name=entry.name), str(start)
-        )
-
-    def _prompt_relocate_repo(self, key: str) -> None:
-        """
-        Points a project at the folder it moved to.
-
-        Args:
-            key: Registry key.
+            key: Registry key of the project.
 
         Returns:
             None
@@ -2813,28 +2751,53 @@ class MainWindow(QMainWindow):
         entry = self._find(key)
         if entry is None:
             return
-        chosen = self.choose_relocation(entry)
-        if not chosen:
-            return
 
-        root = repository_root(Path(chosen))
-        if root is None:
-            self._show_notice(
-                "repo.relocate_not_repo", "repo.relocate_not_repo_hint", "warning", path=chosen
+        suggestion = ""
+        if not entry.remote_url and entry.exists:
+            suggestion = remote_link.suggest_url(
+                entry.path.name,
+                [other.remote_url for other in self._registry.entries if other.remote_url],
+                fallback_owner=self._viewer_login,
             )
+        dialog = LinkRemoteDialog(
+            Path(entry.path),
+            entry.name,
+            suggestion=suggestion,
+            current_url=entry.remote_url,
+            credentials=lambda: git_credentials.for_url(dialog.url),
+            parent=self,
+            folder=Path(entry.path),
+        )
+        if dialog.exec() != LinkRemoteDialog.DialogCode.Accepted:
             return
 
-        # A different server is the one sign that the folder picked is another
-        # project altogether, so that is asked about rather than taken.
-        git_dir = resolve_git_dir(root)
-        new_remote = read_origin_url(git_dir) if git_dir is not None else ""
-        other_project = bool(entry.remote_url and new_remote and new_remote != entry.remote_url)
-        if other_project and not self._confirm(
-            i18n.t("repo.relocate_title", name=entry.name),
-            i18n.t("repo.relocate_other_remote", old=entry.remote_url, new=new_remote),
-            i18n.t("repo.relocate"),
-        ):
-            return
+        if dialog.folder_changed and dialog.folder is not None:
+            if not self._relocate_entry(entry, dialog.folder):
+                return
+
+        url = dialog.url
+        if url and url != remote_mod.remote_fetch_url(entry.path):
+            if not self._set_server(entry, url, dialog.follow_up == AFTER_FETCH):
+                return
+
+        self._save_registry()
+        self._sidebar.refresh()
+        if self._entry is not None and self._entry.key == entry.key:
+            self._reload_current()
+        self._start_scan(entry.key)
+
+    def _relocate_entry(self, entry: RepoEntry, root: Path) -> bool:
+        """
+        Points a project at the folder it moved to.
+
+        Args:
+            entry: The project.
+            root: The project's top folder, already known to be a Git project.
+
+        Returns:
+            bool: True when the project now lives there. False after saying why
+                not, with nothing changed.
+        """
 
         old_key = entry.key
         outcome, found = self._registry.relocate(entry, root)
@@ -2845,12 +2808,12 @@ class MainWindow(QMainWindow):
                 "warning",
                 name=found.name,
             )
-            return
+            return False
         if outcome != ADD_OK:
             self._show_notice(
-                "repo.relocate_not_repo", "repo.relocate_not_repo_hint", "warning", path=chosen
+                "repo.relocate_not_repo", "repo.relocate_not_repo_hint", "warning", path=str(root)
             )
-            return
+            return False
 
         if old_key in self._drafts:
             self._drafts[entry.key] = self._drafts.pop(old_key)
@@ -2862,7 +2825,39 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             i18n.t("repo.relocated", name=entry.name, path=str(entry.path)), 6000
         )
-        self._start_scan(entry.key)
+        return True
+
+    def _set_server(self, entry: RepoEntry, url: str, fetch_afterwards: bool) -> bool:
+        """
+        Writes a project's server address and, when asked, fetches from it.
+
+        Args:
+            entry: The project.
+            url: The address.
+            fetch_afterwards: Whether to fetch once the address is set. Only
+                tracking refs are written: no file in the working tree moves,
+                which is what makes this safe to offer next to the connection.
+
+        Returns:
+            bool: True when the address was written.
+        """
+
+        had_remote = bool(remote_mod.remote_fetch_url(entry.path))
+        result = (
+            remote_mod.set_remote_url(entry.path, url)
+            if had_remote
+            else remote_mod.add_remote(entry.path, url)
+        )
+        if result.failed:
+            self._report(result)
+            return False
+        entry.remote_url = url
+        self.statusBar().showMessage(i18n.t("link.done", url=url), 6000)
+        if fetch_afterwards:
+            fetched = remote_mod.fetch(entry.path, credentials=self._credentials(entry))
+            if fetched.failed:
+                self._report_sync(fetched, entry)
+        return True
 
     def _prompt_remove_repo(self, key: str) -> None:
         """
