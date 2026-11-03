@@ -648,6 +648,50 @@ class Sidebar(QWidget):
         item.setToolTip(0, i18n.t("sidebar.empty_hint"))
         item.setFlags(Qt.ItemFlag.NoItemFlags)
 
+    def resort(self) -> None:
+        """
+        Puts the projects in the order the registry now gives, when it changed.
+
+        The list is built before the first check has told anything about the
+        projects, and a check redraws rows in place so the list does not jump
+        under the cursor. Without this, "projects with changes first" ordered
+        the list by what was known at the start, which was nothing, and never by
+        what the check found. Called once a check is over, and rebuilds the tree
+        only when something would actually move, keeping the scroll position and
+        the selection.
+
+        Returns:
+            None
+        """
+
+        groups = self._registry.grouped(self._sort_mode, self._search.text(), self._changes_first)
+        wanted = [(category.name, [entry.key for entry in entries]) for category, entries in groups]
+        if wanted == self._shown_order():
+            return
+        bar = self._tree.verticalScrollBar()
+        position = bar.value()
+        self.refresh()
+        bar.setValue(position)
+
+    def _shown_order(self) -> list[tuple[str, list[str]]]:
+        """
+        Reads the order the tree shows right now.
+
+        Returns:
+            list[tuple[str, list[str]]]: Each category's name with the keys of its
+                projects, top to bottom.
+        """
+
+        shown: list[tuple[str, list[str]]] = []
+        for index in range(self._tree.topLevelItemCount()):
+            parent = self._tree.topLevelItem(index)
+            keys = [
+                str(parent.child(row).data(0, _ROLE_ENTRY_KEY))
+                for row in range(parent.childCount())
+            ]
+            shown.append((str(parent.data(0, _ROLE_CATEGORY)), keys))
+        return shown
+
     def update_entry(self, entry: RepoEntry) -> None:
         """
         Redraws one row in place, without rebuilding the tree.

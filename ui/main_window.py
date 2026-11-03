@@ -3037,6 +3037,9 @@ class MainWindow(QMainWindow):
         """
 
         self._save_registry()
+        # What the check found may change the order, so it is applied once the
+        # check is over rather than row by row while it runs.
+        self._sidebar.resort()
         self._sidebar.refresh_summary()
         self._run_pending_scan()
 
