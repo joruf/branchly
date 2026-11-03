@@ -447,6 +447,11 @@ genau wie in GitHub Desktop:
 Die Farbe der Zeile sagt dasselbe noch einmal, damit es auch erkennbar bleibt,
 wenn die Zeichen schwer zu unterscheiden sind.
 
+Fährst du über eine Zeile, nennt der Tooltip, was mit der Datei passiert ist und
+wo sie liegt, und eine zweite Zeile sagt, wann die Datei zuletzt geändert wurde,
+mit Datum und Uhrzeit. Bei einer neuen Datei ist das der Zeitpunkt, an dem sie
+entstand. Eine gelöschte Datei hat kein Datum.
+
 ### Rechtsklick auf eine Datei
 
 **Datei öffnen** (Standardprogramm), **Im Ordner zeigen**, **Pfad kopieren**,

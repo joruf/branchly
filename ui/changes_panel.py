@@ -9,6 +9,9 @@ built around. Staging still happens underneath — the tick boxes are turned int
 
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
+
 from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter
 from PySide6.QtWidgets import (
@@ -152,6 +155,31 @@ class SelectAllBox(QCheckBox):
 
         everything = self.checkState() == Qt.CheckState.Checked
         self.setCheckState(Qt.CheckState.Unchecked if everything else Qt.CheckState.Checked)
+
+
+def _changed_at(root: Path | None, relative: str) -> str:
+    """
+    Says when a file in the project was last written.
+
+    For a new file that is when it was made, for a changed one when it was last
+    edited, which is the time somebody looking at the list wants. A file that is
+    gone, as a deletion is, has none.
+
+    Args:
+        root: The project's folder, None when it is not known.
+        relative: The file's path inside it.
+
+    Returns:
+        str: Date and time, empty when they cannot be established.
+    """
+
+    if root is None:
+        return ""
+    try:
+        stamp = (Path(root) / relative).lstat().st_mtime
+        return datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
+    except (OSError, OverflowError, ValueError):
+        return ""
 
 
 class ChangesPanel(QWidget):
@@ -393,6 +421,7 @@ class ChangesPanel(QWidget):
         state: RepositoryState | None,
         branch: str = "",
         deselected: set[str] | None = None,
+        root: Path | None = None,
     ) -> None:
         """
         Rebuilds the list from a repository state.
@@ -404,6 +433,8 @@ class ChangesPanel(QWidget):
                 restarts. Passing None keeps whatever is ticked right now, which
                 is what a plain refresh wants; passing a set is what switching to
                 a repository does.
+            root: The project's folder, so a file's tooltip can say when it was
+                last changed. Without it the tooltip has only its first line.
 
         Returns:
             None
@@ -438,7 +469,11 @@ class ChangesPanel(QWidget):
             item.setText(f"{change.display_path}")
             item.setData(_ROLE_GLYPH, change.glyph)
             item.setData(_ROLE_GLYPH_TOKEN, change.color_token)
-            item.setToolTip(f"{i18n.t(change.label_key)} · {change.path}")
+            tooltip = f"{i18n.t(change.label_key)} · {change.path}"
+            changed_at = _changed_at(root, change.path)
+            if changed_at:
+                tooltip += "\n" + i18n.t("changes.file_changed_at", time=changed_at)
+            item.setToolTip(tooltip)
             item.setForeground(QBrush(QColor(getattr(colors, change.color_token, colors.text))))
             if change.conflicted:
                 # A conflicted file cannot be committed until it is resolved, so

@@ -1083,6 +1083,7 @@
   "changes.step_local": "1  LOCAL",
   "changes.step_server": "2  SERVER",
   "changes.step_both": "both in one click",
+  "changes.file_changed_at": "Last changed: {time}",
   "changes.commit_step": "✓  Save ({count})",
   "changes.push_step": "⇡  Upload",
   "changes.push_step_count": "⇡  Upload ({count})",
