@@ -434,6 +434,10 @@ in GitHub Desktop:
 The row's colour says the same thing again, so it stays recognisable when the
 marks are hard to tell apart.
 
+Hover over a row: the tooltip names what happened to the file and where it is,
+and a second line says when the file was last changed, date and time. For a new
+file that is when it was made. A deleted file has no date.
+
 ### Right-click on a file
 
 **Open file** (in your default program), **Show in folder**, **Copy path**,

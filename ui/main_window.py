@@ -742,6 +742,7 @@ class MainWindow(QMainWindow):
             state,
             state.display_branch,
             deselected=set(entry.deselected_paths) if restore_selection else None,
+            root=Path(entry.path),
         )
         self._update_notice(state)
         self._update_sync_buttons(state)
