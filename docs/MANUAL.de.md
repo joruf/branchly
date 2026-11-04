@@ -850,6 +850,32 @@ würde eine der beiden Historien wegwerfen. Deshalb hast du zwei Möglichkeiten:
 dasselbe Fenster wie das Rechtsklickmenü des Projekts. Es setzt, wohin `origin`
 zeigt. Hat das Projekt noch gar keinen Server, wird er damit angelegt.
 
+### Ein Projekt und ein Server ohne Gemeinsames
+
+Wurde ein Projekt ohne Git begonnen und das Online-Repository, mit dem du es
+verbindest, hat schon eine eigene Geschichte, haben die beiden keinen
+gemeinsamen Anfang. Das Hochladen wird abgelehnt, und weder Zusammenführen noch
+Obenauflegen funktioniert. Branchly erkennt das beim Öffnen des Projekts und
+wenn ein Upload abgelehnt wird, und sagt es, statt dich mit einer Fehlermeldung
+allein zu lassen: Der Streifen über den Reitern nennt den Grund, und ein Fenster
+zeigt, was man dagegen tun kann.
+
+Das Fenster zählt, was die Lösung mit den Dateien täte, verglichen mit dem Server:
+wie viele sie hinzufügt, wie viele sie ändert und wie viele nur der Server hat und
+der neue Stand deshalb entfernt, mit den Stellen, an denen sie liegen
+(`vendor/ · 1131 Dateien`), damit man sofort sieht, wenn ein ganzer Ordner
+verschwindet. Diese Dateien bleiben in der Geschichte des Servers. Den neuen
+Stand benennst du selbst; vorbelegt ist der Name deines neuesten Stands.
+
+*Meine Dateien obendrauf legen und hochladen* macht dann selbst, wofür man sonst
+fünf Befehle bräuchte: Es setzt den Branch auf die Geschichte des Servers, lässt
+alle deine Dateien genau, wie sie sind, hält den Unterschied als einen neuen Stand
+obendrauf fest und lädt den hoch. Es wird nichts erzwungen und nichts auf dem
+Server umgeschrieben. Scheitert das Speichern des neuen Stands, wird der Branch
+zurückgesetzt. Es startet nur ohne ungespeicherte Änderungen. *Abbrechen* ändert
+nichts, und *Branch → Mit der Geschichte des Servers verbinden…* öffnet das
+Fenster wieder.
+
 ### Server überschreiben
 
 *Branch → Server mit diesem Branch überschreiben* ist die Notbremse für einen

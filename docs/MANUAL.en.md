@@ -818,6 +818,30 @@ histories away. So you have two options:
 right-click menu, for the selected project. It sets where `origin` points. If the
 project has no server at all yet, this creates one.
 
+### A project and a server with nothing in common
+
+If a project was started without Git and the online repository you connect it to
+already holds a history of its own, the two share no starting point. Uploading
+is refused, and neither combining nor putting yours on top works. Branchly
+recognises this when you open the project and when an upload is refused, and
+says so instead of leaving you with an error message: the strip above the tabs
+names the reason, and a window shows what can be done about it.
+
+The window counts what the fix would do to the files, compared with the server:
+how many it adds, how many it changes, and how many only the server has, which the
+new version removes, with the places they are in (`vendor/ · 1131 files`), so
+that a whole folder going is seen at once. Those files stay in the server's
+history. You give the new version a name, which starts as the name of your newest
+version.
+
+*Put my files on top and upload* then does by itself what would otherwise be five
+commands: it puts the branch onto the server's history, keeps all your files
+exactly as they are, saves the difference as one new version on top of it, and
+uploads that. Nothing is forced and nothing on the server is rewritten. If saving
+the new version fails, the branch is put back where it was. It only starts with no
+unsaved changes. *Cancel* changes nothing, and *Branch → Join the server's
+history…* opens the window again.
+
 ### Overwriting the server
 
 *Branch → Overwrite the server with this branch* is the emergency brake for a

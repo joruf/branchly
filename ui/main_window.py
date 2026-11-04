@@ -89,6 +89,7 @@ from services import (
     updater,
 )
 from services import revert as revert_mod
+from services import unrelated as unrelated_mod
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
 from ui import changes_panel as changes_panel_mod
@@ -99,6 +100,7 @@ from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
 from ui.discover_dialog import DiscoverDialog
 from ui.divergence_dialog import DivergenceDialog
+from ui.unrelated_dialog import UnrelatedDialog
 from ui.github_dialogs import CreateRepositoryDialog
 from ui.github_discover_dialog import GitHubDiscoverDialog
 from ui.github_lists import GitHubContext
@@ -202,6 +204,9 @@ class MainWindow(QMainWindow):
         # ahead/behind counts at that moment. Reloads must not reopen the same
         # dialog; selecting the project again, or a changed count, may.
         self._divergence_dismissed: tuple[str, int, int] | None = None
+        # The same for a project and server with no shared history: the project
+        # and the two newest versions the question was asked about.
+        self._unrelated_dismissed: tuple[str, str, str] | None = None
 
         self.setWindowTitle(APP_TITLE)
         self.resize(1360, 860)
@@ -465,6 +470,10 @@ class MainWindow(QMainWindow):
         force_action.triggered.connect(self._do_force_push)
         branch_menu.addAction(force_action)
         branch_menu.addAction(i18n.t("repo.connection"), self._edit_current_connection)
+        self._unrelated_action = QAction(i18n.t("unrelated.menu"), self)
+        self._unrelated_action.setToolTip(i18n.t("tip.unrelated_menu"))
+        self._unrelated_action.triggered.connect(lambda: self._offer_unrelated_fix(force=True))
+        branch_menu.addAction(self._unrelated_action)
         branch_menu.addSeparator()
 
         self._abort_action = QAction(i18n.t("merge.abort"), self)
@@ -652,6 +661,11 @@ class MainWindow(QMainWindow):
                 and self._divergence_dismissed[0] == entry.key
             ):
                 self._divergence_dismissed = None
+            if (
+                self._unrelated_dismissed is not None
+                and self._unrelated_dismissed[0] == entry.key
+            ):
+                self._unrelated_dismissed = None
         self._entry = entry
         self._registry.touch(entry)
         self._settings.last_repo = str(entry.path)
@@ -669,7 +683,10 @@ class MainWindow(QMainWindow):
         # The panels above read the working tree; this brings the badges and the
         # server's answer up to date as well.
         self._schedule_current_scan()
-        self._offer_divergence_fix()
+        # A project with no history in common with its server cannot be fixed by
+        # the divergence dialog, so that question is asked first.
+        if not self._offer_unrelated_fix():
+            self._offer_divergence_fix()
 
     def _stash_draft(self, key: str) -> None:
         """
@@ -774,6 +791,11 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is not None and not entry.remote_url and not remote_mod.has_remote(entry.path):
             self._show_notice("sync.no_remote", "sync.no_remote_hint", "info")
+            return
+        if entry is not None and unrelated_mod.detect(entry.path, state) is not None:
+            # Stays on screen after the dialog was cancelled: this is the reason
+            # an upload is refused, and it should not have to be remembered.
+            self._show_notice("unrelated.notice", "unrelated.notice_hint", "warning")
             return
         self._notice.setVisible(False)
 
@@ -1593,6 +1615,11 @@ class MainWindow(QMainWindow):
         has_remote = bool(entry and entry.exists and remote_mod.has_remote(entry.path))
         self._fetch_action.setEnabled(has_remote)
         self._pull_action.setEnabled(has_remote)
+        # Only where it applies, so the entry is not an invitation to something
+        # that has nothing to do with the project in front of the user.
+        self._unrelated_action.setEnabled(
+            has_entry and unrelated_mod.detect(entry.path, state) is not None
+        )
 
         dirty = bool(state and not state.is_clean)
         self._stash_action.setEnabled(has_entry and dirty)
@@ -2354,12 +2381,97 @@ class MainWindow(QMainWindow):
             }
             key = result.error_key()
             if key in hints:
+                if key in ("sync.push_rejected", "sync.no_upstream"):
+                    # A refused upload can have one more reason than the server
+                    # being ahead: the two may share no history at all. Only the
+                    # server's branch as it is now can tell, so it is fetched,
+                    # which writes no file here.
+                    remote_mod.fetch(entry.path, credentials=self._credentials(entry))
+                    self._reload_current()
+                    if self._offer_unrelated_fix():
+                        return
                 self._show_notice(key, hints[key], "warning")
             else:
                 self._report_sync(result, entry)
             return
         self._reload_current()
         self._start_scan(entry.key)
+
+    # ------------------------------------------------------------------ unrelated
+
+    def _offer_unrelated_fix(self, force: bool = False) -> bool:
+        """
+        Opens the fix window when the project and its server share no history.
+
+        Called after activating a project and after a refused upload. Cancel
+        remembers what was asked about so a plain reload does not ask again;
+        selecting the project anew clears that, and so does asking by hand.
+
+        Args:
+            force: Whether to ask even though it was cancelled before.
+
+        Returns:
+            bool: True when the question is the one that applies to this
+                project, answered or not, so that no other fix is offered over
+                it. False when it does not apply.
+        """
+
+        entry = self._entry
+        state = self._state
+        if entry is None or state is None:
+            return False
+        found = unrelated_mod.detect(entry.path, state)
+        if found is None:
+            if force:
+                self._show_notice("unrelated.none", "", "info")
+            return False
+        signature = (entry.key, found.local_oid, found.server_oid)
+        if not force and self._unrelated_dismissed == signature:
+            return True
+
+        dialog = UnrelatedDialog(entry.name, found, dirty=not state.is_clean, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.summary:
+            self._unrelated_dismissed = signature
+            return True
+        self._unrelated_dismissed = None
+        self._apply_unrelated_fix(dialog.summary)
+        return True
+
+    def _apply_unrelated_fix(self, summary: str) -> None:
+        """
+        Puts the project's files on top of the server's history and uploads them.
+
+        Args:
+            summary: What the new version is called.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        self.statusBar().showMessage(i18n.t("sync.working"))
+        outcome = unrelated_mod.resolve(
+            entry.path, summary, credentials=self._credentials(entry)
+        )
+        self.statusBar().clearMessage()
+        self._reload_current()
+
+        if outcome.blocked_key:
+            detail = (
+                "divergence.dirty_hint"
+                if outcome.blocked_key == unrelated_mod.BLOCKED_DIRTY
+                else ""
+            )
+            self._show_notice(outcome.blocked_key, detail, "warning")
+            return
+        if not outcome.ok:
+            if outcome.step is not None:
+                self._report_sync(outcome.step, entry)
+            return
+        self._start_scan(entry.key)
+        self.statusBar().showMessage(i18n.t("unrelated.done"), 6000)
 
     # ------------------------------------------------------------------ divergence
 
