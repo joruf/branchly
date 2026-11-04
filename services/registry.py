@@ -578,14 +578,23 @@ class Registry:
 
         Returns:
             dict[str, int]: Keys ``changed``, ``incoming``, ``conflicts``,
-                ``unpushed`` and ``total``.
+                ``unrelated``, ``unpushed`` and ``total``.
         """
 
-        counts = {"changed": 0, "incoming": 0, "conflicts": 0, "unpushed": 0, "total": len(self._entries)}
+        counts = {
+            "changed": 0,
+            "incoming": 0,
+            "conflicts": 0,
+            "unrelated": 0,
+            "unpushed": 0,
+            "total": len(self._entries),
+        }
         for entry in self._entries:
             status = entry.status
             if status.has_conflicts:
                 counts["conflicts"] += 1
+            if status.unrelated:
+                counts["unrelated"] += 1
             if status.is_dirty:
                 counts["changed"] += 1
             if status.incoming or status.behind:

@@ -855,10 +855,14 @@ zeigt. Hat das Projekt noch gar keinen Server, wird er damit angelegt.
 Wurde ein Projekt ohne Git begonnen und das Online-Repository, mit dem du es
 verbindest, hat schon eine eigene Geschichte, haben die beiden keinen
 gemeinsamen Anfang. Das Hochladen wird abgelehnt, und weder Zusammenführen noch
-Obenauflegen funktioniert. Branchly erkennt das beim Öffnen des Projekts und
-wenn ein Upload abgelehnt wird, und sagt es, statt dich mit einer Fehlermeldung
-allein zu lassen: Der Streifen über den Reitern nennt den Grund, und ein Fenster
-zeigt, was man dagegen tun kann.
+Obenauflegen funktioniert. Branchly erkennt das beim Öffnen des Projekts, wenn ein Upload
+abgelehnt wird und bei jeder Prüfung und jedem Aktualisieren, und sagt es, statt
+dich mit einer Fehlermeldung allein zu lassen: Das Projekt trägt in der Liste links
+ein **⚠**, die Zeile unter der Liste zählt solche Projekte, der Streifen über den
+Reitern nennt den Grund, und ein Fenster zeigt, was man dagegen tun kann. *Alle
+Projekte aktualisieren* und *Alle Änderungen hochladen* nennen es als Grund, warum
+ein Projekt übersprungen wurde. Ein so markiertes Projekt zählt bei der Sortierung
+„Projekte mit Änderungen zuerst“ auch als eines, das Aufmerksamkeit braucht.
 
 Das Fenster zählt, was die Lösung mit den Dateien täte, verglichen mit dem Server:
 wie viele sie hinzufügt, wie viele sie ändert und wie viele nur der Server hat und

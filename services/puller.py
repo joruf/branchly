@@ -29,6 +29,7 @@ from pathlib import Path
 from gitops import remote as remote_mod
 from gitops.runner import ERROR_GENERIC
 from gitops.status import read_state
+from services import unrelated as unrelated_mod
 
 #: Fast-forwarded onto new commits.
 RESULT_PULLED = "pulled"
@@ -50,6 +51,7 @@ SKIP_DIRTY = "pull_all.skip_dirty"
 SKIP_NO_UPSTREAM = "pull_all.skip_no_upstream"
 SKIP_OWN_COMMITS = "pull_all.skip_own_commits"
 SKIP_EMPTY = "pull_all.skip_empty"
+SKIP_UNRELATED = "pull_all.skip_unrelated"
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,12 +208,19 @@ def pull_one(job: PullJob) -> PullResult:
 
     reason = blocking_reason(state)
     if reason:
+        waiting = _fetch_and_count(path, state.upstream)
+        # The fetch above is what makes this answerable: only with the server's
+        # branch as it is now can it be told whether the two share a history. Not
+        # having a tracking branch, or having commits of one's own, are the two
+        # ways an unrelated project looks from the outside.
+        if reason in (SKIP_NO_UPSTREAM, SKIP_OWN_COMMITS) and unrelated_mod.detect(path):
+            reason, waiting = SKIP_UNRELATED, 0
         return PullResult(
             key=job.key,
             name=job.name,
             state=RESULT_SKIPPED,
             reason_key=reason,
-            waiting=_fetch_and_count(path, state.upstream),
+            waiting=waiting,
             branch=branch,
         )
 

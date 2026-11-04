@@ -27,6 +27,7 @@ from config.theme import ThemeColors, get_theme_colors
 
 BADGE_ICONS: dict[str, str] = {
     "conflict": "!",
+    "unrelated": "\u26a0",
     "changed": "●",
     "incoming": "↓",
     "ahead": "↑",
@@ -34,6 +35,7 @@ BADGE_ICONS: dict[str, str] = {
 
 BADGE_TOOLTIP_KEYS: dict[str, tuple[str, str]] = {
     "conflict": ("status.conflicts_one", "status.conflicts_many"),
+    "unrelated": ("unrelated.badge", "unrelated.badge"),
     "changed": ("status.changes_one", "status.changes_many"),
     "incoming": ("status.behind_one", "status.behind_many"),
     "ahead": ("status.ahead_one", "status.ahead_many"),
@@ -91,6 +93,7 @@ class Badge(QLabel):
         colors = get_theme_colors(theme)
         token = {
             "conflict": "status_conflict",
+            "unrelated": "warning",
             "changed": "status_modified",
             "incoming": "info",
             "ahead": "warning",

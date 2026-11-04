@@ -6,7 +6,7 @@ star and is not something a sort order may override. Inside the favorite block
 and inside the rest, two criteria decide:
 
 1. **Projects with changes first**, when that box is ticked: conflicts, then
-   uncommitted work, then commits waiting to be sent or fetched, then the rest.
+   uncommitted work or a server with no shared history, then commits waiting to be sent or fetched, then the rest.
 2. **The chosen order** (name, newest commit, recently opened, own order) inside
    each of those groups, and for the whole list when the box is not ticked.
 
@@ -126,14 +126,15 @@ def changes_rank(entry: RepoEntry) -> int:
         entry: Repository entry.
 
     Returns:
-        int: 0 for a conflict, 1 for uncommitted work, 2 for commits waiting to
-            be sent or fetched, 3 for nothing to do.
+        int: 0 for a conflict, 1 for uncommitted work or a server it shares no
+            history with, 2 for commits waiting to be sent or fetched, 3 for
+            nothing to do.
     """
 
     status = entry.status
     if status.has_conflicts:
         return 0
-    if status.is_dirty:
+    if status.is_dirty or status.unrelated:
         return 1
     if status.ahead or status.incoming or status.behind:
         return 2
