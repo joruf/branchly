@@ -549,6 +549,14 @@ class Sidebar(QWidget):
                     "sidebar.summary_conflicts_many",
                 )
             )
+        if counts["unrelated"]:
+            parts.append(
+                i18n.plural(
+                    counts["unrelated"],
+                    "sidebar.summary_unrelated_one",
+                    "sidebar.summary_unrelated_many",
+                )
+            )
         if counts["changed"]:
             parts.append(
                 i18n.plural(counts["changed"], "sidebar.summary_changes_one", "sidebar.summary_changes_many")

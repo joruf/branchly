@@ -22,6 +22,7 @@ from gitops.remote_url import github_slug
 from gitops.status import last_commit_timestamp, read_state
 from models.repository import RepoEntry, RepoStatus
 from services import git_credentials
+from services import unrelated as unrelated_mod
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +97,7 @@ def scan(request: ScanRequest) -> ScanResult:
         conflicted_files=len(state.conflicted_files),
         ahead=state.ahead,
         behind=state.behind,
+        unrelated=unrelated_mod.detect(path, state) is not None,
         last_commit_at=last_commit_timestamp(path),
         checked_at=time.time(),
     )
@@ -179,6 +181,9 @@ def describe(status: RepoStatus) -> list[tuple[str, str, int]]:
     badges: list[tuple[str, str, int]] = []
     if status.conflicted_files:
         badges.append(("conflict", "status_conflict", status.conflicted_files))
+    if status.unrelated:
+        # No count: it is a state of the project, not a number of things.
+        badges.append(("unrelated", "warning", 0))
     changed = status.changed_files + status.staged_files
     if changed:
         badges.append(("changed", "status_modified", changed))

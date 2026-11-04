@@ -560,5 +560,236 @@ class WindowTests(unittest.TestCase):
             self.assertFalse(window._unrelated_action.isEnabled())
 
 
+@requires_git
+class ListMarkTests(unittest.TestCase):
+    """
+    The check, the update and the badge that tells it in the project list.
+    """
+
+    def _scan(self, root: Path):  # noqa: ANN202
+        from services import scanner
+
+        return scanner.scan(scanner.ScanRequest(path=root, key=str(root), check_online=False))
+
+    def test_the_check_marks_a_project_whose_history_the_server_does_not_share(self) -> None:
+        from services import scanner
+
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+            result = self._scan(mine.root)
+            self.assertTrue(result.status.unrelated)
+            self.assertIn(("unrelated", "warning", 0), scanner.describe(result.status))
+
+    def test_an_ordinary_project_is_not_marked(self) -> None:
+        from services import scanner
+
+        with temp_repo_pair() as (first, second, _origin):
+            first.commit_file("news.txt", "x\n", "News")
+            first.git("push", "-q", "origin", "main")
+            second.git("fetch", "-q", "origin")
+            result = self._scan(second.root)
+            self.assertFalse(result.status.unrelated)
+            self.assertNotIn("unrelated", [kind for kind, _t, _c in scanner.describe(result.status)])
+
+    def test_the_mark_survives_a_restart(self) -> None:
+        from models.repository import RepoStatus
+
+        again = RepoStatus.from_dict(RepoStatus(unrelated=True).to_dict())
+        self.assertTrue(again.unrelated)
+        self.assertFalse(RepoStatus.from_dict({}).unrelated)
+
+    def test_the_mark_stands_with_the_other_things_that_need_attention(self) -> None:
+        from models.repository import RepoEntry, RepoStatus
+        from models.sort import changes_rank
+
+        marked = RepoEntry(path="/tmp/a", status=RepoStatus(unrelated=True))
+        clean = RepoEntry(path="/tmp/b", status=RepoStatus())
+        dirty = RepoEntry(path="/tmp/c", status=RepoStatus(changed_files=2))
+        self.assertLess(changes_rank(marked), changes_rank(clean))
+        self.assertEqual(changes_rank(dirty), changes_rank(marked))
+
+    def test_the_overview_counts_them(self) -> None:
+        from models.repository import RepoEntry, RepoStatus
+        from services.registry import Registry
+
+        registry = Registry()
+        for name, status in (("a", RepoStatus(unrelated=True)), ("b", RepoStatus(unrelated=True)), ("c", RepoStatus())):
+            registry._entries.append(RepoEntry(path=f"/tmp/{name}", status=status))
+        self.assertEqual(2, registry.summary()["unrelated"])
+
+    def test_an_update_fetches_and_says_why_it_did_not_update(self) -> None:
+        from services import puller
+
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+            # Never fetched: the update is what brings the server's branch in.
+            mine.git("update-ref", "-d", "refs/remotes/origin/main")
+            self.assertIsNone(unrelated_mod.detect(mine.root))
+
+            result = puller.pull_one(puller.PullJob(path=mine.root, key="k", name="mine"))
+
+            self.assertEqual(puller.RESULT_SKIPPED, result.state)
+            self.assertEqual(puller.SKIP_UNRELATED, result.reason_key)
+            self.assertEqual(0, result.waiting)
+            self.assertIsNotNone(unrelated_mod.detect(mine.root))
+
+    def test_an_update_of_an_ordinary_project_is_not_called_unrelated(self) -> None:
+        from services import puller
+
+        with temp_repo_pair() as (first, second, _origin):
+            first.commit_file("news.txt", "x\n", "News")
+            first.git("push", "-q", "origin", "main")
+            second.git("branch", "--unset-upstream", check=False)
+            second.git("branch", "--set-upstream-to=origin/main", "main", check=False)
+            second.commit_file("mine.txt", "y\n", "Mine")
+            result = puller.pull_one(puller.PullJob(path=second.root, key="k", name="second"))
+            self.assertNotEqual(puller.SKIP_UNRELATED, result.reason_key)
+
+    def test_sending_everything_says_the_same(self) -> None:
+        from services import pusher, puller
+
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+
+            result = pusher.push_one(puller.PullJob(path=mine.root, key="k", name="mine"))
+
+            self.assertEqual(puller.SKIP_UNRELATED, result.reason_key)
+
+    def test_every_new_text_exists_in_both_languages(self) -> None:
+        keys = (
+            "unrelated.badge", "sidebar.summary_unrelated_one",
+            "sidebar.summary_unrelated_many", "pull_all.skip_unrelated",
+        )
+        for language in ("en", "de"):
+            i18n.set_language(language)
+            self.addCleanup(i18n.set_language, "en")
+            for key in keys:
+                with self.subTest(language=language, key=key):
+                    self.assertNotEqual(key, i18n.t(key, count=2))
+
+
+@requires_qt
+@requires_git
+class ListMarkWindowTests(unittest.TestCase):
+    """
+    The badge as the project list shows it, after a check and after an update.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+        i18n.set_language("en")
+
+    def _window(self):  # noqa: ANN202 - Qt at import time
+        from ui.main_window import MainWindow
+
+        os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="branchly-test-")
+        window = MainWindow(
+            AppSettings(auto_check_minutes=0, github_enabled=False, check_updates=False, language="en")
+        )
+        self.addCleanup(window.close)
+        window._switch_scan_timer.stop()
+        return window
+
+    def _badges(self, window, key: str) -> list[str]:  # noqa: ANN001
+        from ui.widgets import Badge
+
+        row = window._sidebar._rows[key]
+        return [badge._kind for badge in row.findChildren(Badge)]
+
+    def _settle(self, window) -> None:  # noqa: ANN001
+        import time
+
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            self.app.processEvents()
+            if not window._scans.is_running and window._pending_scan_key is None:
+                break
+            time.sleep(0.01)
+        self.app.processEvents()
+
+    def test_a_check_puts_the_attention_mark_on_the_row(self) -> None:
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+            window = self._window()
+            _o, entry = window._registry.add(mine.root)
+            window._sidebar.refresh()
+            self.assertNotIn("unrelated", self._badges(window, entry.key))
+
+            window._start_scan("")
+            self._settle(window)
+
+            self.assertIn("unrelated", self._badges(window, entry.key))
+            from ui.widgets import Badge
+
+            badge = next(
+                b for b in window._sidebar._rows[entry.key].findChildren(Badge) if b._kind == "unrelated"
+            )
+            self.assertEqual("\u26a0", badge.text())
+            self.assertEqual(i18n.t("unrelated.badge"), badge.toolTip())
+
+    def test_the_overview_under_the_list_says_so(self) -> None:
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+            window = self._window()
+            window._registry.add(mine.root)
+            window._sidebar.refresh()
+
+            window._start_scan("")
+            self._settle(window)
+
+            self.assertIn(
+                i18n.t("sidebar.summary_unrelated_one"), window._sidebar._summary.text()
+            )
+
+    def test_updating_all_projects_finds_it_for_a_project_never_fetched(self) -> None:
+        import ui.main_window as module
+        from services import puller
+
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+            mine.git("update-ref", "-d", "refs/remotes/origin/main")
+            window = self._window()
+            _o, entry = window._registry.add(mine.root)
+            window._sidebar.refresh()
+
+            class Immediate:
+                def __init__(self, jobs: list, *_args: object, **_kwargs: object) -> None:
+                    self._jobs = jobs
+                    self.results: list = []
+                    self.summary = None
+
+                def exec(self) -> int:
+                    self.results = [puller.pull_one(job) for job in self._jobs]
+                    return 1
+
+            real = module.PullAllDialog
+            module.PullAllDialog = Immediate
+            self.addCleanup(setattr, module, "PullAllDialog", real)
+
+            window._pull_all()
+            self._settle(window)
+
+            self.assertTrue(entry.status.unrelated)
+            self.assertIn("unrelated", self._badges(window, entry.key))
+
+    def test_a_project_that_is_fixed_loses_the_mark_after_the_next_check(self) -> None:
+        with temp_repo_pair() as (first, _second, _origin), temp_repo() as mine:
+            make_unrelated(first, mine)
+            window = self._window()
+            _o, entry = window._registry.add(mine.root)
+            window._sidebar.refresh()
+            window._start_scan("")
+            self._settle(window)
+            self.assertTrue(entry.status.unrelated)
+
+            unrelated_mod.resolve(mine.root, "Bring my project in")
+            window._start_scan("")
+            self._settle(window)
+
+            self.assertFalse(entry.status.unrelated)
+            self.assertNotIn("unrelated", self._badges(window, entry.key))
+
+
 if __name__ == "__main__":
     unittest.main()

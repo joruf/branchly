@@ -823,9 +823,13 @@ project has no server at all yet, this creates one.
 If a project was started without Git and the online repository you connect it to
 already holds a history of its own, the two share no starting point. Uploading
 is refused, and neither combining nor putting yours on top works. Branchly
-recognises this when you open the project and when an upload is refused, and
-says so instead of leaving you with an error message: the strip above the tabs
-names the reason, and a window shows what can be done about it.
+recognises this when you open the project, when an upload is refused and on every
+check and every update, and says so instead of leaving you with an error message:
+the project carries a **⚠** in the list on the left, the line under the list counts
+such projects, the strip above the tabs names the reason, and a window shows what
+can be done about it. *Update all projects* and *Upload all changes* name it as the
+reason a project was skipped. A project marked this way also counts as needing
+attention when the list is sorted with projects with changes first.
 
 The window counts what the fix would do to the files, compared with the server:
 how many it adds, how many it changes, and how many only the server has, which the

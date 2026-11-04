@@ -32,6 +32,10 @@ class RepoStatus:
             tracking ref already knows about.
         open_pull_requests: Open pull requests reported by the GitHub API.
         check_state: Aggregated CI state of the tip commit, or None.
+        unrelated: Whether the branch and the server's branch share no history at
+            all, so that uploading is refused and neither combining nor putting
+            one side on top of the other works. Found by the check from what
+            this computer already has of the server.
         last_commit_at: Author timestamp of the tip commit, used by the
             "newest first" sort order.
         checked_at: Unix timestamp of the last successful scan, or None.
@@ -50,6 +54,7 @@ class RepoStatus:
     incoming: int = 0
     open_pull_requests: int = 0
     check_state: str | None = None
+    unrelated: bool = False
     last_commit_at: float | None = None
     checked_at: float | None = None
     online_checked_at: float | None = None
@@ -107,6 +112,7 @@ class RepoStatus:
             "incoming": self.incoming,
             "open_pull_requests": self.open_pull_requests,
             "check_state": self.check_state,
+            "unrelated": self.unrelated,
             "last_commit_at": self.last_commit_at,
             "checked_at": self.checked_at,
             "online_checked_at": self.online_checked_at,
@@ -148,6 +154,7 @@ class RepoStatus:
             incoming=_int("incoming"),
             open_pull_requests=_int("open_pull_requests"),
             check_state=check_state if isinstance(check_state, str) else None,
+            unrelated=bool(data.get("unrelated")),
             last_commit_at=_float("last_commit_at"),
             checked_at=_float("checked_at"),
             online_checked_at=_float("online_checked_at"),

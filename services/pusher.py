@@ -23,6 +23,7 @@ from gitops import remote as remote_mod
 from gitops.runner import ERROR_GENERIC, ERROR_PUSH_REJECTED
 from gitops.status import read_state
 from services import git_credentials
+from services import unrelated as unrelated_mod
 from services.puller import (
     RESULT_CURRENT,
     RESULT_FAILED,
@@ -34,6 +35,7 @@ from services.puller import (
     SKIP_IN_PROGRESS,
     SKIP_MISSING,
     SKIP_NO_REMOTE,
+    SKIP_UNRELATED,
     PullJob,
     PullResult,
 )
@@ -103,12 +105,17 @@ def push_one(job: PullJob) -> PullResult:
 
     reason = blocking_reason(state)
     if reason:
+        waiting = state.behind if reason == SKIP_BEHIND else 0
+        # Sending would be refused, and "update first" would not help: the two
+        # share no history, so there is nothing to update onto.
+        if reason in (SKIP_UNPUBLISHED, SKIP_BEHIND) and unrelated_mod.detect(path, state):
+            reason, waiting = SKIP_UNRELATED, 0
         return PullResult(
             key=job.key,
             name=job.name,
             state=RESULT_SKIPPED,
             reason_key=reason,
-            waiting=state.behind if reason == SKIP_BEHIND else 0,
+            waiting=waiting,
             branch=branch,
         )
     if not state.ahead:
