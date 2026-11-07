@@ -264,6 +264,72 @@ class WindowTests(unittest.TestCase):
             resolve.assert_called_once()
             self.assertEqual(divergence_mod.MODE_REBASE_PUSH, resolve.call_args.args[1])
 
+    def test_refused_upload_strip_offers_a_fix_button(self) -> None:
+        import i18n
+        from ui.main_window import ACTION_PUSH_REJECTED_FIX
+
+        window = self._window()
+        window._show_push_rejected_notice()
+        # The window itself is never shown in these tests, so isVisible() on a
+        # child is always false; isHidden() is the flag this strip owns.
+        self.assertFalse(window._notice.isHidden())
+        self.assertEqual(i18n.t("sync.push_rejected"), window._notice._title.text())
+        self.assertFalse(window._notice._button_row.isHidden())
+        labels = [
+            window._notice._buttons.itemAt(i).widget().text()
+            for i in range(window._notice._buttons.count())
+            if window._notice._buttons.itemAt(i).widget() is not None
+        ]
+        self.assertIn(i18n.t("sync.push_rejected_action"), labels)
+
+        opened: list[str] = []
+
+        def record_force(force: bool = False) -> None:
+            opened.append("forced" if force else "plain")
+
+        window._entry = MagicMock()
+        window._state = RepositoryState(ahead=1, behind=1, files=[])
+        with (
+            patch("ui.main_window.remote_mod.fetch"),
+            patch.object(window, "_reload_current"),
+            patch.object(window, "_offer_divergence_fix", side_effect=record_force),
+            patch("ui.main_window.divergence_mod.should_offer", return_value=True),
+        ):
+            window._notice.action_clicked.emit(ACTION_PUSH_REJECTED_FIX)
+
+        self.assertEqual(["forced"], opened)
+
+    def test_fix_button_reopens_after_a_dismissed_divergence(self) -> None:
+        with temp_repo_pair() as (first, second, _origin):
+            make_diverged(first, second)
+            window = self._window()
+            _outcome, entry = window._registry.add(second.root)
+            window._entry = entry
+            window._state = read_state(second.root)
+            window._divergence_dismissed = (entry.key, 1, 1)
+
+            opened: list[str] = []
+
+            class FakeDialog:
+                def __init__(self, *_args, **_kwargs) -> None:
+                    opened.append("yes")
+
+                def exec(self) -> int:
+                    return QDialog.DialogCode.Rejected
+
+                @property
+                def chosen_mode(self) -> str:
+                    return ""
+
+            with (
+                patch("ui.main_window.remote_mod.fetch"),
+                patch.object(window, "_reload_current"),
+                patch("ui.main_window.DivergenceDialog", FakeDialog),
+            ):
+                window._fix_push_rejected()
+
+            self.assertEqual(["yes"], opened)
+
 
 if __name__ == "__main__":
     unittest.main()

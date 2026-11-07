@@ -253,6 +253,8 @@
   "sync.working": "Verbinde mit dem Server…",
   "sync.push_rejected": "Der Server hat abgelehnt",
   "sync.push_rejected_hint": "In der Zwischenzeit hat jemand anderes etwas gesendet. Hole erst dessen Änderungen, dann sende deine.",
+  "sync.push_rejected_action": "Deren Änderungen holen und deine senden",
+  "tip.push_rejected_action": "Holt, was auf dem Server liegt, bringt deine Commits damit zusammen und lädt hoch. Du wählst, wie die beiden Seiten verbunden werden.",
   "divergence.title": "Beide Seiten haben sich bewegt",
   "divergence.heading": "{name}: dieses Projekt und der Server haben jeweils eigene Commits",
   "divergence.hint": "Du hast {ahead} noch nicht gesendet, und {behind} warten auf dem Server. Weder Senden noch Aktualisieren geht, solange die beiden Seiten nicht zusammengebracht sind.",

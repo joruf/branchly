@@ -253,6 +253,8 @@
   "sync.working": "Talking to the server…",
   "sync.push_rejected": "The server refused",
   "sync.push_rejected_hint": "Someone else sent changes in the meantime. Get their changes first, then send yours.",
+  "sync.push_rejected_action": "Get their changes, then send yours",
+  "tip.push_rejected_action": "Brings in what the server has, puts your commits with it, and uploads. You choose how the two sides are combined.",
   "divergence.title": "Both sides have moved",
   "divergence.heading": "{name}: this project and the server each have their own commits",
   "divergence.hint": "You have {ahead} not sent yet, and {behind} waiting on the server. Neither send nor update works until the two sides are brought together.",

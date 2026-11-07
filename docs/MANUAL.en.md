@@ -354,9 +354,9 @@ them, and underneath the button for both:
 | **Save and upload** | The commit first, then the upload straight away | Both of the above, and the project has a server |
 
 If uploading fails, say because somebody else sent something in the meantime,
-the commit is kept. The strip at the top then says what to do. The
-**Upload all changes to the server** button at the top right, by contrast,
-uploads every project at once.
+the commit is kept. The strip at the top then says what to do, with a button
+that gets their changes and sends yours. The **Upload all changes to the
+server** button at the top right, by contrast, uploads every project at once.
 
 Summary, description and the *Add to the previous commit instead* tick belong to the project. Click
 another project in between and everything is as you left it when you come back,
@@ -871,7 +871,8 @@ so and sends nothing. There is no branch there for the server to keep. Switch to
 a branch first.
 
 If the server refuses a push, it almost always means somebody else was faster.
-Fetch first, then send.
+The strip at the top then offers a button that gets their changes and sends
+yours.
 
 ## GitHub
 

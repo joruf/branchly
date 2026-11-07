@@ -152,6 +152,7 @@ SWITCH_SCAN_DEBOUNCE_MS = 300
 
 ACTION_UPDATE_INSTALL = "update.install"
 ACTION_UPDATE_LATER = "update.later"
+ACTION_PUSH_REJECTED_FIX = "push_rejected_fix"
 
 
 class MainWindow(QMainWindow):
@@ -265,6 +266,7 @@ class MainWindow(QMainWindow):
         self._notice = InlineMessage("", "", "info", right)
         self._notice.setVisible(False)
         right_layout.addWidget(self._notice)
+        self._notice.action_clicked.connect(self._on_notice_action)
 
         content = QSplitter(Qt.Orientation.Horizontal, right)
 
@@ -783,7 +785,7 @@ class MainWindow(QMainWindow):
         """
 
         if state.has_conflicts:
-            self._notice.setVisible(False)
+            self._hide_notice()
             return
         if state.detached:
             self._show_notice("status.detached", "status.detached_hint", "warning")
@@ -797,6 +799,17 @@ class MainWindow(QMainWindow):
             # an upload is refused, and it should not have to be remembered.
             self._show_notice("unrelated.notice", "unrelated.notice_hint", "warning")
             return
+        self._hide_notice()
+
+    def _hide_notice(self) -> None:
+        """
+        Clears buttons and hides the strip above the tabs.
+
+        Returns:
+            None
+        """
+
+        self._notice.clear_actions()
         self._notice.setVisible(False)
 
     def _show_notice(
@@ -815,12 +828,67 @@ class MainWindow(QMainWindow):
             None
         """
 
+        self._notice.clear_actions()
         self._notice.set_message(
             i18n.t(title_key, **params),
             i18n.t(detail_key, **params) if detail_key else "",
             token,
         )
         self._notice.setVisible(True)
+
+    def _show_push_rejected_notice(self) -> None:
+        """
+        Explains a refused upload and offers the fix on the same strip.
+
+        Returns:
+            None
+        """
+
+        self._show_notice("sync.push_rejected", "sync.push_rejected_hint", "warning")
+        self._notice.add_action(
+            i18n.t("sync.push_rejected_action"),
+            ACTION_PUSH_REJECTED_FIX,
+            primary=True,
+            tip=i18n.t("tip.push_rejected_action"),
+        )
+
+    def _on_notice_action(self, action_id: str) -> None:
+        """
+        Carries out a button on the repository notice strip.
+
+        Args:
+            action_id: Which button.
+
+        Returns:
+            None
+        """
+
+        if action_id == ACTION_PUSH_REJECTED_FIX:
+            self._fix_push_rejected()
+
+    def _fix_push_rejected(self) -> None:
+        """
+        Brings in the server's commits and sends ours afterwards.
+
+        When both sides moved, that is the divergence dialog. When only the
+        server is ahead, a normal fetch-and-integrate is enough, then upload.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        remote_mod.fetch(entry.path, credentials=self._credentials(entry))
+        self._reload_current()
+        if divergence_mod.should_offer(self._state):
+            self._offer_divergence_fix(force=True)
+            return
+        self._do_pull()
+        state = self._state
+        if state is not None and state.ahead > 0 and not state.has_conflicts:
+            self._do_push()
 
     def _set_sync_enabled(self, enabled: bool) -> None:
         """
@@ -2331,6 +2399,7 @@ class MainWindow(QMainWindow):
             # here: a skipped or failed project is not something to miss. Shown
             # after the reload, which would otherwise hide them again.
             title, detail, token = dialog.summary
+            self._notice.clear_actions()
             self._notice.set_message(title, detail, token)
             self._notice.setVisible(True)
         # Every badge is stale now, whether the project moved or was only fetched.
@@ -2390,7 +2459,10 @@ class MainWindow(QMainWindow):
                     self._reload_current()
                     if self._offer_unrelated_fix():
                         return
-                self._show_notice(key, hints[key], "warning")
+                if key == "sync.push_rejected":
+                    self._show_push_rejected_notice()
+                else:
+                    self._show_notice(key, hints[key], "warning")
             else:
                 self._report_sync(result, entry)
             return
@@ -2475,12 +2547,16 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ divergence
 
-    def _offer_divergence_fix(self) -> None:
+    def _offer_divergence_fix(self, force: bool = False) -> None:
         """
         Opens the fix dialog when this project and the server each moved.
 
-        Called after activating a project. Cancel remembers the counts so a
-        plain reload does not ask again; selecting the project anew clears that.
+        Called after activating a project, and from the refused-upload strip.
+        Cancel remembers the counts so a plain reload does not ask again;
+        selecting the project anew clears that, and so does asking by hand.
+
+        Args:
+            force: Whether to ask even though it was cancelled before.
 
         Returns:
             None
@@ -2491,7 +2567,7 @@ class MainWindow(QMainWindow):
         if entry is None or state is None or not divergence_mod.should_offer(state):
             return
         signature = (entry.key, state.ahead, state.behind)
-        if self._divergence_dismissed == signature:
+        if not force and self._divergence_dismissed == signature:
             return
 
         dialog = DivergenceDialog(
@@ -2557,7 +2633,9 @@ class MainWindow(QMainWindow):
                 "sync.detached": "sync.detached_hint",
             }
             key = failed.error_key()
-            if key in hints:
+            if key == "sync.push_rejected":
+                self._show_push_rejected_notice()
+            elif key in hints:
                 self._show_notice(key, hints[key], "warning")
             else:
                 self._report_sync(failed, entry)
@@ -2934,7 +3012,7 @@ class MainWindow(QMainWindow):
         self._sidebar.refresh()
         self._sidebar.select_key(entry.key)
         self._activate(entry)
-        self._notice.setVisible(False)
+        self._hide_notice()
         self.statusBar().showMessage(
             i18n.t("repo.relocated", name=entry.name, path=str(entry.path)), 6000
         )

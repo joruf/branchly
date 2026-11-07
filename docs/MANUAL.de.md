@@ -364,9 +364,9 @@ dazwischen, und darunter der Knopf für beides:
 | **Speichern und hochladen** | Erst der Commit, dann sofort das Hochladen | Beides oben, und das Projekt hat einen Server |
 
 Klappt das Hochladen nicht, etwa weil inzwischen jemand anderes etwas geschickt
-hat, bleibt der Commit erhalten. Oben steht dann, was zu tun ist. Der Knopf
-**Alle Änderungen zum Server hochladen** oben rechts lädt dagegen alle Projekte
-auf einmal hoch.
+hat, bleibt der Commit erhalten. Oben steht dann, was zu tun ist, mit einem
+Knopf, der deren Änderungen holt und deine sendet. Der Knopf **Alle Änderungen
+zum Server hochladen** oben rechts lädt dagegen alle Projekte auf einmal hoch.
 
 Kurzfassung, Beschreibung und der Haken *Stattdessen zum letzten Commit hinzufügen* gehören zum
 Projekt. Wer zwischendurch ein anderes Projekt anklickt, findet beim Zurückkommen
@@ -906,7 +906,8 @@ Stand an, sagt Branchly das und sendet nichts. Dort gibt es keinen Branch, den
 der Server führen könnte. Wechsle erst auf einen Branch.
 
 Lehnt der Server einen Push ab, heißt das fast immer: jemand anderes war
-schneller. Erst holen, dann senden.
+schneller. Der Streifen oben bietet dann den Knopf, der erst holt und danach
+sendet.
 
 ## GitHub
 

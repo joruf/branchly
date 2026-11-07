@@ -235,6 +235,10 @@ class PushErrorWordingTests(unittest.TestCase):
                 "sync.no_upstream_hint",
                 "sync.detached",
                 "sync.detached_hint",
+                "sync.push_rejected",
+                "sync.push_rejected_hint",
+                "sync.push_rejected_action",
+                "tip.push_rejected_action",
             ):
                 with self.subTest(language=language, key=key):
                     self.assertNotEqual(key, i18n.t(key))
