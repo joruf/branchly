@@ -24,6 +24,10 @@ import i18n
 from services.unrelated import GROUPS_SHOWN, Unrelated
 from ui.widgets import InlineMessage
 
+#: Result code of the window when the user chose to take over the server's version
+#: instead: neither accepted nor rejected, so the caller can tell the three apart.
+ADOPT_RESULT = 2
+
 
 class UnrelatedDialog(QDialog):
     """
@@ -47,7 +51,7 @@ class UnrelatedDialog(QDialog):
 
         super().__init__(parent)
         self.setWindowTitle(i18n.t("unrelated.title"))
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(760)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -121,9 +125,16 @@ class UnrelatedDialog(QDialog):
         self._apply_button = self._buttons.addButton(
             i18n.t("unrelated.apply"), QDialogButtonBox.ButtonRole.AcceptRole
         )
+        self._adopt_button = self._buttons.addButton(
+            i18n.t("unrelated.adopt"), QDialogButtonBox.ButtonRole.ActionRole
+        )
         self._cancel_button = self._buttons.addButton(
             i18n.t("action.cancel"), QDialogButtonBox.ButtonRole.RejectRole
         )
+        if isinstance(self._adopt_button, QPushButton):
+            self._adopt_button.setToolTip(i18n.t("tip.unrelated_adopt"))
+            self._adopt_button.setEnabled(not dirty)
+            self._adopt_button.clicked.connect(lambda: self.done(ADOPT_RESULT))
         if isinstance(self._apply_button, QPushButton):
             self._apply_button.setObjectName("Primary")
             self._apply_button.setToolTip(i18n.t("tip.unrelated_apply"))

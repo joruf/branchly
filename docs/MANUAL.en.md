@@ -846,6 +846,29 @@ the new version fails, the branch is put back where it was. It only starts with 
 unsaved changes. *Cancel* changes nothing, and *Branch → Join the server's
 history…* opens the window again.
 
+### Taking over the server's version
+
+Sometimes it is the server that is right. The usual case: the history on the
+server was **rewritten**, for example with a force push that removed a name or a
+secret from every version. A second computer still has the old versions, and
+Branchly then reports *no shared history* or a diverged branch. Putting your files
+on top of the server's history, or merging, would bring the removed thing back, so
+every window for these two situations has one more choice: *Take over the
+server's version…* (in the window for histories that share nothing it reads *Take
+over the server's version instead…*). The same entry is in the Branch menu, and it
+is on only for a project where both sides have versions the other lacks.
+
+The window says whether the server's history looks rewritten (several versions
+here have a version with the same summary but another identity on the server),
+how many files the server's version adds, changes and removes compared with yours,
+and where your old versions are kept. *Take over the server's version* then makes
+the branch and the files exactly the server's newest version. Nothing is uploaded
+and nothing on the server changes. Before the branch moves, your old versions are
+put in a branch of their own, `backup/<branch>-before-server-<date and time>`, so
+nothing is lost; delete that branch when you no longer need it. If a step fails,
+the project stays as it was. It only starts with no unsaved changes. *Cancel*
+changes nothing.
+
 ### Overwriting the server
 
 *Branch → Overwrite the server with this branch* is the emergency brake for a

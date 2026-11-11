@@ -880,6 +880,31 @@ zurückgesetzt. Es startet nur ohne ungespeicherte Änderungen. *Abbrechen* änd
 nichts, und *Branch → Mit der Geschichte des Servers verbinden…* öffnet das
 Fenster wieder.
 
+### Den Stand des Servers übernehmen
+
+Manchmal hat der Server recht. Der typische Fall: Die Geschichte auf dem Server
+wurde **umgeschrieben**, zum Beispiel mit einem Force-Push, der einen Namen oder ein
+Geheimnis aus jedem Stand entfernt hat. Ein zweiter Rechner hat noch die alten
+Stände, und Branchly meldet dann *keine gemeinsame Geschichte* oder einen
+auseinandergelaufenen Branch. Deine Dateien obendrauf zu legen oder
+zusammenzuführen würde das Entfernte zurückbringen, deshalb hat jedes Fenster für
+diese beiden Fälle eine Wahl mehr: *Stand des Servers übernehmen…* (im Fenster für
+Geschichten ohne gemeinsamen Anfang heißt sie *Stattdessen den Stand des Servers
+übernehmen…*). Derselbe Eintrag steht im Branch-Menü und ist nur bei einem Projekt
+aktiv, bei dem beide Seiten Stände haben, die der andere nicht hat.
+
+Das Fenster sagt, ob die Geschichte des Servers umgeschrieben aussieht (mehrere
+Stände hier haben auf dem Server einen Stand mit derselben Zusammenfassung, aber
+einer anderen Kennung), wie viele Dateien der Stand des Servers verglichen mit
+deinen hinzufügt, ändert und entfernt, und wo deine alten Stände aufgehoben
+werden. *Stand des Servers übernehmen* macht dann den Branch und die Dateien zu
+genau dem neuesten Stand des Servers. Es wird nichts hochgeladen und auf dem Server
+ändert sich nichts. Bevor der Branch sich bewegt, kommen deine alten Stände in
+einen eigenen Branch, `backup/<Branch>-before-server-<Datum und Uhrzeit>`, es geht
+also nichts verloren; lösche diesen Branch, wenn du ihn nicht mehr brauchst.
+Scheitert ein Schritt, bleibt das Projekt, wie es war. Es startet nur ohne
+ungespeicherte Änderungen. *Abbrechen* ändert nichts.
+
 ### Server überschreiben
 
 *Branch → Server mit diesem Branch überschreiben* ist die Notbremse für einen

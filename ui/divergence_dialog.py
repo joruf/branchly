@@ -22,6 +22,10 @@ import i18n
 from services import divergence as divergence_mod
 from ui.widgets import InlineMessage
 
+#: The choice that is not a way of combining the two sides: the window only says
+#: so, and the caller opens the window that explains taking over the server's version.
+MODE_ADOPT = "adopt"
+
 
 class DivergenceDialog(QDialog):
     """
@@ -48,7 +52,7 @@ class DivergenceDialog(QDialog):
         super().__init__(parent)
         self._chosen_mode = ""
         self.setWindowTitle(i18n.t("divergence.title"))
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(780)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -73,12 +77,32 @@ class DivergenceDialog(QDialog):
             i18n.t("divergence.merge_push"),
             QDialogButtonBox.ButtonRole.ActionRole,
         )
+        self._adopt_button = self._buttons.addButton(
+            i18n.t("divergence.adopt"),
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
         self._cancel_button = self._buttons.addButton(
             i18n.t("action.cancel"),
             QDialogButtonBox.ButtonRole.RejectRole,
         )
         self._wire_buttons(dirty)
         layout.addWidget(self._buttons)
+
+    def showEvent(self, event) -> None:  # noqa: ANN001, N802 - Qt override
+        """
+        Makes the window tall enough for its wrapped texts at the width it has.
+
+        Args:
+            event: Show event.
+
+        Returns:
+            None
+        """
+
+        super().showEvent(event)
+        needed = self.layout().totalHeightForWidth(self.width())
+        if needed > self.height():
+            self.resize(self.width(), needed)
 
     def _wire_buttons(self, dirty: bool) -> None:
         """
@@ -94,6 +118,11 @@ class DivergenceDialog(QDialog):
         rebase = self._rebase_button
         merge = self._merge_button
         cancel = self._cancel_button
+        adopt = self._adopt_button
+        if isinstance(adopt, QPushButton):
+            adopt.setEnabled(not dirty)
+            adopt.setToolTip(i18n.t("tip.divergence_adopt"))
+            adopt.clicked.connect(lambda: self._choose(MODE_ADOPT))
         if isinstance(rebase, QPushButton):
             rebase.setObjectName("Primary")
             rebase.style().unpolish(rebase)

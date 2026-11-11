@@ -89,6 +89,7 @@ from services import (
     updater,
 )
 from services import revert as revert_mod
+from services import adopt as adopt_mod
 from services import unrelated as unrelated_mod
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
@@ -99,8 +100,9 @@ from ui.commit_files_dialog import CommitFilesDialog, ViewOptions
 from ui.conflict_dialog import ConflictDialog
 from ui.diff_view import DiffView
 from ui.discover_dialog import DiscoverDialog
-from ui.divergence_dialog import DivergenceDialog
-from ui.unrelated_dialog import UnrelatedDialog
+from ui.adopt_dialog import AdoptDialog
+from ui.divergence_dialog import MODE_ADOPT, DivergenceDialog
+from ui.unrelated_dialog import ADOPT_RESULT, UnrelatedDialog
 from ui.github_dialogs import CreateRepositoryDialog
 from ui.github_discover_dialog import GitHubDiscoverDialog
 from ui.github_lists import GitHubContext
@@ -476,6 +478,10 @@ class MainWindow(QMainWindow):
         self._unrelated_action.setToolTip(i18n.t("tip.unrelated_menu"))
         self._unrelated_action.triggered.connect(lambda: self._offer_unrelated_fix(force=True))
         branch_menu.addAction(self._unrelated_action)
+        self._adopt_action = QAction(i18n.t("adopt.menu"), self)
+        self._adopt_action.setToolTip(i18n.t("tip.adopt_menu"))
+        self._adopt_action.triggered.connect(lambda: self._offer_adopt_fix(force=True))
+        branch_menu.addAction(self._adopt_action)
         branch_menu.addSeparator()
 
         self._abort_action = QAction(i18n.t("merge.abort"), self)
@@ -1688,6 +1694,9 @@ class MainWindow(QMainWindow):
         self._unrelated_action.setEnabled(
             has_entry and unrelated_mod.detect(entry.path, state) is not None
         )
+        self._adopt_action.setEnabled(
+            has_entry and adopt_mod.detect(entry.path, state) is not None
+        )
 
         dirty = bool(state and not state.is_clean)
         self._stash_action.setEnabled(has_entry and dirty)
@@ -2502,7 +2511,13 @@ class MainWindow(QMainWindow):
             return True
 
         dialog = UnrelatedDialog(entry.name, found, dirty=not state.is_clean, parent=self)
-        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.summary:
+        outcome = dialog.exec()
+        if outcome == ADOPT_RESULT:
+            # The server is the one that is right: a different window explains that.
+            self._unrelated_dismissed = None
+            self._offer_adopt_fix(force=True)
+            return True
+        if outcome != QDialog.DialogCode.Accepted or not dialog.summary:
             self._unrelated_dismissed = signature
             return True
         self._unrelated_dismissed = None
@@ -2545,6 +2560,68 @@ class MainWindow(QMainWindow):
         self._start_scan(entry.key)
         self.statusBar().showMessage(i18n.t("unrelated.done"), 6000)
 
+    # ------------------------------------------------------------------ adopt
+
+    def _offer_adopt_fix(self, force: bool = False) -> bool:
+        """
+        Opens the window that offers to take over the server's version.
+
+        Asked for by hand from the Branch menu, and from the windows for histories
+        that share nothing and for diverged branches.
+
+        Args:
+            force: Whether to say so when it does not apply.
+
+        Returns:
+            bool: True when the window was shown, answered or not.
+        """
+
+        entry = self._entry
+        state = self._state
+        if entry is None or state is None:
+            return False
+        found = adopt_mod.detect(entry.path, state)
+        if found is None:
+            if force:
+                self._show_notice("adopt.none", "", "info")
+            return False
+        dialog = AdoptDialog(entry.name, found, dirty=not state.is_clean, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return True
+        self._apply_adopt()
+        return True
+
+    def _apply_adopt(self) -> None:
+        """
+        Moves the project onto the server's newest version and keeps the old one.
+
+        Returns:
+            None
+        """
+
+        entry = self._entry
+        if entry is None:
+            return
+        self.statusBar().showMessage(i18n.t("sync.working"))
+        outcome = adopt_mod.adopt(entry.path, credentials=self._credentials(entry))
+        self.statusBar().clearMessage()
+        self._reload_current()
+
+        if outcome.blocked_key:
+            detail = (
+                "divergence.dirty_hint"
+                if outcome.blocked_key == adopt_mod.BLOCKED_DIRTY
+                else ""
+            )
+            self._show_notice(outcome.blocked_key, detail, "warning")
+            return
+        if not outcome.ok:
+            if outcome.step is not None:
+                self._report_sync(outcome.step, entry)
+            return
+        self._start_scan(entry.key)
+        self.statusBar().showMessage(i18n.t("adopt.done", backup=outcome.backup), 12000)
+
     # ------------------------------------------------------------------ divergence
 
     def _offer_divergence_fix(self, force: bool = False) -> None:
@@ -2585,6 +2662,9 @@ class MainWindow(QMainWindow):
             self._divergence_dismissed = signature
             return
         self._divergence_dismissed = None
+        if mode == MODE_ADOPT:
+            self._offer_adopt_fix(force=True)
+            return
         self._apply_divergence_fix(mode)
 
     def _apply_divergence_fix(self, mode: str) -> None:
