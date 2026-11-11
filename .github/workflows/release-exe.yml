@@ -20,7 +20,9 @@ jobs:
   build:
     name: Build on ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      # One system failing must not take the other one's file with it: the release
+      # below publishes whatever was built.
+      fail-fast: false
       matrix:
         # The oldest supported Ubuntu: the Linux file runs on every system with
         # the same or a newer glibc, never on an older one.
@@ -61,6 +63,8 @@ jobs:
   release:
     name: Publish the release
     needs: build
+    # Also when one system failed, as long as the run was not cancelled.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -71,6 +75,7 @@ jobs:
       - name: Collect the executables
         uses: actions/download-artifact@v4
         with:
+          pattern: exe-*
           path: dist
           merge-multiple: true
 
