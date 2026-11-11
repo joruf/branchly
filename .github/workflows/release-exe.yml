@@ -39,8 +39,8 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libglib2.0-0 libxcb-cursor0 libxkbcommon-x11-0
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y -o Acquire::Retries=3 libegl1 libgl1 libglib2.0-0 libxcb-cursor0 libxkbcommon-x11-0
 
       # Not the system Python: Ubuntu 22.04 ships 3.10, Branchly needs 3.11.
       - name: Setup Python
