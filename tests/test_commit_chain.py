@@ -113,6 +113,7 @@ class ChainTests(unittest.TestCase):
             window = self._window(first.root)
             window._changes.set_draft(CommitDraft("Add new file"))
             window._changes._both_button.click()
+            window._tasks.wait_until_idle()
             remote = first.git("ls-remote", "origin", "main").stdout.split()[0]
             self.assertEqual(first.head(), remote)
             self.assertEqual("Add new file", first.git("log", "-1", "--format=%s").stdout.strip())
@@ -133,6 +134,7 @@ class ChainTests(unittest.TestCase):
             window = self._window(first.root)
             window._changes.set_draft(CommitDraft("Mine"))
             window._changes._both_button.click()
+            window._tasks.wait_until_idle()
             self.assertEqual("Mine", first.git("log", "-1", "--format=%s").stdout.strip())
             self.assertTrue(window._notice.isVisibleTo(window))
 

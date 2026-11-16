@@ -68,9 +68,7 @@ from gitops import conflict as conflict_mod
 from gitops import diff as diff_mod
 from gitops import ignore as ignore_mod
 from gitops import remote as remote_mod
-from gitops import stage as stage_mod
 from gitops.commit import CommitDraft
-from gitops.commit import commit as do_commit
 from gitops.history import read_history
 from gitops.refname import suggest_branch_name
 from gitops.remote_url import github_slug
@@ -88,11 +86,13 @@ from services import (
     scanner,
     updater,
 )
+from services import committer as committer_mod
 from services import revert as revert_mod
 from services import adopt as adopt_mod
 from services import unrelated as unrelated_mod
 from services.registry import ADD_DUPLICATE, ADD_NOT_A_REPOSITORY, ADD_OK, load_registry
 from services.scheduler import AutoCheckScheduler, RefreshThrottle, ScanCoordinator
+from services.tasks import BackgroundTasks
 from ui import changes_panel as changes_panel_mod
 from ui.changes_panel import ChangesPanel
 from ui.clone_dialog import CloneDialog
@@ -155,6 +155,11 @@ SWITCH_SCAN_DEBOUNCE_MS = 300
 ACTION_UPDATE_INSTALL = "update.install"
 ACTION_UPDATE_LATER = "update.later"
 ACTION_PUSH_REJECTED_FIX = "push_rejected_fix"
+
+# The hourglass of an action under way, two pictures that take turns, and how long
+# each stays. Slow enough to be calm, quick enough to be seen to move.
+HOURGLASS_FRAMES = ("\u23f3", "\u231b")
+HOURGLASS_INTERVAL_MS = 500
 
 
 class MainWindow(QMainWindow):
@@ -305,6 +310,19 @@ class MainWindow(QMainWindow):
 
         self._scans = ScanCoordinator(self)
         self._scheduler = AutoCheckScheduler(self)
+
+        # Slow actions run here, off the window's thread, with an hourglass that
+        # shows them without getting in the way of anything else.
+        self._tasks = BackgroundTasks(self)
+        self._tasks.changed.connect(self._update_busy_ui)
+        self._hourglass_frame = 0
+        self._hourglass_timer = QTimer(self)
+        self._hourglass_timer.setInterval(HOURGLASS_INTERVAL_MS)
+        self._hourglass_timer.timeout.connect(self._turn_hourglass)
+        self._busy_label = QLabel("", self)
+        self._busy_label.setContentsMargins(0, 0, 8, 0)
+        self._busy_label.setVisible(False)
+        self.statusBar().addPermanentWidget(self._busy_label)
 
         self._switch_scan_timer = QTimer(self)
         self._switch_scan_timer.setSingleShot(True)
@@ -675,6 +693,9 @@ class MainWindow(QMainWindow):
             ):
                 self._unrelated_dismissed = None
         self._entry = entry
+        # Before the panels are read, so that they show whether this project has
+        # an action under way and not whatever the previous one had.
+        self._paint_busy()
         self._registry.touch(entry)
         self._settings.last_repo = str(entry.path)
         self._graph.clear_comparison_mark()
@@ -886,15 +907,28 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        remote_mod.fetch(entry.path, credentials=self._credentials(entry))
-        self._reload_current()
-        if divergence_mod.should_offer(self._state):
-            self._offer_divergence_fix(force=True)
-            return
-        self._do_pull()
-        state = self._state
-        if state is not None and state.ahead > 0 and not state.has_conflicts:
-            self._do_push()
+        credentials = self._credentials(entry)
+
+        def upload_if_ahead() -> None:
+            state = self._state
+            if self._is_current(entry) and state is not None and state.ahead > 0 and not state.has_conflicts:
+                self._do_push()
+
+        def fetched(_result: GitResult) -> None:
+            self._after_task(entry, scan=False)
+            if not self._is_current(entry):
+                return
+            if divergence_mod.should_offer(self._state):
+                self._offer_divergence_fix(force=True)
+                return
+            self._pull(upload_if_ahead)
+
+        self._start_task(
+            entry,
+            "tasks.fetching",
+            lambda: remote_mod.fetch(entry.path, credentials=credentials),
+            fetched,
+        )
 
     def _set_sync_enabled(self, enabled: bool) -> None:
         """
@@ -1305,71 +1339,358 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------------------- commit
 
-    def _do_commit(self, draft: CommitDraft, selected: list[str]) -> bool:
+    # ------------------------------------------------------------- slow actions
+
+    def _start_task(self, entry: RepoEntry, label_key: str, work, done) -> bool:  # noqa: ANN001
         """
-        Stages the ticked files and commits them.
+        Runs a slow action for a project off the window's thread.
+
+        Args:
+            entry: The project.
+            label_key: Translation key for what is being done, shown next to the
+                hourglass.
+            work: The git work. It runs on a thread and must not touch the
+                interface.
+            done: Called with the work's result, on the window's thread.
+
+        Returns:
+            bool: True when it started. False when the project already has an
+                action under way, which is then said in the status bar.
+        """
+
+        started = self._tasks.submit(
+            entry.key,
+            label_key,
+            work,
+            done,
+            failed=lambda error: self._task_failed(entry, error),
+        )
+        if not started and not self._closing:
+            running = self._tasks.label_for(entry.key)
+            self.statusBar().showMessage(
+                i18n.t("tasks.busy", name=entry.name, action=i18n.t(running) if running else ""),
+                5000,
+            )
+        return started
+
+    def _task_failed(self, entry: RepoEntry, error: BaseException) -> None:
+        """
+        Says that an action ended in an exception instead of a result.
+
+        Args:
+            entry: The project.
+            error: What was raised.
+
+        Returns:
+            None
+        """
+
+        self._say(entry, "tasks.crashed", "", "danger", error=str(error) or type(error).__name__)
+        if self._is_current(entry):
+            self._reload_current()
+
+    def _busy_guard(self) -> bool:
+        """
+        Tells whether the selected project has an action under way, and says so.
+
+        Two git commands writing to one repository at once end in lock errors or a
+        half-made result, so a change to a project waits until the slow action it
+        is already in has ended. The window itself is not blocked: the person is
+        told, and can go on with another project meanwhile.
+
+        Returns:
+            bool: True when the project is busy and the caller should stop.
+        """
+
+        entry = self._entry
+        if entry is None or not self._tasks.is_busy(entry.key):
+            return False
+        self.statusBar().showMessage(
+            i18n.t(
+                "tasks.busy",
+                name=entry.name,
+                action=i18n.t(self._tasks.label_for(entry.key)),
+            ),
+            5000,
+        )
+        return True
+
+    def _is_current(self, entry: RepoEntry) -> bool:
+        """
+        Reports whether a project is the one on screen.
+
+        An action ends some seconds after it started, and in between the user may
+        have gone to another project. What it has to say is then not for the panels
+        in front of them.
+
+        Args:
+            entry: The project.
+
+        Returns:
+            bool: True when it is the selected one.
+        """
+
+        return self._entry is not None and self._entry.key == entry.key
+
+    def _say(
+        self, entry: RepoEntry, title_key: str, detail_key: str = "", token: str = "warning", **params: object
+    ) -> None:
+        """
+        Says something about a project, where it will be seen.
+
+        On the strip above the tabs when the project is the one on screen, in the
+        status bar with its name when it is not.
+
+        Args:
+            entry: The project.
+            title_key: Translation key for the headline.
+            detail_key: Translation key for the explanation.
+            token: Theme token naming the accent colour.
+            **params: Placeholder values.
+
+        Returns:
+            None
+        """
+
+        if self._is_current(entry):
+            self._show_notice(title_key, detail_key, token, **params)
+            return
+        self.statusBar().showMessage(f"{entry.name}: {i18n.t(title_key, **params)}", 10000)
+
+    def _report_for(self, entry: RepoEntry, result: GitResult, fallback_title: str = "error.title") -> None:
+        """
+        Reports a git failure for a project, where it will be seen.
+
+        Args:
+            entry: The project.
+            result: The failed result.
+            fallback_title: Translation key for the title when nothing better fits.
+
+        Returns:
+            None
+        """
+
+        if self._is_current(entry):
+            self._report(result, fallback_title)
+            return
+        key = result.error_key()
+        self.statusBar().showMessage(
+            f"{entry.name}: {i18n.t(key) if key else i18n.t(fallback_title)}", 10000
+        )
+
+    def _report_sync_for(self, entry: RepoEntry, result: GitResult) -> None:
+        """
+        Reports a failed server action for a project, where it will be seen.
+
+        Args:
+            entry: The project.
+            result: The failed result.
+
+        Returns:
+            None
+        """
+
+        if self._is_current(entry):
+            self._report_sync(result, entry)
+            return
+        self._report_for(entry, result)
+
+    def _after_task(self, entry: RepoEntry, scan: bool = True) -> None:
+        """
+        Brings the screen up to date after an action, and asks for a fresh check.
+
+        Args:
+            entry: The project.
+            scan: Whether to check the project again as well.
+
+        Returns:
+            None
+        """
+
+        if self._is_current(entry):
+            self._reload_current()
+        if scan:
+            self._start_scan(entry.key)
+
+    def _update_busy_ui(self) -> None:
+        """
+        Shows or hides the hourglass according to what is under way.
+
+        Returns:
+            None
+        """
+
+        if self._tasks.is_busy():
+            if not self._hourglass_timer.isActive():
+                self._hourglass_timer.start()
+        else:
+            self._hourglass_timer.stop()
+            self._hourglass_frame = 0
+        self._paint_busy()
+
+    def _turn_hourglass(self) -> None:
+        """
+        Turns the hourglass over, so that it is seen to be doing something.
+
+        Returns:
+            None
+        """
+
+        self._hourglass_frame = (self._hourglass_frame + 1) % len(HOURGLASS_FRAMES)
+        self._paint_busy()
+
+    def _paint_busy(self) -> None:
+        """
+        Puts the hourglass in the status bar, on the buttons and in the list.
+
+        The status bar names what the project in front of the user is doing, and
+        counts the others, so that an upload left running in another project is
+        not forgotten. Nothing here blocks anything.
+
+        Returns:
+            None
+        """
+
+        glyph = HOURGLASS_FRAMES[self._hourglass_frame]
+        running = self._tasks.running
+        current_key = self._entry.key if self._entry is not None else ""
+        own = self._tasks.label_for(current_key) if current_key else ""
+
+        self._changes.set_busy(own, glyph if own else "")
+        busy_keys = self._tasks.busy_keys()
+        self._sidebar.set_busy(busy_keys, glyph if busy_keys else "")
+
+        if not running:
+            self._busy_label.setVisible(False)
+            self._busy_label.setText("")
+            return
+        others = len({task.key for task in running if task.key and task.key != current_key})
+        if own:
+            text = f"{glyph}  {i18n.t(own)}"
+            if others:
+                text += "  " + i18n.plural(others, "tasks.others_one", "tasks.others_many")
+        else:
+            first = running[0]
+            entry = self._find(first.key)
+            name = entry.name if entry is not None else ""
+            text = f"{glyph}  {name}: {i18n.t(first.label_key)}" if name else f"{glyph}  {i18n.t(first.label_key)}"
+            if others > 1:
+                text += "  " + i18n.plural(others - 1, "tasks.more_one", "tasks.more_many")
+        self._busy_label.setText(text)
+        self._busy_label.setToolTip(i18n.t("tasks.indicator_tip"))
+        self._busy_label.setVisible(True)
+
+    def _do_commit(self, draft: CommitDraft, selected: list[str], upload: bool = False) -> bool:
+        """
+        Saves the ticked files, and uploads them when asked, without freezing.
 
         Args:
             draft: Message the user typed.
             selected: Paths to include.
+            upload: Whether to send the new version to the server in the same run.
 
         Returns:
-            bool: True when the commit was made.
+            bool: True when the action started.
         """
 
         entry = self._entry
         if entry is None or not selected:
             return False
+        state = self._state
+        # Everything the thread needs is taken here, on the window's thread: it
+        # may not look at the interface, and the interface may change while it runs.
+        files = list(selected)
+        hunks = {path: set(keys) for path, keys in self._hunk_selection.items()}
+        detached = bool(state is not None and state.detached)
+        send = upload and not detached
 
-        staged = stage_mod.unstage_all(entry.path)
-        if staged.failed and "did not match" not in staged.message:
-            self._report(staged)
-            return False
+        if send:
+            # An upstream is recorded on the first upload of a branch, and git then
+            # needs the branch by name. With one in place git follows the tracking
+            # configuration, which may point at a branch of another name.
+            set_upstream = bool(state and not state.upstream)
+            branch = state.branch if set_upstream and state is not None else ""
+            credentials = self._credentials(entry)
+            label = "tasks.saving_uploading"
 
-        # Files the user took single blocks out of are staged block by block, the
-        # rest wholesale. The index has to start at the last saved version for
-        # that, which is exactly what the reset above leaves behind.
-        partial = self._partial_paths()
-        whole = [path for path in selected if path not in partial]
-        if whole:
-            added = stage_mod.stage_files(entry.path, whole)
-            if added.failed:
-                self._report(added)
-                return False
-        for path in selected:
-            if path not in partial:
-                continue
-            parsed = diff_mod.file_diff(entry.path, path, diff_mod.TARGET_WORKTREE_HEAD)
-            self._apply_hunk_selection(parsed)
-            applied = stage_mod.stage_selected_hunks(entry.path, parsed)
-            if applied.failed:
-                self._report(applied)
-                return False
+            def work() -> committer_mod.SaveOutcome:
+                return committer_mod.save_and_upload(
+                    entry.path, draft, files, hunks, branch, set_upstream, credentials
+                )
 
-        result = do_commit(entry.path, draft)
-        if result.failed:
-            self._report(result)
-            return False
-        self._changes.clear_draft()
+        else:
+            label = "tasks.saving"
+
+            def work() -> committer_mod.SaveOutcome:
+                return committer_mod.save(entry.path, draft, files, hunks)
+
+        return self._start_task(
+            entry,
+            label,
+            work,
+            lambda outcome: self._commit_done(entry, draft, files, outcome, upload and detached),
+        )
+
+    def _commit_done(
+        self,
+        entry: RepoEntry,
+        draft: CommitDraft,
+        files: list[str],
+        outcome: committer_mod.SaveOutcome,
+        upload_skipped: bool,
+    ) -> None:
+        """
+        Takes the end of saving, on the window's thread.
+
+        Args:
+            entry: The project.
+            draft: The message that was saved.
+            files: The files that went in.
+            outcome: How it ended.
+            upload_skipped: Whether an upload was asked for and not made because
+                the project is on no branch.
+
+        Returns:
+            None
+        """
+
+        if not outcome.saved:
+            if outcome.failure is not None:
+                self._report_for(entry, outcome.failure)
+            return
+
+        if self._is_current(entry):
+            # Only what was saved is cleared: somebody who started the next message
+            # while this one was being saved keeps it.
+            if self._changes.commit_draft() == draft:
+                self._changes.clear_draft()
+            self._changes.forget_selection(files)
+            # The block keys are counted against the version that just became the
+            # last saved one, so none of them means anything any more.
+            self._forget_hunk_selection(files)
+        elif self._drafts.get(entry.key) == draft:
+            self._drafts.pop(entry.key, None)
         # Whatever went in is settled. Keeping it in the deselection would untick
         # a future, unrelated change to the same file.
-        self._changes.forget_selection(selected)
-        entry.forget_selection(selected)
-        # The block keys are counted against the version that just became the
-        # last saved one, so none of them means anything any more.
-        self._forget_hunk_selection(selected)
+        entry.forget_selection(files)
         self._save_registry()
-        self.statusBar().showMessage(draft.summary.strip(), 4000)
-        self._reload_current()
-        self._start_scan(entry.key)
-        return True
+        self.statusBar().showMessage(f"{entry.name}: {draft.summary.strip()}", 4000)
+
+        if outcome.push is not None:
+            self._push_done(entry, outcome)
+            return
+        self._after_task(entry)
+        if upload_skipped:
+            self._say(entry, "sync.detached", "sync.detached_hint", "warning")
+
+
 
     def _do_commit_and_push(self, draft: CommitDraft, selected: list[str]) -> None:
         """
-        Commits the ticked files and sends them to the server in one go.
+        Saves the ticked files and sends them to the server in one go.
 
-        The push only starts once the commit is made. If it then fails, for
-        instance because somebody else sent something first, the commit stays:
+        The upload only starts once the version is made. If it then fails, for
+        instance because somebody else sent something first, the version stays:
         the explanation is the same one the upload button gives on its own.
 
         Args:
@@ -1380,8 +1701,7 @@ class MainWindow(QMainWindow):
             None
         """
 
-        if self._do_commit(draft, selected):
-            self._do_push()
+        self._do_commit(draft, selected, upload=True)
 
     def _remember_selection(self) -> None:
         """
@@ -1546,6 +1866,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         state = read_state(entry.path)
         plan = revert_mod.plan(state.files, paths)
         if plan.is_empty:
@@ -1602,6 +1925,9 @@ class MainWindow(QMainWindow):
         Returns:
             None
         """
+
+        if self._busy_guard():
+            return
 
         entry = self._entry
         if entry is None:
@@ -1739,6 +2065,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         state = self._state
         if entry is None or state is None or state.detached or not state.branch:
@@ -1776,6 +2105,9 @@ class MainWindow(QMainWindow):
         Returns:
             None
         """
+
+        if self._busy_guard():
+            return
 
         entry = self._entry
         if entry is None:
@@ -1837,6 +2169,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         if entry is None:
             return
@@ -1860,6 +2195,9 @@ class MainWindow(QMainWindow):
         Returns:
             None
         """
+
+        if self._busy_guard():
+            return
 
         entry = self._entry
         if entry is None:
@@ -1983,27 +2321,32 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
 
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.push(
-            entry.path,
-            branch=state.branch if state else "",
-            set_upstream=bool(state and not state.upstream),
-            force_with_lease=True,
-            credentials=self._credentials(entry),
-        )
-        self.statusBar().clearMessage()
-        if result.failed:
+        branch = state.branch if state else ""
+        set_upstream = bool(state and not state.upstream)
+        credentials = self._credentials(entry)
+
+        def done(outcome: committer_mod.SaveOutcome) -> None:
+            result = outcome.push
+            if result is None or not result.failed:
+                self._after_task(entry)
+                return
             # Reloaded before the explanation, which a reload afterwards would hide.
-            self._reload_current()
+            self._after_task(entry, scan=False)
             # A lease that no longer holds is the whole point of the flag: somebody
             # pushed in the meantime and their work would have been deleted.
             if "stale info" in result.message.lower():
-                self._show_notice("sync.lease_stale", "sync.lease_stale_hint", "warning")
+                self._say(entry, "sync.lease_stale", "sync.lease_stale_hint", "warning")
             else:
-                self._report_sync(result, entry)
-            return
-        self._reload_current()
-        self._start_scan(entry.key)
+                self._report_sync_for(entry, result)
+
+        self._start_task(
+            entry,
+            "tasks.overwriting",
+            lambda: committer_mod.upload(
+                entry.path, branch, set_upstream, credentials, force_with_lease=True
+            ),
+            done,
+        )
 
     def _abort_operation(self) -> None:
         """
@@ -2012,6 +2355,9 @@ class MainWindow(QMainWindow):
         Returns:
             None
         """
+
+        if self._busy_guard():
+            return
 
         entry = self._entry
         operation = self._unfinished_operation()
@@ -2100,6 +2446,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         if entry is None:
             return
@@ -2120,6 +2469,9 @@ class MainWindow(QMainWindow):
         Returns:
             None
         """
+
+        if self._busy_guard():
+            return
 
         entry = self._entry
         if entry is None:
@@ -2159,6 +2511,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         if entry is None:
             return
@@ -2182,6 +2537,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         if entry is None:
             return
@@ -2204,6 +2562,9 @@ class MainWindow(QMainWindow):
         Returns:
             None
         """
+
+        if self._busy_guard():
+            return
 
         entry = self._entry
         if entry is None:
@@ -2238,6 +2599,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         if entry is None:
             return
@@ -2265,6 +2629,9 @@ class MainWindow(QMainWindow):
             None
         """
 
+        if self._busy_guard():
+            return
+
         entry = self._entry
         if entry is None:
             return
@@ -2290,14 +2657,20 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.fetch(entry.path, credentials=self._credentials(entry))
-        self.statusBar().clearMessage()
-        if result.failed:
-            self._report_sync(result, entry)
-            return
-        self._reload_current()
-        self._start_scan(entry.key)
+        credentials = self._credentials(entry)
+
+        def done(result: GitResult) -> None:
+            if result.failed:
+                self._report_sync_for(entry, result)
+                return
+            self._after_task(entry)
+
+        self._start_task(
+            entry,
+            "tasks.fetching",
+            lambda: remote_mod.fetch(entry.path, credentials=credentials),
+            done,
+        )
 
     def _do_pull(self) -> None:
         """
@@ -2307,21 +2680,46 @@ class MainWindow(QMainWindow):
             None
         """
 
+        self._pull(None)
+
+    def _pull(self, after) -> None:  # noqa: ANN001
+        """
+        Fetches and integrates the server's commits, then goes on.
+
+        Kept apart from ``_do_pull``, which a menu entry connects to: Qt hands a
+        slot with an optional argument the entry's "checked" flag in its place.
+
+        Args:
+            after: Called when it worked, for what has to follow, or None.
+
+        Returns:
+            None
+        """
+
         entry = self._entry
         if entry is None:
             return
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.pull(entry.path, credentials=self._credentials(entry))
-        self.statusBar().clearMessage()
-        self._reload_current()
-        if result.failed:
-            state = read_state(entry.path)
-            if state.has_conflicts:
-                self._open_conflict_assistant()
+        credentials = self._credentials(entry)
+
+        def done(result: GitResult) -> None:
+            self._after_task(entry, scan=False)
+            if result.failed:
+                state = self._state if self._is_current(entry) else None
+                if state is not None and state.has_conflicts:
+                    self._open_conflict_assistant()
+                    return
+                self._report_sync_for(entry, result)
                 return
-            self._report_sync(result, entry)
-            return
-        self._start_scan(entry.key)
+            self._start_scan(entry.key)
+            if after is not None:
+                after()
+
+        self._start_task(
+            entry,
+            "tasks.pulling",
+            lambda: remote_mod.pull(entry.path, credentials=credentials),
+            done,
+        )
 
     def _pull_all(self) -> None:
         """
@@ -2414,23 +2812,23 @@ class MainWindow(QMainWindow):
         # Every badge is stale now, whether the project moved or was only fetched.
         self._start_scan(scan_key)
 
-    def _do_push(self) -> None:
+    def _do_push(self) -> bool:
         """
-        Sends local commits to the server.
+        Sends local commits to the server, without freezing the window.
 
         Returns:
-            None
+            bool: True when the upload started.
         """
 
         entry = self._entry
         if entry is None:
-            return
+            return False
         state = self._state
         if state is not None and state.detached:
             # Nothing to send anywhere: a detached HEAD is not on a branch, so
             # there is no branch to push and none to record an upstream for.
             self._show_notice("sync.detached", "sync.detached_hint", "warning")
-            return
+            return False
 
         # An upstream is recorded on the first push of a branch, and git then
         # needs the branch by name: without it, it refuses with a fatal. The name
@@ -2439,44 +2837,54 @@ class MainWindow(QMainWindow):
         # branch that is not called the same thing.
         set_upstream = bool(state and not state.upstream)
         branch = state.branch if set_upstream and state is not None else ""
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        result = remote_mod.push(
-            entry.path,
-            branch=branch,
-            set_upstream=set_upstream,
-            credentials=self._credentials(entry),
+        credentials = self._credentials(entry)
+        return self._start_task(
+            entry,
+            "tasks.uploading",
+            lambda: committer_mod.upload(entry.path, branch, set_upstream, credentials),
+            lambda outcome: self._push_done(entry, outcome),
         )
-        self.statusBar().clearMessage()
-        if result.failed:
-            # Read the project again first: a reload settles the notice strip on
-            # what the project's state says, and done afterwards it took the
-            # explanation of the refusal straight off the screen again.
-            self._reload_current()
-            hints = {
-                "sync.push_rejected": "sync.push_rejected_hint",
-                "sync.no_upstream": "sync.no_upstream_hint",
-                "sync.detached": "sync.detached_hint",
-            }
-            key = result.error_key()
-            if key in hints:
-                if key in ("sync.push_rejected", "sync.no_upstream"):
-                    # A refused upload can have one more reason than the server
-                    # being ahead: the two may share no history at all. Only the
-                    # server's branch as it is now can tell, so it is fetched,
-                    # which writes no file here.
-                    remote_mod.fetch(entry.path, credentials=self._credentials(entry))
-                    self._reload_current()
-                    if self._offer_unrelated_fix():
-                        return
-                if key == "sync.push_rejected":
-                    self._show_push_rejected_notice()
-                else:
-                    self._show_notice(key, hints[key], "warning")
-            else:
-                self._report_sync(result, entry)
+
+    def _push_done(self, entry: RepoEntry, outcome: committer_mod.SaveOutcome) -> None:
+        """
+        Takes the end of an upload, on the window's thread.
+
+        Args:
+            entry: The project.
+            outcome: How it ended, with the server's branch already fetched when
+                the upload was refused.
+
+        Returns:
+            None
+        """
+
+        result = outcome.push
+        if result is None or not result.failed:
+            self._after_task(entry)
             return
-        self._reload_current()
-        self._start_scan(entry.key)
+        # Read the project again first: a reload settles the notice strip on what
+        # the project's state says, and done afterwards it took the explanation of
+        # the refusal straight off the screen again.
+        self._after_task(entry, scan=False)
+        hints = {
+            "sync.push_rejected": "sync.push_rejected_hint",
+            "sync.no_upstream": "sync.no_upstream_hint",
+            "sync.detached": "sync.detached_hint",
+        }
+        key = result.error_key()
+        if key not in hints:
+            self._report_sync_for(entry, result)
+            return
+        if key in ("sync.push_rejected", "sync.no_upstream") and self._is_current(entry):
+            # A refused upload can have one more reason than the server being
+            # ahead: the two may share no history at all. The server's branch was
+            # fetched for exactly this, which writes no file here.
+            if self._offer_unrelated_fix():
+                return
+        if key == "sync.push_rejected" and self._is_current(entry):
+            self._show_push_rejected_notice()
+        else:
+            self._say(entry, key, hints[key], "warning")
 
     # ------------------------------------------------------------------ unrelated
 
@@ -2538,27 +2946,31 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        outcome = unrelated_mod.resolve(
-            entry.path, summary, credentials=self._credentials(entry)
-        )
-        self.statusBar().clearMessage()
-        self._reload_current()
+        credentials = self._credentials(entry)
 
-        if outcome.blocked_key:
-            detail = (
-                "divergence.dirty_hint"
-                if outcome.blocked_key == unrelated_mod.BLOCKED_DIRTY
-                else ""
-            )
-            self._show_notice(outcome.blocked_key, detail, "warning")
-            return
-        if not outcome.ok:
-            if outcome.step is not None:
-                self._report_sync(outcome.step, entry)
-            return
-        self._start_scan(entry.key)
-        self.statusBar().showMessage(i18n.t("unrelated.done"), 6000)
+        def done(outcome: unrelated_mod.ResolveResult) -> None:
+            self._after_task(entry, scan=False)
+            if outcome.blocked_key:
+                detail = (
+                    "divergence.dirty_hint"
+                    if outcome.blocked_key == unrelated_mod.BLOCKED_DIRTY
+                    else ""
+                )
+                self._say(entry, outcome.blocked_key, detail, "warning")
+                return
+            if not outcome.ok:
+                if outcome.step is not None:
+                    self._report_sync_for(entry, outcome.step)
+                return
+            self._start_scan(entry.key)
+            self.statusBar().showMessage(f"{entry.name}: {i18n.t('unrelated.done')}", 6000)
+
+        self._start_task(
+            entry,
+            "tasks.joining",
+            lambda: unrelated_mod.resolve(entry.path, summary, credentials=credentials),
+            done,
+        )
 
     # ------------------------------------------------------------------ adopt
 
@@ -2602,25 +3014,33 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        outcome = adopt_mod.adopt(entry.path, credentials=self._credentials(entry))
-        self.statusBar().clearMessage()
-        self._reload_current()
+        credentials = self._credentials(entry)
 
-        if outcome.blocked_key:
-            detail = (
-                "divergence.dirty_hint"
-                if outcome.blocked_key == adopt_mod.BLOCKED_DIRTY
-                else ""
+        def done(outcome: adopt_mod.AdoptResult) -> None:
+            self._after_task(entry, scan=False)
+            if outcome.blocked_key:
+                detail = (
+                    "divergence.dirty_hint"
+                    if outcome.blocked_key == adopt_mod.BLOCKED_DIRTY
+                    else ""
+                )
+                self._say(entry, outcome.blocked_key, detail, "warning")
+                return
+            if not outcome.ok:
+                if outcome.step is not None:
+                    self._report_sync_for(entry, outcome.step)
+                return
+            self._start_scan(entry.key)
+            self.statusBar().showMessage(
+                f"{entry.name}: {i18n.t('adopt.done', backup=outcome.backup)}", 12000
             )
-            self._show_notice(outcome.blocked_key, detail, "warning")
-            return
-        if not outcome.ok:
-            if outcome.step is not None:
-                self._report_sync(outcome.step, entry)
-            return
-        self._start_scan(entry.key)
-        self.statusBar().showMessage(i18n.t("adopt.done", backup=outcome.backup), 12000)
+
+        self._start_task(
+            entry,
+            "tasks.adopting",
+            lambda: adopt_mod.adopt(entry.path, credentials=credentials),
+            done,
+        )
 
     # ------------------------------------------------------------------ divergence
 
@@ -2681,49 +3101,50 @@ class MainWindow(QMainWindow):
         entry = self._entry
         if entry is None:
             return
-        self.statusBar().showMessage(i18n.t("sync.working"))
-        outcome = divergence_mod.resolve(
-            entry.path,
-            mode,
-            credentials=self._credentials(entry),
-        )
-        self.statusBar().clearMessage()
+        credentials = self._credentials(entry)
 
-        if outcome.blocked_key:
-            self._reload_current()
-            detail = (
-                "divergence.dirty_hint"
-                if outcome.blocked_key == divergence_mod.BLOCKED_DIRTY
-                else ""
-            )
-            self._show_notice(outcome.blocked_key, detail, "warning")
-            return
-        if outcome.needs_conflict_assistant:
-            self._reload_current()
-            self._open_conflict_assistant()
-            return
-        if not outcome.ok:
-            self._reload_current()
-            failed = outcome.failed_step
-            if failed is None:
+        def done(outcome: divergence_mod.ResolveResult) -> None:
+            self._after_task(entry, scan=False)
+            if outcome.blocked_key:
+                detail = (
+                    "divergence.dirty_hint"
+                    if outcome.blocked_key == divergence_mod.BLOCKED_DIRTY
+                    else ""
+                )
+                self._say(entry, outcome.blocked_key, detail, "warning")
                 return
-            hints = {
-                "sync.push_rejected": "sync.push_rejected_hint",
-                "sync.no_upstream": "sync.no_upstream_hint",
-                "sync.detached": "sync.detached_hint",
-            }
-            key = failed.error_key()
-            if key == "sync.push_rejected":
-                self._show_push_rejected_notice()
-            elif key in hints:
-                self._show_notice(key, hints[key], "warning")
-            else:
-                self._report_sync(failed, entry)
-            return
+            if outcome.needs_conflict_assistant:
+                if self._is_current(entry):
+                    self._open_conflict_assistant()
+                else:
+                    self._say(entry, "conflict.intro_start", "", "warning")
+                return
+            if not outcome.ok:
+                failed = outcome.failed_step
+                if failed is None:
+                    return
+                hints = {
+                    "sync.push_rejected": "sync.push_rejected_hint",
+                    "sync.no_upstream": "sync.no_upstream_hint",
+                    "sync.detached": "sync.detached_hint",
+                }
+                key = failed.error_key()
+                if key == "sync.push_rejected" and self._is_current(entry):
+                    self._show_push_rejected_notice()
+                elif key in hints:
+                    self._say(entry, key, hints[key], "warning")
+                else:
+                    self._report_sync_for(entry, failed)
+                return
+            self._start_scan(entry.key)
+            self.statusBar().showMessage(f"{entry.name}: {i18n.t('divergence.done')}", 4000)
 
-        self._reload_current()
-        self._start_scan(entry.key)
-        self.statusBar().showMessage(i18n.t("divergence.done"), 4000)
+        self._start_task(
+            entry,
+            "tasks.fixing",
+            lambda: divergence_mod.resolve(entry.path, mode, credentials=credentials),
+            done,
+        )
 
     # ------------------------------------------------------------------ conflicts
 
@@ -4365,6 +4786,7 @@ class MainWindow(QMainWindow):
             self._update_thread = None
         self._github.close()
         self._scans.wait(5000)
+        self._tasks.shutdown(5000)
         self._save_registry()
         save_settings(self.collect_settings())
         super().closeEvent(event)

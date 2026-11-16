@@ -260,6 +260,7 @@ class WindowTests(unittest.TestCase):
             )
             with patch("ui.main_window.divergence_mod.resolve", return_value=fake) as resolve:
                 window._apply_divergence_fix(divergence_mod.MODE_REBASE_PUSH)
+                window._tasks.wait_until_idle()
 
             resolve.assert_called_once()
             self.assertEqual(divergence_mod.MODE_REBASE_PUSH, resolve.call_args.args[1])
@@ -296,6 +297,7 @@ class WindowTests(unittest.TestCase):
             patch("ui.main_window.divergence_mod.should_offer", return_value=True),
         ):
             window._notice.action_clicked.emit(ACTION_PUSH_REJECTED_FIX)
+            window._tasks.wait_until_idle()
 
         self.assertEqual(["forced"], opened)
 
@@ -327,6 +329,7 @@ class WindowTests(unittest.TestCase):
                 patch("ui.main_window.DivergenceDialog", FakeDialog),
             ):
                 window._fix_push_rejected()
+                window._tasks.wait_until_idle()
 
             self.assertEqual(["yes"], opened)
 

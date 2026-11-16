@@ -137,6 +137,13 @@ class RepoRow(QWidget):
         self._name.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         layout.addWidget(self._name, 1)
 
+        # The hourglass of an action under way in this project. Its own label, so
+        # that redrawing the badges after a check does not take it away.
+        self._busy = QLabel(self)
+        self._busy.setToolTip(i18n.t("tasks.row_busy"))
+        self._busy.setVisible(False)
+        layout.addWidget(self._busy)
+
         self._badges = QHBoxLayout()
         self._badges.setContentsMargins(0, 0, 0, 0)
         self._badges.setSpacing(4)
@@ -156,6 +163,20 @@ class RepoRow(QWidget):
         """
 
         return self._key
+
+    def set_busy(self, glyph: str) -> None:
+        """
+        Shows or hides the hourglass of an action under way.
+
+        Args:
+            glyph: The hourglass to show, empty when nothing is going on.
+
+        Returns:
+            None
+        """
+
+        self._busy.setText(glyph)
+        self._busy.setVisible(bool(glyph))
 
     def update_entry(self, entry: RepoEntry) -> None:
         """
@@ -271,6 +292,10 @@ class Sidebar(QWidget):
         self._changes_first = changes_first
         self._selected_key = ""
         self._rows: dict[str, RepoRow] = {}
+        # Which projects have an action under way, and the hourglass to show for
+        # them, kept so that a rebuilt list shows them again.
+        self._busy_keys: set[str] = set()
+        self._busy_glyph = ""
         self._suppress_selection = False
 
         layout = QVBoxLayout(self)
@@ -600,6 +625,8 @@ class Sidebar(QWidget):
                 row.favorite_toggled.connect(self._on_favorite_toggled)
                 self._tree.setItemWidget(child, 0, row)
                 self._rows[entry.key] = row
+                if entry.key in self._busy_keys:
+                    row.set_busy(self._busy_glyph)
             # A search should reveal what it found, not leave it folded away.
             collapsed = self._registry.is_collapsed(category.name) and not query.strip()
             parent.setExpanded(not collapsed)
@@ -699,6 +726,23 @@ class Sidebar(QWidget):
             ]
             shown.append((str(parent.data(0, _ROLE_CATEGORY)), keys))
         return shown
+
+    def set_busy(self, keys: set[str], glyph: str) -> None:
+        """
+        Marks the projects that have an action under way.
+
+        Args:
+            keys: Registry keys of the busy projects.
+            glyph: The hourglass to show next to them.
+
+        Returns:
+            None
+        """
+
+        self._busy_keys = set(keys)
+        self._busy_glyph = glyph
+        for key, row in self._rows.items():
+            row.set_busy(glyph if key in self._busy_keys else "")
 
     def update_entry(self, entry: RepoEntry) -> None:
         """

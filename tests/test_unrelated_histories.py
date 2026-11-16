@@ -520,6 +520,7 @@ class WindowTests(unittest.TestCase):
             window._sidebar.refresh()
 
             window._activate(entry)
+            window._tasks.wait_until_idle()
 
             self.assertEqual(mine.head(), server_tip(first, origin))
             self.assertEqual("origin/main", read_state(mine.root).upstream)
@@ -540,6 +541,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual([], shown)
 
             window._do_push()
+            window._tasks.wait_until_idle()
 
             self.assertEqual(1, len(shown))
 

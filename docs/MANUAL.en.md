@@ -381,6 +381,30 @@ worse than none.
 "Add to the last commit instead" attaches the selection to the previous commit
 rather than creating a new one.
 
+### Slow actions run in the background
+
+Saving, uploading, fetching and the fixes for a split history take a few
+seconds, some of them over a network. They no longer hold the window up: the work
+runs on its own, and the window goes on answering while it does.
+
+An hourglass (⏳ ⌛, turning over) says that something is running, in three
+places, and none of them gets in the way:
+
+- **On the button you pressed**, which names what it is doing (*Saving…*,
+  *Uploading…*, *Saving and uploading…*). The three buttons of the project are off
+  meanwhile, so a click made twice is not an action done twice.
+- **In the status bar at the bottom right**, with the project's name when it is
+  not the one in front of you, and a count when more than one project is busy.
+- **In the project's row in the list**, so an upload left running in one project
+  is not forgotten while you work in another.
+
+You can open another project, or save in it, while one is uploading: different
+projects do not wait for each other. A change to the project that is busy, such as
+switching branch, merging or putting changes aside, waits until its action has
+ended, which the status bar tells you. When an action ends with something to say,
+it is said on the strip above the tabs if the project is in front of you, and in
+the status bar with the project's name if it is not.
+
 ### Committing single blocks only
 
 Sometimes one file holds two things that do not belong in the same commit. Above

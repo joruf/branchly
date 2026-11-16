@@ -111,7 +111,11 @@ class SaveAndUploadEndToEndTests(unittest.TestCase):
         quiet_since = None
         while time.time() < deadline:
             self.app.processEvents()
-            busy = window._scans.is_running or window._pending_scan_key is not None
+            busy = (
+                window._scans.is_running
+                or window._pending_scan_key is not None
+                or window._tasks.is_busy()
+            )
             if busy:
                 quiet_since = None
             elif quiet_since is None:

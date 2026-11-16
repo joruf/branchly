@@ -127,6 +127,7 @@ class DraftTests(unittest.TestCase):
     def test_a_commit_ends_the_draft(self) -> None:
         self.window._changes.set_draft(CommitDraft("Commit this"))
         self.window._do_commit(self._box(), ["change.txt"])
+        self.window._tasks.wait_until_idle()
         self.assertEqual(CommitDraft(""), self._box())
         self._open(1)
         self._open(0)

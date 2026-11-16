@@ -56,6 +56,9 @@ something new", locally *and* on the server.
 - Tick the files that belong together, write a summary, save. New changes are
   ticked; whatever you untick stays unticked after a restart, and is forgotten
   once it has been committed
+- Saving, uploading and fetching run in the background: the window keeps
+  answering, an hourglass shows on the button, in the status bar and in the
+  project's row, and another project can be used meanwhile
 - Right-click a file to ignore it, everything with its extension, or its whole
   folder. The entry is anchored and escaped, so it matches that file and not a
   file that happens to share its name

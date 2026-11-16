@@ -498,6 +498,7 @@ class WindowTests(unittest.TestCase):
             window._activate(entry)
 
             window._adopt_action.trigger()
+            window._tasks.wait_until_idle()
 
             self.assertEqual(1, len(shown))
             self.assertEqual(server_tip(origin), second.head())
@@ -530,6 +531,7 @@ class WindowTests(unittest.TestCase):
             window._sidebar.refresh()
 
             window._activate(entry)
+            window._tasks.wait_until_idle()
 
             self.assertEqual(1, len(shown))
             self.assertEqual(server_tip(origin), mine.head())

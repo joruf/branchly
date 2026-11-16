@@ -221,6 +221,10 @@ class ChangesPanel(QWidget):
         self._state: RepositoryState | None = None
         self._branch = ""
         self._has_remote = False
+        # What is going on in this project, as a translation key, and the hourglass
+        # to show with it. Empty when nothing is.
+        self._busy_label = ""
+        self._busy_glyph = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -849,9 +853,65 @@ class ChangesPanel(QWidget):
         self._select_all.setCheckState(state)
         self._select_all.blockSignals(False)
 
+    def set_busy(self, label_key: str, glyph: str = "") -> None:
+        """
+        Shows that an action of this project is under way.
+
+        The three buttons are off meanwhile, so that a click made twice is not two
+        actions, and the one that was pressed says what it is doing, with the
+        hourglass. Nothing is blocked: the rest of the window goes on working.
+
+        Args:
+            label_key: Translation key for what is going on, empty when idle.
+            glyph: The hourglass to show.
+
+        Returns:
+            None
+        """
+
+        self._busy_label = label_key
+        self._busy_glyph = glyph
+        self._update_commit_button()
+
+    def _apply_busy(self) -> None:
+        """
+        Puts the busy state onto the three buttons.
+
+        Returns:
+            None
+        """
+
+        if not self._busy_label:
+            return
+        buttons = {
+            "tasks.saving": self._commit_button,
+            "tasks.uploading": self._push_button,
+            "tasks.saving_uploading": self._both_button,
+        }
+        for button in (self._commit_button, self._push_button, self._both_button):
+            button.setEnabled(False)
+        pressed = buttons.get(self._busy_label)
+        if pressed is not None:
+            pressed.setText(f"{self._busy_glyph}  {i18n.t(self._busy_label)}")
+            pressed.setToolTip(i18n.t("tasks.button_busy"))
+
     def _update_commit_button(self) -> None:
         """
         Relabels and enables or disables the three buttons of the chain.
+
+        While an action is under way the buttons stay off, whatever the state of
+        the files says.
+
+        Returns:
+            None
+        """
+
+        self._refresh_chain_buttons()
+        self._apply_busy()
+
+    def _refresh_chain_buttons(self) -> None:
+        """
+        Works out the labels and states of the three buttons from the files.
 
         Returns:
             None

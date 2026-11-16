@@ -311,6 +311,7 @@ class MainWindowSmokeTests(unittest.TestCase):
                 window = self._window(repo.root, config)
                 try:
                     window._do_commit(CommitDraft(summary="add a note"), ["note.txt"])
+                    window._tasks.wait_until_idle()
                     details = commit_details(repo.root, "HEAD")
                     self.assertIsNotNone(details)
                     assert details is not None

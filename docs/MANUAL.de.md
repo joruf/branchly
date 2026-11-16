@@ -391,6 +391,33 @@ schlimmer als keiner.
 „Stattdessen zum letzten Commit hinzufügen" hängt die Auswahl an den vorherigen
 Commit, statt einen neuen anzulegen.
 
+### Langsame Aktionen laufen im Hintergrund
+
+Speichern, Hochladen, Abfragen des Servers und die Lösungen für eine
+auseinandergelaufene Geschichte dauern ein paar Sekunden, manche über ein Netz.
+Sie halten das Fenster nicht mehr auf: Die Arbeit läuft für sich, und das Fenster
+antwortet weiter.
+
+Eine Sanduhr (⏳ ⌛, sie dreht sich um) zeigt, dass etwas läuft, an drei Stellen,
+und keine davon steht im Weg:
+
+- **Auf dem Knopf, den du gedrückt hast**, der sagt, was er gerade tut
+  (*Speichere…*, *Lade hoch…*, *Speichere und lade hoch…*). Die drei Knöpfe des
+  Projekts sind solange aus, damit ein doppelter Klick nicht zu einer doppelt
+  ausgeführten Aktion wird.
+- **In der Statusleiste unten rechts**, mit dem Namen des Projekts, wenn es nicht
+  das vor dir ist, und einer Zahl, wenn mehr als ein Projekt beschäftigt ist.
+- **In der Zeile des Projekts in der Liste**, damit ein Upload, den du in einem
+  Projekt laufen lässt, nicht vergessen wird, während du in einem anderen
+  arbeitest.
+
+Du kannst ein anderes Projekt öffnen oder darin speichern, während eines hochlädt:
+Verschiedene Projekte warten nicht aufeinander. Eine Änderung am beschäftigten
+Projekt, etwa Branch wechseln, zusammenführen oder Änderungen beiseitelegen,
+wartet, bis seine Aktion zu Ende ist, was die Statusleiste sagt. Hat eine Aktion
+beim Ende etwas zu sagen, steht es im Streifen über den Reitern, wenn das Projekt
+vor dir ist, und in der Statusleiste mit dem Namen des Projekts, wenn nicht.
+
 ### Nur einzelne Blöcke committen
 
 Manchmal stecken in einer Datei zwei Dinge, die nicht in denselben Commit

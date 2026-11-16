@@ -298,6 +298,7 @@ class PartialCommitTests(unittest.TestCase):
             window._on_hunk_toggled(keys[1])
 
             window._do_commit(CommitDraft(summary="only the top"), ["notes.txt"])
+            window._tasks.wait_until_idle()
 
             committed = show(repo, "HEAD", "notes.txt")
             self.assertIn("TOP changed", committed)
@@ -311,6 +312,7 @@ class PartialCommitTests(unittest.TestCase):
             window._on_hunk_toggled(keys[1])
 
             window._do_commit(CommitDraft(summary="only the top"), ["notes.txt"])
+            window._tasks.wait_until_idle()
 
             on_disk = (repo / "notes.txt").read_text(encoding="utf-8")
             self.assertIn("TOP changed", on_disk)
@@ -320,6 +322,7 @@ class PartialCommitTests(unittest.TestCase):
         with TemporaryDirectory() as base:
             window, _entry, repo = self._window(Path(base))
             window._do_commit(CommitDraft(summary="everything"), ["notes.txt"])
+            window._tasks.wait_until_idle()
 
             committed = show(repo, "HEAD", "notes.txt")
             self.assertIn("TOP changed", committed)
@@ -370,6 +373,7 @@ class PartialCommitTests(unittest.TestCase):
             window._on_hunk_toggled(keys[1])
 
             window._do_commit(CommitDraft(summary="only the top"), ["notes.txt"])
+            window._tasks.wait_until_idle()
             self.assertNotIn("notes.txt", window._hunk_selection)
 
     def test_a_key_that_matches_nothing_is_ignored(self) -> None:
