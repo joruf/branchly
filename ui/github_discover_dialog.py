@@ -39,7 +39,8 @@ from PySide6.QtWidgets import (
 )
 
 import i18n
-from github_api.client import GitHubClient
+from github_api import token as token_store
+from github_api.client import ERROR_NO_TOKEN, ERROR_UNAUTHORIZED, GitHubClient
 from gitops import clone as clone_mod
 from models.category import Category
 from services import git_credentials
@@ -47,9 +48,12 @@ from services import github_discovery as discovery
 from services.github_discovery import Offer, RemoteRepository
 from ui.changes_panel import SelectAllBox
 from ui.github_worker import ApiRunner
+from ui.signin_dialog import SignInDialog
 from ui.widgets import InlineMessage, token_color
 
 _ROLE_INDEX = int(Qt.ItemDataRole.UserRole)
+_ACTION_SIGNIN = "signin"
+_AUTH_ERROR_KEYS = frozenset({ERROR_UNAUTHORIZED, ERROR_NO_TOKEN})
 
 
 class _BatchCloneWorker(QObject):
@@ -208,6 +212,7 @@ class GitHubDiscoverDialog(QDialog):
 
         self._notice = InlineMessage("", "", "info", self)
         self._notice.setVisible(False)
+        self._notice.action_clicked.connect(self._on_notice_action)
         column.addWidget(self._notice)
 
         self._buttons = QDialogButtonBox(self)
@@ -333,6 +338,7 @@ class GitHubDiscoverDialog(QDialog):
 
         if self._thread is not None:
             return
+        self._notice.clear_actions()
         self._notice.setVisible(False)
         self._progress.setRange(0, 0)
         self._progress.setVisible(True)
@@ -375,9 +381,7 @@ class GitHubDiscoverDialog(QDialog):
         ok = getattr(outcome, "ok", False)
         if not ok:
             key = getattr(outcome, "error_key", "") or "error.git_failed"
-            self._notice.set_message(i18n.t("github_discover.load_failed"), i18n.t(key), "danger")
-            self._notice.setVisible(True)
-            self._status.setText("")
+            self._show_load_failure(key)
             return
         payload = getattr(outcome, "payload", [])
         if self._moved_known is not None:
@@ -390,6 +394,65 @@ class GitHubDiscoverDialog(QDialog):
                         break
             self._known = self._moved_known
         self.set_repositories([RemoteRepository.from_model(item) for item in payload or []])
+
+    def _show_load_failure(self, error_key: str) -> None:
+        """
+        Explains why the list did not load, and offers a way out when the token
+        is the problem.
+
+        Args:
+            error_key: Translation key from the API result.
+
+        Returns:
+            None
+        """
+
+        self._notice.clear_actions()
+        self._notice.set_message(i18n.t("github_discover.load_failed"), i18n.t(error_key), "danger")
+        if error_key in _AUTH_ERROR_KEYS:
+            # Same wording as the GitHub panel: the strip names the problem, and
+            # the way out sits on it so nobody has to dig through the menu first.
+            tip = i18n.t("tip.signin")
+            self._notice.add_action(i18n.t("signin.menu"), _ACTION_SIGNIN, primary=True, tip=tip)
+            self._notice.set_click_action(_ACTION_SIGNIN, tip=tip)
+        self._notice.setVisible(True)
+        self._status.setText("")
+
+    def _on_notice_action(self, action_id: str) -> None:
+        """
+        Carries out a button or a click on the failure strip.
+
+        Args:
+            action_id: Which action.
+
+        Returns:
+            None
+        """
+
+        if action_id == _ACTION_SIGNIN:
+            self._fix_auth()
+
+    def _fix_auth(self) -> None:
+        """
+        Opens the sign-in dialog, then loads the list again when it worked.
+
+        Returns:
+            None
+        """
+
+        dialog = SignInDialog(self)
+        if dialog.exec() != SignInDialog.DialogCode.Accepted:
+            return
+        self._client.set_token(token_store.load())
+        parent = self.parent()
+        # The main window handed us its client; keep its account menu in step.
+        if parent is not None and hasattr(parent, "_refresh_account_menu"):
+            if hasattr(parent, "_viewer_login"):
+                parent._viewer_login = dialog.login
+            if hasattr(parent, "_settings"):
+                parent._settings.github_enabled = True
+            parent._refresh_account_menu()
+        self.reload()
 
     def set_repositories(self, repositories: list[RemoteRepository]) -> None:
         """

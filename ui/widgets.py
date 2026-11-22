@@ -170,9 +170,13 @@ class InlineMessage(QFrame):
     """
     A message strip with a title, an explanation and optional buttons.
 
-    This is the shape every "something needs saying" moment in Branchly uses —
-    empty states, warnings, failures — so the wording carries the weight rather
+    This is the shape every "something needs saying" moment in Branchly uses:
+    empty states, warnings, failures, so the wording carries the weight rather
     than a modal dialog interrupting the user.
+
+    When a strip names a problem that can be fixed right here, ``set_click_action``
+    makes a click anywhere on the banner do that fix, so the reader does not have
+    to hunt for a separate control.
     """
 
     action_clicked = Signal(str)
@@ -194,6 +198,7 @@ class InlineMessage(QFrame):
 
         super().__init__(parent)
         self._token = token
+        self._click_action = ""
         self.setObjectName("InlineMessage")
 
         layout = QVBoxLayout(self)
@@ -205,11 +210,13 @@ class InlineMessage(QFrame):
         title_font.setBold(True)
         self._title.setFont(title_font)
         self._title.setWordWrap(True)
+        self._title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         self._detail = QLabel(detail)
         self._detail.setObjectName("Muted")
         self._detail.setWordWrap(True)
         self._detail.setVisible(bool(detail))
+        self._detail.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         layout.addWidget(self._title)
         layout.addWidget(self._detail)
@@ -245,6 +252,26 @@ class InlineMessage(QFrame):
             self._token = token
         self.refresh()
 
+    def set_click_action(self, action_id: str = "", tip: str = "") -> None:
+        """
+        Makes a click on the strip itself emit ``action_clicked``.
+
+        Args:
+            action_id: Identifier to emit, or empty to turn the click off.
+            tip: Tooltip while the strip is clickable.
+
+        Returns:
+            None
+        """
+
+        self._click_action = action_id
+        if action_id:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.setToolTip(tip)
+        else:
+            self.unsetCursor()
+            self.setToolTip("")
+
     def add_action(
         self, label: str, action_id: str, primary: bool = False, tip: str = ""
     ) -> QPushButton:
@@ -275,7 +302,7 @@ class InlineMessage(QFrame):
 
     def clear_actions(self) -> None:
         """
-        Removes every button.
+        Removes every button and turns off a clickable banner.
 
         Returns:
             None
@@ -287,6 +314,26 @@ class InlineMessage(QFrame):
             if widget is not None:
                 widget.deleteLater()
         self._button_row.setVisible(False)
+        self.set_click_action("")
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+        """
+        Runs the banner action when the strip itself was clicked.
+
+        The title and detail ignore the mouse, so a click on the wording lands
+        here. Buttons keep their own clicks.
+
+        Args:
+            event: The mouse press.
+
+        Returns:
+            None
+        """
+
+        if self._click_action and event.button() == Qt.MouseButton.LeftButton:
+            self.action_clicked.emit(self._click_action)
+            return
+        super().mousePressEvent(event)
 
     def refresh(self, theme: str | None = None) -> None:
         """

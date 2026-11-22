@@ -342,6 +342,58 @@ class DialogTests(unittest.TestCase):
             self.assertLess(column.indexOf(select_row), column.indexOf(dialog._list))
             self.assertLess(column.indexOf(dialog._search), column.indexOf(select_row))
 
+    def test_a_rejected_token_puts_sign_in_on_the_banner(self) -> None:
+        from github_api.client import ERROR_UNAUTHORIZED
+        from ui.github_discover_dialog import _ACTION_SIGNIN
+
+        with tempfile.TemporaryDirectory() as base:
+            dialog = self._dialog(Path(base), [])
+            dialog._on_loaded(
+                type("Result", (), {"ok": False, "error_key": ERROR_UNAUTHORIZED})()
+            )
+            self.assertFalse(dialog._notice.isHidden())
+            self.assertEqual(i18n.t("github_discover.load_failed"), dialog._notice._title.text())
+            self.assertEqual(i18n.t("settings.github_token_invalid"), dialog._notice._detail.text())
+            self.assertEqual(_ACTION_SIGNIN, dialog._notice._click_action)
+            self.assertFalse(dialog._notice._button_row.isHidden())
+
+    def test_clicking_the_auth_banner_opens_sign_in(self) -> None:
+        from github_api.client import ERROR_UNAUTHORIZED
+        from ui import github_discover_dialog as module
+
+        with tempfile.TemporaryDirectory() as base:
+            dialog = self._dialog(Path(base), [])
+            dialog._on_loaded(
+                type("Result", (), {"ok": False, "error_key": ERROR_UNAUTHORIZED})()
+            )
+            opened: list[object] = []
+
+            class StubSignIn:
+                DialogCode = type("DialogCode", (), {"Accepted": 1, "Rejected": 0})
+                login = "joruf"
+
+                def __init__(self, parent=None) -> None:  # noqa: ANN001
+                    opened.append(parent)
+
+                def exec(self) -> int:
+                    return self.DialogCode.Accepted
+
+            real_dialog = module.SignInDialog
+            real_load = module.token_store.load
+            real_reload = dialog.reload
+            module.SignInDialog = StubSignIn
+            module.token_store.load = lambda: "ghp_new"
+            reloaded: list[bool] = []
+            dialog.reload = lambda: reloaded.append(True)
+            self.addCleanup(setattr, module, "SignInDialog", real_dialog)
+            self.addCleanup(setattr, module.token_store, "load", real_load)
+            self.addCleanup(setattr, dialog, "reload", real_reload)
+
+            dialog._notice.action_clicked.emit("signin")
+            self.assertEqual([dialog], opened)
+            self.assertEqual("ghp_new", dialog._client._token)
+            self.assertEqual([True], reloaded)
+
     def test_ticked_ones_are_cloned_and_handed_back(self) -> None:
         with temp_repo_pair() as (_first, _second, origin), tempfile.TemporaryDirectory() as base:
             make_clone(Path(base) / "already", "https://github.com/joruf/already.git")
