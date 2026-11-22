@@ -160,6 +160,13 @@ class DiscoverDialog(QDialog):
         self._status.setObjectName("Muted")
         column.addWidget(self._status)
 
+        self._search = QLineEdit(self)
+        self._search.setClearButtonEnabled(True)
+        self._search.setPlaceholderText(i18n.t("discover.search_placeholder"))
+        self._search.setToolTip(i18n.t("tip.discover_search"))
+        self._search.textChanged.connect(self._on_search_changed)
+        column.addWidget(self._search)
+
         self._list = QListWidget(self)
         self._list.setToolTip(i18n.t("tip.discover_list"))
         self._list.itemChanged.connect(self._on_item_changed)
@@ -278,6 +285,7 @@ class DiscoverDialog(QDialog):
         self._candidates = []
         self._progress.setVisible(True)
         self._rescan.setEnabled(False)
+        self._search.setEnabled(False)
         self._status.setText(i18n.t("discover.searching"))
         self._update_buttons()
 
@@ -320,6 +328,7 @@ class DiscoverDialog(QDialog):
         self._stop_thread()
         self._progress.setVisible(False)
         self._rescan.setEnabled(True)
+        self._search.setEnabled(True)
 
         self._candidates = list(candidates) if isinstance(candidates, list) else []
         self._fill()
@@ -383,6 +392,7 @@ class DiscoverDialog(QDialog):
             self._status.setText(i18n.t("discover.none_found"))
         else:
             self._status.setText(i18n.t("discover.summary", new=fresh, known=known))
+        self._apply_filter()
         self._update_buttons()
 
     # ------------------------------------------------------------------ actions
@@ -415,9 +425,52 @@ class DiscoverDialog(QDialog):
 
         self._update_buttons()
 
+    def _on_search_changed(self, _text: str) -> None:
+        """
+        Narrows the list to rows that match what was typed.
+
+        Args:
+            _text: The search field's text.
+
+        Returns:
+            None
+        """
+
+        self._apply_filter()
+        self._update_buttons()
+
+    def _apply_filter(self) -> None:
+        """
+        Shows or hides each row for the current search text.
+
+        A row matches when the keyword sits in the name, path or remote address.
+        An empty field shows every row again.
+
+        Returns:
+            None
+        """
+
+        needle = self._search.text().strip().lower()
+        by_path = {str(candidate.path): candidate for candidate in self._candidates}
+        for row in range(self._list.count()):
+            item = self._list.item(row)
+            if not needle:
+                item.setHidden(False)
+                continue
+            path = item.data(_ROLE_PATH)
+            candidate = by_path.get(path) if isinstance(path, str) else None
+            if candidate is None:
+                item.setHidden(False)
+                continue
+            haystack = (
+                f"{candidate.name} {candidate.display_path} {candidate.path} "
+                f"{candidate.branch} {candidate.remote_url}"
+            ).lower()
+            item.setHidden(needle not in haystack)
+
     def _on_select_all_clicked(self) -> None:
         """
-        Ticks or unticks every offered row, as the box now says.
+        Ticks or unticks every offered row still shown, as the box now says.
 
         Returns:
             None
@@ -427,7 +480,7 @@ class DiscoverDialog(QDialog):
 
     def _set_all_checked(self, checked: bool) -> None:
         """
-        Ticks or unticks every offered row.
+        Ticks or unticks every offered row the filter still shows.
 
         Args:
             checked: Target state.
@@ -436,19 +489,34 @@ class DiscoverDialog(QDialog):
             None
         """
 
+        state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
         self._list.blockSignals(True)
-        for index in range(self._list.count()):
-            item = self._list.item(index)
-            if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
-                item.setCheckState(
-                    Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
-                )
+        for item in self._offerable_items():
+            item.setCheckState(state)
         self._list.blockSignals(False)
         self._update_buttons()
 
+    def _offerable_items(self) -> list[QListWidgetItem]:
+        """
+        Collects the visible rows that can be ticked.
+
+        Hidden rows stay out of the tick-for-all count so the box only talks about
+        what the filter still shows.
+
+        Returns:
+            list[QListWidgetItem]: Those rows.
+        """
+
+        return [
+            self._list.item(row)
+            for row in range(self._list.count())
+            if not self._list.item(row).isHidden()
+            and self._list.item(row).flags() & Qt.ItemFlag.ItemIsUserCheckable
+        ]
+
     def checked_paths(self) -> list[Path]:
         """
-        Returns the working trees the user ticked.
+        Returns the working trees the user ticked, including ones the filter hides.
 
         Returns:
             list[Path]: Paths to register.
@@ -472,27 +540,29 @@ class DiscoverDialog(QDialog):
             None
         """
 
+        offerable_items = self._offerable_items()
+        offerable = len(offerable_items)
+        visible_checked = sum(
+            1 for item in offerable_items if item.checkState() == Qt.CheckState.Checked
+        )
         count = len(self.checked_paths())
         busy = self._thread is not None
         self._apply_button.setEnabled(count > 0 and not busy)
         self._apply_button.setText(
             i18n.t("discover.apply_count", count=count) if count else i18n.t("discover.apply")
         )
-        offerable = sum(
-            1
-            for index in range(self._list.count())
-            if self._list.item(index).flags() & Qt.ItemFlag.ItemIsUserCheckable
-        )
-        if count == 0:
+        if visible_checked == 0:
             state = Qt.CheckState.Unchecked
-        elif count == offerable:
+        elif visible_checked == offerable:
             state = Qt.CheckState.Checked
         else:
             state = Qt.CheckState.PartiallyChecked
         self._select_all.setCheckState(state)
         self._select_all.setEnabled(offerable > 0 and not busy)
         self._select_all.setText(
-            i18n.t("changes.selected_count", selected=count, total=offerable) if offerable else ""
+            i18n.t("changes.selected_count", selected=visible_checked, total=offerable)
+            if offerable
+            else ""
         )
 
     def _on_accept(self) -> None:

@@ -387,6 +387,29 @@ class DialogTests(unittest.TestCase):
             dialog._set_all_checked(False)
             self.assertFalse(dialog._apply_button.isEnabled())
 
+    def test_the_search_field_narrows_the_list_immediately(self) -> None:
+        with TemporaryDirectory() as base:
+            root = Path(base)
+            for name in ("alpha", "beta", "gamma"):
+                make_repo(root / name)
+
+            dialog = self._dialog(root)
+            dialog._search.setText("alp")
+            visible = [
+                dialog._list.item(row).text().splitlines()[0]
+                for row in range(dialog._list.count())
+                if not dialog._list.item(row).isHidden()
+            ]
+            self.assertEqual(["alpha"], visible)
+            # Ticks under a filter stay on the hidden rows, so Add still counts them.
+            self.assertEqual(3, len(dialog.checked_paths()))
+            dialog._set_all_checked(False)
+            self.assertEqual(["beta", "gamma"], [path.name for path in dialog.checked_paths()])
+            dialog._search.clear()
+            self.assertEqual(
+                3, sum(1 for row in range(dialog._list.count()) if not dialog._list.item(row).isHidden())
+            )
+
     def test_an_empty_folder_says_so(self) -> None:
         from ui.discover_dialog import DiscoverDialog
 
